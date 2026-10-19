@@ -9,6 +9,7 @@ A personal AI assistant designed for a single user (the owner) that runs locally
 ## Current Status
 
 - **Step 1 completed**: Basic chat window working with the local Ollama model (`qwen3.5:4b`) from `config/settings.yaml`.
+- **Step 2 completed**: Persona loading from `config/hinaku_persona.md` with hot-reload, fallback on missing/empty file, and reasoning/thinking tag suppression.
 
 ---
 

@@ -125,6 +125,27 @@ body {
   font-family: var(--font-mono);
 }
 
+/* Notice banner for persona fallback or warnings */
+.notice-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(234, 179, 8, 0.1);
+  border-bottom: 1px solid rgba(234, 179, 8, 0.25);
+  color: #fef08a;
+  padding: 8px 24px;
+  font-size: 12px;
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+.notice-banner.hidden {
+  display: none;
+}
+
+.notice-icon {
+  font-size: 13px;
+}
+
 /* Chat container */
 .chat-container {
   flex: 1;

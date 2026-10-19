@@ -1,6 +1,7 @@
 import json
 from typing import AsyncGenerator, Dict, List, Optional
 import httpx
+from .thinking_filter import ThinkingFilter, strip_thinking
 
 class OllamaAdapter:
     def __init__(self, host: str = "http://localhost:11434", default_model: str = "qwen3.5:4b"):
@@ -37,6 +38,8 @@ class OllamaAdapter:
             "stream": True,
         }
 
+        thinking_filter = ThinkingFilter()
+
         async with httpx.AsyncClient(timeout=120.0) as client:
             try:
                 async with client.stream("POST", url, json=payload) as response:
@@ -53,11 +56,19 @@ class OllamaAdapter:
                             msg = chunk.get("message", {})
                             content = msg.get("content", "")
                             if content:
-                                yield content
+                                filtered = thinking_filter.process_chunk(content)
+                                if filtered:
+                                    yield filtered
                             if chunk.get("done", False):
                                 break
                         except json.JSONDecodeError:
                             continue
+
+                    # Flush any remaining buffer from the filter
+                    final_chunk = thinking_filter.flush()
+                    if final_chunk:
+                        yield final_chunk
+
             except httpx.ConnectError:
                 yield "[Error: Unable to connect to local Ollama service at " + self.host + ". Is Ollama running?]"
             except Exception as e:

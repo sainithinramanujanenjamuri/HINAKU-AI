@@ -5,10 +5,22 @@ document.addEventListener("DOMContentLoaded", () => {
   const sendButton = document.getElementById("send-button");
   const modelBadge = document.getElementById("model-badge");
   const statusIndicator = document.getElementById("status-indicator");
+  const noticeBanner = document.getElementById("notice-banner");
+  const noticeText = document.getElementById("notice-text");
 
   let conversationHistory = [];
   let isGenerating = false;
   let activeAbortController = null;
+
+  function updatePersonaNotice(isFallback, notice) {
+    if (!noticeBanner || !noticeText) return;
+    if (isFallback) {
+      noticeText.textContent = notice || "Persona file missing or empty. Using neutral fallback prompt.";
+      noticeBanner.classList.remove("hidden");
+    } else {
+      noticeBanner.classList.add("hidden");
+    }
+  }
 
   // Initialize marked settings
   if (window.marked) {
@@ -32,6 +44,9 @@ document.addEventListener("DOMContentLoaded", () => {
         } else {
           statusIndicator.classList.add("offline");
           statusIndicator.title = "Ollama offline or model not found";
+        }
+        if (data.persona) {
+          updatePersonaNotice(data.persona.is_fallback, data.persona.notice);
         }
       }
     } catch (e) {
@@ -176,6 +191,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
           try {
             const parsed = JSON.parse(dataStr);
+            if (parsed.persona_fallback !== undefined) {
+              updatePersonaNotice(parsed.persona_fallback, parsed.notice);
+            }
             if (parsed.chunk) {
               assistantText += parsed.chunk;
               if (window.marked) {

@@ -41,6 +41,12 @@ class Settings:
     def allowed_local_models(self) -> list:
         return self.local.get("allowed_models", [self.default_local_model])
 
+    @property
+    def persona_file(self) -> Path:
+        rel_or_abs = self.app.get("persona_file", "config/hinaku_persona.md")
+        p = Path(rel_or_abs)
+        return p if p.is_absolute() else ROOT_DIR / p
+
 def get_settings() -> Settings:
     return Settings(load_settings())
 
