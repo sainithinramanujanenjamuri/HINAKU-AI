@@ -115,6 +115,10 @@ class Settings:
     def api_max_requests_per_day(self) -> int:
         return self.api.get("max_requests_per_day", 100)
 
+    @property
+    def api_logged_by_provider(self) -> bool:
+        return self.api.get("logged_by_provider", False)
+
     def get_api_key(self) -> Optional[str]:
         import os
         from dotenv import load_dotenv

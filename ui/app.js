@@ -21,6 +21,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let isCurrentChatPrivate = false;
   let isGenerating = false;
   let activeAbortController = null;
+  let isApiLoggedByProvider = false;
 
   // Initialize marked settings
   if (window.marked) {
@@ -28,6 +29,33 @@ document.addEventListener("DOMContentLoaded", () => {
       breaks: true,
       gfm: true
     });
+  }
+
+  function formatMarkdown(text) {
+    if (!text) return "";
+    // Preprocess: ensure bold heading directly after a list item renders as its own paragraph
+    const normalized = text.replace(/((?:^|\n)[ \t]*(?:[-*+]|\d+\.)[^\n]+)\n([ \t]*\*\*[^*]+?\*\*.*)/g, "$1\n\n$2");
+    return window.marked ? marked.parse(normalized) : normalized;
+  }
+
+  function updateFooterBackend(backend) {
+    const footerEl = document.getElementById("footer-backend");
+    if (!footerEl) return;
+    if (!backend) {
+      footerEl.textContent = "Local inference";
+      return;
+    }
+    const b = backend.toLowerCase();
+    footerEl.textContent = b === "api" ? "API" : "local";
+  }
+
+  function getBackendBadgeText(backend, model) {
+    const bKind = (backend || "local").toLowerCase();
+    const mName = model ? model.split("/").pop() : "local";
+    if (bKind === "api") {
+      return isApiLoggedByProvider ? "API · logged by provider" : `${mName} · API`;
+    }
+    return `${mName} · local`;
   }
 
   function updateNoticeBanner(visible, message) {
@@ -82,6 +110,10 @@ document.addEventListener("DOMContentLoaded", () => {
         const mode = data.router?.mode || "auto";
         const localModel = data.default_model || "qwen3.5:4b";
         modelBadge.textContent = `${mode} • ${localModel}`;
+
+        if (data.router && data.router.api_logged_by_provider !== undefined) {
+          isApiLoggedByProvider = Boolean(data.router.api_logged_by_provider);
+        }
 
         if (data.ollama_status && data.ollama_status.online) {
           statusIndicator.classList.remove("offline");
@@ -265,11 +297,17 @@ document.addEventListener("DOMContentLoaded", () => {
       messagesContainer.innerHTML = "";
 
       if (conv.messages && conv.messages.length > 0) {
+        let lastAssistantBackend = null;
         conv.messages.forEach((m) => {
           renderMessage(m.role, m.content, false, m.model, m.backend);
+          if (m.role === "assistant" && m.backend) {
+            lastAssistantBackend = m.backend;
+          }
         });
+        updateFooterBackend(lastAssistantBackend || "local");
       } else {
         renderIntroMessage();
+        updateFooterBackend("local");
       }
 
       loadConversations();
@@ -305,6 +343,7 @@ document.addEventListener("DOMContentLoaded", () => {
         </div>
       </div>
     `;
+    updateFooterBackend("local");
   }
 
   function startNewChat() {
@@ -312,6 +351,7 @@ document.addEventListener("DOMContentLoaded", () => {
     currentConversationId = null;
     updatePrivacyUI(false);
     renderIntroMessage();
+    updateFooterBackend("local");
     loadConversations();
     closeMobileSidebar();
     promptInput.focus();
@@ -355,8 +395,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const bKind = (backend || "local").toLowerCase();
       tag.className = `backend-tag ${bKind}`;
       tag.dataset.tag = "backend";
-      const mName = model ? model.split("/").pop() : "local";
-      tag.textContent = `${mName} · ${bKind === "api" ? "API" : "local"}`;
+      tag.textContent = getBackendBadgeText(backend, model);
       metaDiv.appendChild(tag);
     }
     msgDiv.appendChild(metaDiv);
@@ -365,8 +404,8 @@ document.addEventListener("DOMContentLoaded", () => {
     bodyDiv.className = "message-body";
 
     if (role === "assistant") {
-      if (window.marked && content) {
-        bodyDiv.innerHTML = marked.parse(content);
+      if (content) {
+        bodyDiv.innerHTML = formatMarkdown(content);
       } else {
         bodyDiv.textContent = content;
       }
@@ -474,22 +513,21 @@ document.addEventListener("DOMContentLoaded", () => {
             if (parsed.notice) {
               updateNoticeBanner(true, parsed.notice);
             }
+            if (parsed.logged_by_provider !== undefined) {
+              isApiLoggedByProvider = Boolean(parsed.logged_by_provider);
+            }
             if (parsed.backend) {
+              updateFooterBackend(parsed.backend);
               const bTag = metaDiv.querySelector("[data-tag='backend']");
               if (bTag) {
                 const bKind = parsed.backend.toLowerCase();
                 bTag.className = `backend-tag ${bKind}`;
-                const mName = parsed.model ? parsed.model.split("/").pop() : "local";
-                bTag.textContent = `${mName} · ${bKind === "api" ? "API" : "local"}`;
+                bTag.textContent = getBackendBadgeText(parsed.backend, parsed.model);
               }
             }
             if (parsed.chunk) {
               assistantText += parsed.chunk;
-              if (window.marked) {
-                bodyDiv.innerHTML = marked.parse(assistantText);
-              } else {
-                bodyDiv.textContent = assistantText;
-              }
+              bodyDiv.innerHTML = formatMarkdown(assistantText);
               const cursor = document.createElement("span");
               cursor.className = "streaming-cursor";
               bodyDiv.appendChild(cursor);

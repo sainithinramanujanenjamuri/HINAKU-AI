@@ -81,6 +81,7 @@ async def get_info():
             "api_provider": settings.api_provider,
             "api_model": settings.api_model,
             "api_ready": api_ready,
+            "api_logged_by_provider": settings.api_logged_by_provider,
             "daily_api_requests": daily_count,
             "max_daily_api_requests": settings.api_max_requests_per_day
         },
@@ -118,6 +119,13 @@ async def chat_endpoint(req: ChatRequest, response: Response):
     conv_data = history_manager.get_conversation(conv_id)
     db_messages = conv_data.get("messages", []) if conv_data else []
 
+    # Identify previous assistant backend for router stickiness
+    last_backend = None
+    for m in reversed(db_messages[:-1] if db_messages else []):
+        if m.get("role") == "assistant" and m.get("backend"):
+            last_backend = m["backend"]
+            break
+
     messages_to_trim = [{"role": m["role"], "content": m["content"]} for m in db_messages]
     if not messages_to_trim:
         messages_to_trim = [
@@ -151,14 +159,16 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                 "conversation_id": conv_id,
                 "persona_fallback": persona_state.is_fallback,
                 "notice": persona_state.notice,
-                "is_private": is_private
+                "is_private": is_private,
+                "logged_by_provider": settings.api_logged_by_provider
             }
             yield f"data: {json.dumps(init_meta)}\n\n"
 
             async for event in model_router.stream_chat(
                 trimmed_messages,
                 user_prompt=latest_user_text,
-                is_private=is_private
+                is_private=is_private,
+                last_backend=last_backend
             ):
                 used_backend = event["backend"]
                 used_model = event["model"]
@@ -172,7 +182,8 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                     "model": used_model,
                     "conversation_id": conv_id,
                     "persona_fallback": persona_state.is_fallback,
-                    "notice": stream_notice
+                    "notice": stream_notice,
+                    "logged_by_provider": settings.api_logged_by_provider
                 }
                 accumulated_chunks.append(event["chunk"])
                 yield f"data: {json.dumps(chunk_payload)}\n\n"
@@ -219,7 +230,8 @@ async def chat_endpoint(req: ChatRequest, response: Response):
         async for event in model_router.stream_chat(
             trimmed_messages,
             user_prompt=latest_user_text,
-            is_private=is_private
+            is_private=is_private,
+            last_backend=last_backend
         ):
             accumulated_chunks.append(event["chunk"])
             used_backend = event["backend"]

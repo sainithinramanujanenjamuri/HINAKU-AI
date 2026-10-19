@@ -29,6 +29,44 @@ API_KEYWORDS = [
     r"\b(?:code|function|class|import|def|python|javascript|typescript|c\+\+|rust|sql|bug|regex|algorithm|api|git)\b",
 ]
 
+def is_short_followup(text: str) -> bool:
+    """
+    Check if a user prompt is a short follow-up (under 12 words, no new topic).
+    """
+    words = text.strip().split()
+    if not (1 <= len(words) < 12):
+        return False
+
+    clean = text.strip().lower()
+    clean_stripped = re.sub(r"[^\w\s]", "", clean).strip()
+
+    # Greetings are conversational resets, not topic follow-ups
+    if clean_stripped in GREETINGS:
+        return False
+
+    # Explicit new topic or new question indicators
+    new_topic_patterns = [
+        r"\b(?:new topic|new question|switch topic|different question|by the way|unrelated)\b",
+        r"\b(?:what is|what are|who is|who was|tell me about|define)\s+(?!it\b|this\b|that\b|the\b|these\b|those\b)"
+    ]
+    for pat in new_topic_patterns:
+        if re.search(pat, clean):
+            return False
+
+    if clean_stripped in FOLLOW_UPS:
+        return True
+
+    followup_indicators = [
+        r"\b(?:it|this|that|them|these|those|again|more|else|example|shorter|longer|simpler|faster|further)\b",
+        r"\b(?:continue|go on|elaborate|expand|summarize|clarify|rephrase|rewrite)\b",
+        r"\b(?:why|how so|what about|and\b|but\b|so\b|tell me more|tell me)\b"
+    ]
+    for pat in followup_indicators:
+        if re.search(pat, clean):
+            return True
+
+    return False
+
 def classify_prompt(text: str, is_private: bool = False, max_local_tokens: int = 1500) -> str:
     """
     Classify whether a prompt should go to 'local' or 'api' in auto mode.
@@ -84,7 +122,8 @@ class ModelRouter:
     def decide_backend(
         self,
         user_prompt: str,
-        is_private: bool = False
+        is_private: bool = False,
+        last_backend: Optional[str] = None
     ) -> RouterDecision:
         # Private chats NEVER use API
         if is_private:
@@ -118,6 +157,42 @@ class ModelRouter:
                 fallback_allowed=self.fallback_on_failure,
                 notice=None
             )
+
+        # Mode is 'auto'
+        # Stickiness: a short follow-up (under 12 words, no new topic) uses the same backend
+        # as the previous assistant reply in that conversation
+        if last_backend in ("local", "api") and is_short_followup(user_prompt):
+            if last_backend == "api":
+                if self.history_manager:
+                    daily_count = self.history_manager.get_daily_api_request_count()
+                    if daily_count >= self.max_daily_api_requests:
+                        logger.warning(f"Daily API request limit reached. Sticky fallback to local.")
+                        return RouterDecision(
+                            target_backend="local",
+                            target_model=self.local_adapter.default_model,
+                            fallback_allowed=False,
+                            notice=f"Daily API request limit ({self.max_daily_api_requests}) reached. Using local model."
+                        )
+                if not self.api_adapter.api_key:
+                    return RouterDecision(
+                        target_backend="local",
+                        target_model=self.local_adapter.default_model,
+                        fallback_allowed=False,
+                        notice="API key not configured. Using local model."
+                    )
+                return RouterDecision(
+                    target_backend="api",
+                    target_model=self.api_adapter.model,
+                    fallback_allowed=self.fallback_on_failure,
+                    notice=None
+                )
+            else:
+                return RouterDecision(
+                    target_backend="local",
+                    target_model=self.local_adapter.default_model,
+                    fallback_allowed=self.fallback_on_failure,
+                    notice=None
+                )
 
         # Mode is 'auto'
         classified = classify_prompt(
@@ -167,9 +242,10 @@ class ModelRouter:
         self,
         messages: List[Dict[str, str]],
         user_prompt: str,
-        is_private: bool = False
+        is_private: bool = False,
+        last_backend: Optional[str] = None
     ) -> AsyncGenerator[Dict[str, Any], None]:
-        decision = self.decide_backend(user_prompt, is_private=is_private)
+        decision = self.decide_backend(user_prompt, is_private=is_private, last_backend=last_backend)
         active_backend = decision.target_backend
         active_model = decision.target_model
         notice = decision.notice
