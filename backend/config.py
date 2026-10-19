@@ -66,6 +66,10 @@ class Settings:
 
     @property
     def sqlite_path(self) -> Path:
+        import os
+        env_override = os.getenv("HINAKU_DB_PATH")
+        if env_override:
+            return Path(env_override)
         p = self.memory.get("sqlite_path", "data/hinaku.db")
         path = Path(p)
         return path if path.is_absolute() else ROOT_DIR / path
