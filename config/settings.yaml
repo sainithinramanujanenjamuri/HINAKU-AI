@@ -47,8 +47,15 @@ memory:
   sqlite_path: data/hinaku.db
   chroma_path: data/chroma
   extract_after_each_turn: true
-  retrieve_top_k: 5
+  learn_from_private_chats: false
+  retrieve_top_k: 3
+  min_similarity: 0.46
+  embedding_model: qwen3-embedding:0.6b
+  embedding_dims: 1024
+  query_prefix: "Instruct: Given the owner's message, retrieve stored facts about the owner that help answer it\nQuery: "
+  document_prefix: ""
   merge_similar: true
+  merge_threshold: 0.80
   never_store:                  # extraction must drop these
     - passwords
     - api_keys

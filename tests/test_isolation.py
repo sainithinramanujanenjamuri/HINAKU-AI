@@ -22,3 +22,8 @@ def test_database_isolation_preserves_real_db():
     current_hash = get_file_hash(REAL_DB_PATH)
     assert current_hash == INITIAL_DB_HASH, "Real database data/hinaku.db was modified during test run!"
 
+    # Verify that the real Chroma path data/chroma was not created by tests
+    real_chroma = REAL_DB_PATH.parent / "chroma"
+    if not INITIAL_DB_EXISTS:
+        assert not real_chroma.exists() or len(list(real_chroma.iterdir())) == 0
+

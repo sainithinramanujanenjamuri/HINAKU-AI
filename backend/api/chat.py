@@ -10,6 +10,7 @@ from backend.models.api_adapter import ApiAdapter
 from backend.models.router import ModelRouter
 from backend.persona import PersonaManager
 from backend.history import ChatHistoryManager, trim_history
+from backend.memory import MemoryStorage, MemoryExtractor, MemoryManager
 
 router = APIRouter()
 settings = get_settings()
@@ -42,6 +43,32 @@ model_router = ModelRouter(
     max_prompt_tokens=settings.local_max_prompt_tokens,
     max_daily_api_requests=settings.api_max_requests_per_day,
     history_manager=history_manager
+)
+
+memory_storage = MemoryStorage(
+    db_path=settings.sqlite_path,
+    chroma_path=settings.chroma_path,
+    embedding_model=settings.memory_embedding_model,
+    embedding_dims=settings.memory_embedding_dims,
+    query_prefix=settings.memory_query_prefix,
+    document_prefix=settings.memory_document_prefix,
+    ollama_host=settings.local_host
+)
+
+memory_extractor = MemoryExtractor(
+    local_adapter=local_adapter,
+    storage=memory_storage,
+    never_store_categories=settings.memory_never_store,
+    merge_threshold=settings.memory_merge_threshold
+)
+
+memory_manager = MemoryManager(
+    storage=memory_storage,
+    extractor=memory_extractor,
+    enabled=settings.memory_enabled,
+    learn_from_private_chats=settings.memory_learn_from_private_chats,
+    retrieve_top_k=settings.memory_retrieve_top_k,
+    min_similarity=settings.memory_min_similarity
 )
 
 class Message(BaseModel):
@@ -134,8 +161,29 @@ async def chat_endpoint(req: ChatRequest, response: Response):
             if m.role != "system"
         ]
 
-    # Prepend persona system prompt and trim history to max_context_tokens
-    full_messages = [{"role": "system", "content": persona_state.content}] + messages_to_trim
+    # Identify target backend for memory retrieval privacy rule
+    router_decision = model_router.decide_backend(
+        latest_user_text,
+        is_private=is_private,
+        last_backend=last_backend
+    )
+    is_api = (router_decision.target_backend == "api")
+
+    # Retrieve memory context (only for local model requests per privacy rules)
+    memory_context = memory_manager.retrieve_context(
+        latest_user_text,
+        is_private=is_private,
+        is_api_request=is_api,
+        send_personal_context=settings.api_send_personal_context
+    )
+
+    if memory_context:
+        system_content = f"{persona_state.content}\n\n{memory_context}"
+    else:
+        system_content = persona_state.content
+
+    # Prepend persona system prompt (with memory context if applicable) and trim history
+    full_messages = [{"role": "system", "content": system_content}] + messages_to_trim
     trimmed_messages = trim_history(full_messages, max_tokens=settings.max_context_tokens)
 
     # Re-read fresh API key if changed in environment
@@ -206,6 +254,17 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                     model=used_model,
                     backend=used_backend
                 )
+                # Background memory extraction using LOCAL model (never API)
+                if not is_private and settings.memory_enabled and settings.memory_extract_after_each_turn:
+                    import asyncio
+                    asyncio.create_task(
+                        memory_manager.extract_and_store(
+                            conversation_id=conv_id,
+                            user_message=latest_user_text,
+                            assistant_message=full_response,
+                            is_private=is_private
+                        )
+                    )
 
             yield "data: [DONE]\n\n"
 
@@ -254,6 +313,17 @@ async def chat_endpoint(req: ChatRequest, response: Response):
             model=used_model,
             backend=used_backend
         )
+        if content.strip():
+            if not is_private and settings.memory_enabled and settings.memory_extract_after_each_turn:
+                import asyncio
+                asyncio.create_task(
+                    memory_manager.extract_and_store(
+                        conversation_id=conv_id,
+                        user_message=latest_user_text,
+                        assistant_message=content,
+                        is_private=is_private
+                    )
+                )
         return ChatResponse(
             role="assistant",
             content=content,

@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 import yaml
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -118,6 +118,73 @@ class Settings:
     @property
     def api_logged_by_provider(self) -> bool:
         return self.api.get("logged_by_provider", False)
+
+    @property
+    def api_send_personal_context(self) -> bool:
+        return self.api.get("send_personal_context", False)
+
+    @property
+    def chroma_path(self) -> Path:
+        import os
+        env_override = os.getenv("HINAKU_CHROMA_PATH")
+        if env_override:
+            return Path(env_override)
+        p = self.memory.get("chroma_path", "data/chroma")
+        path = Path(p)
+        return path if path.is_absolute() else ROOT_DIR / path
+
+    @property
+    def memory_enabled(self) -> bool:
+        return self.memory.get("enabled", True)
+
+    @property
+    def memory_extract_after_each_turn(self) -> bool:
+        return self.memory.get("extract_after_each_turn", True)
+
+    @property
+    def memory_learn_from_private_chats(self) -> bool:
+        return self.memory.get("learn_from_private_chats", False)
+
+    @property
+    def memory_retrieve_top_k(self) -> int:
+        return self.memory.get("retrieve_top_k", 3)
+
+    @property
+    def memory_min_similarity(self) -> float:
+        return float(self.memory.get("min_similarity", 0.46))
+
+    @property
+    def memory_embedding_model(self) -> str:
+        return self.memory.get("embedding_model", "qwen3-embedding:0.6b")
+
+    @property
+    def memory_embedding_dims(self) -> int:
+        return self.memory.get("embedding_dims", 1024)
+
+    @property
+    def memory_query_prefix(self) -> str:
+        return self.memory.get("query_prefix", "Instruct: Given the owner's message, retrieve stored facts about the owner that help answer it\nQuery: ")
+
+    @property
+    def memory_document_prefix(self) -> str:
+        return self.memory.get("document_prefix", "")
+
+    @property
+    def memory_merge_similar(self) -> bool:
+        return self.memory.get("merge_similar", True)
+
+    @property
+    def memory_merge_threshold(self) -> float:
+        return float(self.memory.get("merge_threshold", 0.80))
+
+    @property
+    def memory_never_store(self) -> List[str]:
+        return self.memory.get("never_store", [
+            "passwords",
+            "api_keys",
+            "government_id_numbers",
+            "bank_or_card_numbers"
+        ])
 
     def get_api_key(self) -> Optional[str]:
         import os

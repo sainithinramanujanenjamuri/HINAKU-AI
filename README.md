@@ -12,6 +12,7 @@ A personal AI assistant designed for a single user (the owner) that runs locally
 - **Step 2 completed**: Persona loading from `config/hinaku_persona.md` with hot-reload, fallback on missing/empty file, and reasoning/thinking tag suppression.
 - **Step 3 completed**: SQLite chat history in `data/hinaku.db`, auto-titling, conversation lifecycle (new, open, rename, delete with cascade), token trimming (`max_context_tokens`), and responsive collapsible sidebar.
 - **Step 4 completed**: Hybrid Model Router (Local Ollama + API supporting OpenAI-compatible and Anthropic Messages), rule-based classification, private chat local-only guarantee, daily safety limits, interaction logging, and per-message backend pills.
+- **Step 5 completed**: Memory extraction and retrieval using SQLite + ChromaDB (`qwen3-embedding:0.6b`), strict privacy constraints (local-only extraction, no memory leakage to API, private chat exclusion), never-store safety filters (passwords, keys, IDs, bank cards), deduplication/merging, automatic re-indexing on embedding model changes, and REST management endpoints.
 
 
 ---

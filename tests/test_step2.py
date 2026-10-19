@@ -74,6 +74,7 @@ def test_persona_included_in_request(monkeypatch):
         yield "Fake response"
 
     monkeypatch.setattr(chat_module.adapter, "stream_chat", fake_stream_chat)
+    monkeypatch.setattr(chat_module.memory_manager, "enabled", False)
 
     response = client.post("/api/chat", json={
         "messages": [
