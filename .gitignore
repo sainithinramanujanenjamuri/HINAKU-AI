@@ -1,0 +1,29 @@
+# Secrets
+.env
+
+# Private data and large artifacts
+data/
+models/
+logs/
+*.gguf
+*.safetensors
+*.bin
+*.pt
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+.pytest_cache/
+
+# Node / UI
+node_modules/
+dist/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

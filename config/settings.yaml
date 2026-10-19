@@ -1,0 +1,84 @@
+# HINAKU settings. Edit freely; the app reloads on change.
+
+app:
+  name: HINAKU
+  persona_file: config/hinaku_persona.md
+  hotkey: ctrl+alt+h            # summon / hide window
+  reduced_motion: false
+
+router:
+  mode: auto                    # auto | local_only | api_only
+  fallback_on_failure: true     # use the other backend if one is down (ignored in forced modes)
+  # In auto mode: short/simple/private -> local, hard reasoning -> api
+  local_max_prompt_tokens: 1500
+  show_backend_indicator: true  # show "local" or "API" on every reply
+
+local:
+  provider: ollama
+  host: http://localhost:11434
+  default_model: qwen3.5:4b     # 3B-4B at Q4 fits 6 GB VRAM
+  allowed_models:               # larger ones run slower (partial CPU offload)
+    - qwen3.5:4b
+    - qwen2.5-coder:3b
+    - llama3.2:3b
+    - qwen2.5:7b
+
+api:
+  provider: SET_ME              # your provider name, handled by one adapter
+  model: SET_ME                 # exact model name from your provider
+  api_key_env: HINAKU_API_KEY   # key is read from the environment / .env, never stored here
+  max_tokens: 1024
+  timeout_seconds: 60
+
+memory:
+  enabled: true
+  store: sqlite+chroma
+  sqlite_path: data/hinaku.db
+  chroma_path: data/chroma
+  extract_after_each_turn: true
+  retrieve_top_k: 5
+  merge_similar: true
+  never_store:                  # extraction must drop these
+    - passwords
+    - api_keys
+    - government_id_numbers
+    - bank_or_card_numbers
+
+training:
+  interval_months: 6
+  allow_manual_run: true
+  base_model: Qwen/Qwen2.5-1.5B-Instruct   # 1B-1.5B fits QLoRA on 6 GB VRAM
+  method: qlora
+  load_in_4bit: true
+  max_seq_len: 1024
+  lora_r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  per_device_batch_size: 1
+  grad_accum_steps: 16
+  gradient_checkpointing: true
+  epochs: 2
+  min_vram_gb: 5.5              # preflight: refuse to start below this
+  pause_when_user_active: true
+  datasets_dir: data/datasets
+  models_dir: models
+  keep_versions: 3              # previous promoted models kept for rollback
+  export_gguf: true
+  ollama_name_template: "hinaku-{yyyy}-{mm}"
+
+curation:
+  min_examples_to_train: 200
+  include: [thumbs_up, owner_edited, accepted_api_answers]
+  exclude: [thumbs_down, marked_private, deleted]
+  owner_review_required: true   # owner can remove items before training
+
+evaluation:
+  golden_file: eval/golden.jsonl
+  compare_against: [current_local, api]
+  promote_only_if_better: true
+  min_improvement: 0.02         # new model must beat current by this margin
+  auto_promote_without_eval: false   # must never be true
+
+paths:
+  logs: logs
+  data: data
