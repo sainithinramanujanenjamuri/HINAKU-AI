@@ -64,6 +64,13 @@ class Settings:
     def max_context_tokens(self) -> int:
         return self.local.get("max_context_tokens", 2000)
 
+    @property
+    def sqlite_path(self) -> Path:
+        p = self.memory.get("sqlite_path", "data/hinaku.db")
+        path = Path(p)
+        return path if path.is_absolute() else ROOT_DIR / path
+
+
 
 def get_settings() -> Settings:
     return Settings(load_settings())

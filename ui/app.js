@@ -1,4 +1,4 @@
-// HINAKU UI Client
+// HINAKU UI Client with SQLite History & Sidebar
 document.addEventListener("DOMContentLoaded", () => {
   const messagesContainer = document.getElementById("messages-container");
   const promptInput = document.getElementById("prompt-input");
@@ -7,10 +7,24 @@ document.addEventListener("DOMContentLoaded", () => {
   const statusIndicator = document.getElementById("status-indicator");
   const noticeBanner = document.getElementById("notice-banner");
   const noticeText = document.getElementById("notice-text");
+  const conversationsList = document.getElementById("conversations-list");
+  const newChatBtn = document.getElementById("new-chat-btn");
+  const sidebar = document.getElementById("sidebar");
+  const sidebarToggleBtn = document.getElementById("sidebar-toggle-btn");
+  const sidebarCloseBtn = document.getElementById("sidebar-close-btn");
+  const sidebarOverlay = document.getElementById("sidebar-overlay");
 
-  let conversationHistory = [];
+  let currentConversationId = null;
   let isGenerating = false;
   let activeAbortController = null;
+
+  // Initialize marked settings
+  if (window.marked) {
+    marked.setOptions({
+      breaks: true,
+      gfm: true
+    });
+  }
 
   function updatePersonaNotice(isFallback, notice) {
     if (!noticeBanner || !noticeText) return;
@@ -20,14 +34,6 @@ document.addEventListener("DOMContentLoaded", () => {
     } else {
       noticeBanner.classList.add("hidden");
     }
-  }
-
-  // Initialize marked settings
-  if (window.marked) {
-    marked.setOptions({
-      breaks: true,
-      gfm: true
-    });
   }
 
   // Fetch status info
@@ -57,13 +63,215 @@ document.addEventListener("DOMContentLoaded", () => {
 
   checkInfo();
 
+  // Sidebar toggle behavior
+  function toggleSidebar() {
+    const isMobile = window.innerWidth <= 768;
+    if (isMobile) {
+      sidebar.classList.toggle("open");
+      sidebarOverlay.classList.toggle("active");
+    } else {
+      sidebar.classList.toggle("collapsed");
+    }
+  }
+
+  function closeMobileSidebar() {
+    sidebar.classList.remove("open");
+    sidebarOverlay.classList.remove("active");
+  }
+
+  sidebarToggleBtn.addEventListener("click", toggleSidebar);
+  if (sidebarCloseBtn) sidebarCloseBtn.addEventListener("click", closeMobileSidebar);
+  sidebarOverlay.addEventListener("click", closeMobileSidebar);
+
+  // Conversations List & Management
+  async function loadConversations() {
+    try {
+      const res = await fetch("/api/conversations");
+      if (!res.ok) return;
+      const convs = await res.json();
+
+      conversationsList.innerHTML = "";
+      if (convs.length === 0) {
+        const empty = document.createElement("div");
+        empty.style.padding = "12px 14px";
+        empty.style.color = "var(--text-dim)";
+        empty.style.fontSize = "12px";
+        empty.textContent = "No conversations yet";
+        conversationsList.appendChild(empty);
+        return;
+      }
+
+      convs.forEach((c) => {
+        const item = document.createElement("div");
+        item.className = `conversation-item ${c.id === currentConversationId ? "active" : ""}`;
+        item.dataset.id = c.id;
+
+        const titleSpan = document.createElement("span");
+        titleSpan.className = "conv-title";
+        titleSpan.textContent = c.title || "Untitled";
+        titleSpan.title = c.title || "Untitled";
+
+        const actionsDiv = document.createElement("div");
+        actionsDiv.className = "conv-actions";
+
+        // Rename button
+        const renameBtn = document.createElement("button");
+        renameBtn.className = "conv-btn";
+        renameBtn.title = "Rename conversation";
+        renameBtn.innerHTML = `
+          <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none">
+            <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
+          </svg>
+        `;
+        renameBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          startInlineRename(item, c.id, c.title);
+        });
+
+        // Delete button
+        const deleteBtn = document.createElement("button");
+        deleteBtn.className = "conv-btn delete-btn";
+        deleteBtn.title = "Delete conversation";
+        deleteBtn.innerHTML = `
+          <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          </svg>
+        `;
+        deleteBtn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          if (confirm(`Permanently delete "${c.title}"?`)) {
+            await deleteConversation(c.id);
+          }
+        });
+
+        actionsDiv.appendChild(renameBtn);
+        actionsDiv.appendChild(deleteBtn);
+
+        item.appendChild(titleSpan);
+        item.appendChild(actionsDiv);
+
+        item.addEventListener("click", () => {
+          openConversation(c.id);
+        });
+
+        conversationsList.appendChild(item);
+      });
+    } catch (e) {
+      console.error("Failed to load conversations:", e);
+    }
+  }
+
+  function startInlineRename(itemDiv, convId, currentTitle) {
+    const titleSpan = itemDiv.querySelector(".conv-title");
+    const actionsDiv = itemDiv.querySelector(".conv-actions");
+    if (!titleSpan) return;
+
+    actionsDiv.style.display = "none";
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "rename-input";
+    input.value = currentTitle;
+
+    titleSpan.replaceWith(input);
+    input.focus();
+    input.select();
+
+    async function finishRename() {
+      const newTitle = input.value.trim() || currentTitle;
+      try {
+        await fetch(`/api/conversations/${convId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: newTitle })
+        });
+      } catch (e) {
+        console.error("Error renaming:", e);
+      }
+      loadConversations();
+    }
+
+    input.addEventListener("blur", finishRename);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        input.removeEventListener("blur", finishRename);
+        finishRename();
+      } else if (e.key === "Escape") {
+        input.removeEventListener("blur", finishRename);
+        loadConversations();
+      }
+    });
+  }
+
+  async function openConversation(convId) {
+    if (isGenerating) return;
+    try {
+      const res = await fetch(`/api/conversations/${convId}`);
+      if (!res.ok) return;
+      const conv = await res.json();
+
+      currentConversationId = conv.id;
+      messagesContainer.innerHTML = "";
+
+      if (conv.messages && conv.messages.length > 0) {
+        conv.messages.forEach((m) => {
+          renderMessage(m.role, m.content);
+        });
+      } else {
+        renderIntroMessage();
+      }
+
+      loadConversations();
+      closeMobileSidebar();
+      promptInput.focus();
+    } catch (e) {
+      console.error("Error opening conversation:", e);
+    }
+  }
+
+  async function deleteConversation(convId) {
+    try {
+      await fetch(`/api/conversations/${convId}`, { method: "DELETE" });
+      if (currentConversationId === convId) {
+        startNewChat();
+      } else {
+        loadConversations();
+      }
+    } catch (e) {
+      console.error("Error deleting conversation:", e);
+    }
+  }
+
+  function renderIntroMessage() {
+    messagesContainer.innerHTML = `
+      <div class="message assistant intro-message">
+        <div class="message-meta">
+          <span class="sender-name">HINAKU</span>
+        </div>
+        <div class="message-body">
+          I am HINAKU. I am listening.
+        </div>
+      </div>
+    `;
+  }
+
+  function startNewChat() {
+    if (isGenerating) return;
+    currentConversationId = null;
+    renderIntroMessage();
+    loadConversations();
+    closeMobileSidebar();
+    promptInput.focus();
+  }
+
+  newChatBtn.addEventListener("click", startNewChat);
+
   // Auto-resize input
   promptInput.addEventListener("input", () => {
     promptInput.style.height = "auto";
     promptInput.style.height = `${Math.min(promptInput.scrollHeight, 160)}px`;
   });
 
-  // Handle Enter (send) vs Shift+Enter (newline)
   promptInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -130,7 +338,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function scrollToBottom() {
     const chatContainer = document.querySelector(".chat-container");
-    chatContainer.scrollTop = chatContainer.scrollHeight;
+    if (chatContainer) chatContainer.scrollTop = chatContainer.scrollHeight;
   }
 
   async function sendMessage() {
@@ -144,10 +352,9 @@ document.addEventListener("DOMContentLoaded", () => {
     isGenerating = true;
 
     // Append user message
-    conversationHistory.push({ role: "user", content: text });
     renderMessage("user", text);
 
-    // Create placeholder for assistant response
+    // Create assistant message placeholder
     let assistantText = "";
     const { bodyDiv } = renderMessage("assistant", "", true);
 
@@ -158,7 +365,8 @@ document.addEventListener("DOMContentLoaded", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: conversationHistory,
+          messages: [{ role: "user", content: text }],
+          conversation_id: currentConversationId,
           stream: true
         }),
         signal: activeAbortController.signal
@@ -178,7 +386,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n\n");
-        buffer = lines.pop(); // keep last incomplete chunk
+        buffer = lines.pop();
 
         for (const line of lines) {
           const trimmed = line.trim();
@@ -191,6 +399,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
           try {
             const parsed = JSON.parse(dataStr);
+            if (parsed.conversation_id) {
+              currentConversationId = parsed.conversation_id;
+            }
             if (parsed.persona_fallback !== undefined) {
               updatePersonaNotice(parsed.persona_fallback, parsed.notice);
             }
@@ -213,11 +424,12 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       }
 
-      // Remove cursor at end
       const cursor = bodyDiv.querySelector(".streaming-cursor");
       if (cursor) cursor.remove();
       attachCopyButtons(bodyDiv);
-      conversationHistory.push({ role: "assistant", content: assistantText });
+
+      // Refresh sidebar so newly titled or updated conversation reflects at top
+      loadConversations();
 
     } catch (err) {
       if (err.name !== "AbortError") {
@@ -230,7 +442,10 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Starfield subtle ambient motion
+  // Load initial conversations
+  loadConversations();
+
+  // Subtle starfield ambient canvas
   initStarfield();
 
   function initStarfield() {
@@ -281,4 +496,3 @@ document.addEventListener("DOMContentLoaded", () => {
     render();
   }
 });
-
