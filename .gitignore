@@ -5,6 +5,7 @@
 data/
 models/
 logs/
+!backend/models/
 *.gguf
 *.safetensors
 *.bin

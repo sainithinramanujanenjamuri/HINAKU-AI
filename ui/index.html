@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HINAKU</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <!-- Markdown parser -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+  <!-- Ambient cosmos canvas for subtle drifting particles -->
+  <canvas id="starfield" class="starfield"></canvas>
+
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="void-mark"></div>
+        <div class="brand-text">
+          <span class="title">HINAKU</span>
+          <span class="subtitle">ヒナク &bull; An infinite void</span>
+        </div>
+      </div>
+      <div class="header-status">
+        <span class="status-indicator" id="status-indicator"></span>
+        <span class="model-badge" id="model-badge">qwen3.5:4b &bull; local</span>
+      </div>
+    </header>
+
+    <!-- Main Chat Area -->
+    <main class="chat-container">
+      <div class="messages" id="messages-container">
+        <div class="message assistant intro-message">
+          <div class="message-meta">
+            <span class="sender-name">HINAKU</span>
+          </div>
+          <div class="message-body">
+            I am HINAKU. I am listening.
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Input Footer -->
+    <footer class="app-footer">
+      <div class="input-wrapper">
+        <textarea
+          id="prompt-input"
+          placeholder="Speak with intent... (Shift+Enter for newline)"
+          rows="1"
+          autofocus
+        ></textarea>
+        <button id="send-button" class="action-btn send-btn" title="Send message (Enter)">
+          <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13"></line>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+          </svg>
+        </button>
+      </div>
+      <div class="footer-meta">
+        <span class="hint">HP V15 &bull; RTX 4050 &bull; Local inference</span>
+      </div>
+    </footer>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
+
