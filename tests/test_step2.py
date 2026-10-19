@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from backend.main import app
 from backend.config import get_settings
 from backend.persona import PersonaManager, DEFAULT_FALLBACK_PROMPT
-from backend.models.thinking_filter import ThinkingFilter, strip_thinking
+from backend.models.thinking_filter import ThinkingFilter, strip_thinking, strip_meta_commentary
 import backend.api.chat as chat_module
 
 client = TestClient(app)
@@ -131,4 +131,63 @@ def test_thinking_filter_preserves_regular_less_than():
 
     result = "".join(output)
     assert result == "If x < 5 and y > 3 then return True. Also <vector<int>>."
+
+def test_strip_meta_commentary_cases():
+    assert strip_meta_commentary("It is a question about the day.\nI am here.") == "I am here."
+    assert strip_meta_commentary("The user wants assistance.\nHINAKU at your service.") == "HINAKU at your service."
+    assert strip_meta_commentary("I should answer with precision.\nUnderstood.") == "Understood."
+    assert strip_meta_commentary("I should not do that.") == ""
+    assert strip_meta_commentary("Normal reply with no meta.") == "Normal reply with no meta."
+
+def test_streaming_strips_meta_commentary():
+    chunks = ["The user is asking: ", "how are you today?\n", "I don't experience days, ", "but I'm here."]
+    filt = ThinkingFilter()
+    output = []
+    for c in chunks:
+        out = filt.process_chunk(c)
+        if out:
+            output.append(out)
+    rem = filt.flush()
+    if rem:
+        output.append(rem)
+    result = "".join(output)
+    assert not result.startswith("The user")
+    assert result == "I don't experience days, but I'm here."
+
+def test_ollama_adapter_payload_options_and_think(monkeypatch):
+    captured_payload = {}
+
+    class DummyResponse:
+        status_code = 200
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *args):
+            pass
+        async def aiter_lines(self):
+            yield '{"message": {"content": "ok"}, "done": true}'
+
+    class DummyClient:
+        def __init__(self, *args, **kwargs):
+            pass
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *args):
+            pass
+        def stream(self, method, url, json=None):
+            captured_payload.update(json)
+            return DummyResponse()
+
+    monkeypatch.setattr("httpx.AsyncClient", DummyClient)
+
+    adapter = chat_module.OllamaAdapter(
+        default_options={"temperature": 0.6, "top_p": 0.9},
+        default_think=False
+    )
+    import asyncio
+    asyncio.run(adapter.chat([{"role": "user", "content": "hi"}]))
+
+    assert captured_payload["options"]["temperature"] == 0.6
+    assert captured_payload["options"]["top_p"] == 0.9
+    assert captured_payload["think"] is False
+
 

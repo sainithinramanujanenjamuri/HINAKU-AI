@@ -47,6 +47,24 @@ class Settings:
         p = Path(rel_or_abs)
         return p if p.is_absolute() else ROOT_DIR / p
 
+    @property
+    def local_options(self) -> Dict[str, Any]:
+        return self.local.get("options", {
+            "temperature": 0.6,
+            "top_p": 0.9,
+            "repeat_penalty": 1.1,
+            "num_predict": 300
+        })
+
+    @property
+    def local_think(self) -> bool:
+        return self.local.get("think", False)
+
+    @property
+    def max_context_tokens(self) -> int:
+        return self.local.get("max_context_tokens", 2000)
+
+
 def get_settings() -> Settings:
     return Settings(load_settings())
 

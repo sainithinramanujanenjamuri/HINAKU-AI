@@ -1,12 +1,20 @@
 import json
-from typing import AsyncGenerator, Dict, List, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional
 import httpx
 from .thinking_filter import ThinkingFilter, strip_thinking
 
 class OllamaAdapter:
-    def __init__(self, host: str = "http://localhost:11434", default_model: str = "qwen3.5:4b"):
+    def __init__(
+        self,
+        host: str = "http://localhost:11434",
+        default_model: str = "qwen3.5:4b",
+        default_options: Optional[Dict[str, Any]] = None,
+        default_think: Optional[bool] = False,
+    ):
         self.host = host.rstrip("/")
         self.default_model = default_model
+        self.default_options = default_options or {}
+        self.default_think = default_think
 
     async def check_health(self) -> Dict[str, bool]:
         url = f"{self.host}/api/tags"
@@ -28,15 +36,29 @@ class OllamaAdapter:
     async def stream_chat(
         self,
         messages: List[Dict[str, str]],
-        model: Optional[str] = None
+        model: Optional[str] = None,
+        options: Optional[Dict[str, Any]] = None,
+        think: Optional[bool] = None,
     ) -> AsyncGenerator[str, None]:
         target_model = model or self.default_model
         url = f"{self.host}/api/chat"
-        payload = {
+        payload: Dict[str, Any] = {
             "model": target_model,
             "messages": messages,
             "stream": True,
         }
+
+        # Apply configurable options
+        merged_options = dict(self.default_options)
+        if options:
+            merged_options.update(options)
+        if merged_options:
+            payload["options"] = merged_options
+
+        # Apply think parameter
+        use_think = self.default_think if think is None else think
+        if use_think is not None:
+            payload["think"] = use_think
 
         thinking_filter = ThinkingFilter()
 
@@ -77,10 +99,12 @@ class OllamaAdapter:
     async def chat(
         self,
         messages: List[Dict[str, str]],
-        model: Optional[str] = None
+        model: Optional[str] = None,
+        options: Optional[Dict[str, Any]] = None,
+        think: Optional[bool] = None,
     ) -> str:
         parts = []
-        async for chunk in self.stream_chat(messages, model=model):
+        async for chunk in self.stream_chat(messages, model=model, options=options, think=think):
             parts.append(chunk)
-        return "".join(parts)
+        return strip_thinking("".join(parts))
 

@@ -9,7 +9,12 @@ from backend.persona import PersonaManager
 
 router = APIRouter()
 settings = get_settings()
-adapter = OllamaAdapter(host=settings.local_host, default_model=settings.default_local_model)
+adapter = OllamaAdapter(
+    host=settings.local_host,
+    default_model=settings.default_local_model,
+    default_options=settings.local_options,
+    default_think=settings.local_think
+)
 persona_manager = PersonaManager(file_path=settings.persona_file)
 
 class Message(BaseModel):
