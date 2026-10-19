@@ -42,3 +42,4 @@ async def delete_conversation(conv_id: str):
     if not deleted:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return {"status": "deleted", "id": conv_id}
+

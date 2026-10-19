@@ -174,3 +174,4 @@ def test_chat_endpoint_stores_history(monkeypatch):
     roles = [m["role"] for m in conv["messages"]]
     assert "user" in roles
     assert "assistant" in roles
+
