@@ -11,6 +11,7 @@ A personal AI assistant designed for a single user (the owner) that runs locally
 - **Step 1 completed**: Basic chat window working with the local Ollama model (`qwen3.5:4b`) from `config/settings.yaml`.
 - **Step 2 completed**: Persona loading from `config/hinaku_persona.md` with hot-reload, fallback on missing/empty file, and reasoning/thinking tag suppression.
 - **Step 3 completed**: SQLite chat history in `data/hinaku.db`, auto-titling, conversation lifecycle (new, open, rename, delete with cascade), token trimming (`max_context_tokens`), and responsive collapsible sidebar.
+- **Step 4 completed**: Hybrid Model Router (Local Ollama + API supporting OpenAI-compatible and Anthropic Messages), rule-based classification, private chat local-only guarantee, daily safety limits, interaction logging, and per-message backend pills.
 
 
 ---

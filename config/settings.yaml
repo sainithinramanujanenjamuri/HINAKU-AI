@@ -31,11 +31,15 @@ local:
     num_predict: 300
 
 api:
-  provider: SET_ME              # your provider name, handled by one adapter
-  model: SET_ME                 # exact model name from your provider
+  provider: openai_compatible   # "openai_compatible" (or "openrouter", "openai") | "anthropic"
+  base_url: https://openrouter.ai/api/v1
+  model: nvidia/nemotron-3-ultra-550b-a55b:free
   api_key_env: HINAKU_API_KEY   # key is read from the environment / .env, never stored here
   max_tokens: 1024
-  timeout_seconds: 60
+  timeout_seconds: 90
+  send_personal_context: false   # never attach memories or personal data to API requests
+  logged_by_provider: true       # free endpoint is logged; show this in the UI
+  max_requests_per_day: 100
 
 memory:
   enabled: true

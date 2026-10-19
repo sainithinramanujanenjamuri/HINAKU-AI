@@ -1,4 +1,4 @@
-// HINAKU UI Client with SQLite History & Sidebar
+// HINAKU UI Client with Model Router, Private Chat & Backend Badges
 document.addEventListener("DOMContentLoaded", () => {
   const messagesContainer = document.getElementById("messages-container");
   const promptInput = document.getElementById("prompt-input");
@@ -13,8 +13,12 @@ document.addEventListener("DOMContentLoaded", () => {
   const sidebarToggleBtn = document.getElementById("sidebar-toggle-btn");
   const sidebarCloseBtn = document.getElementById("sidebar-close-btn");
   const sidebarOverlay = document.getElementById("sidebar-overlay");
+  const privateToggleBtn = document.getElementById("private-toggle-btn");
+  const privacyIcon = document.getElementById("privacy-icon");
+  const privacyLabel = document.getElementById("privacy-label");
 
   let currentConversationId = null;
+  let isCurrentChatPrivate = false;
   let isGenerating = false;
   let activeAbortController = null;
 
@@ -26,15 +30,48 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  function updatePersonaNotice(isFallback, notice) {
+  function updateNoticeBanner(visible, message) {
     if (!noticeBanner || !noticeText) return;
-    if (isFallback) {
-      noticeText.textContent = notice || "Persona file missing or empty. Using neutral fallback prompt.";
+    if (visible && message) {
+      noticeText.textContent = message;
       noticeBanner.classList.remove("hidden");
     } else {
       noticeBanner.classList.add("hidden");
     }
   }
+
+  function updatePrivacyUI(isPrivate) {
+    isCurrentChatPrivate = isPrivate;
+    if (isPrivate) {
+      privateToggleBtn.classList.add("active");
+      if (privacyIcon) privacyIcon.textContent = "🔒";
+      if (privacyLabel) privacyLabel.textContent = "Private (Local)";
+      privateToggleBtn.title = "Private Chat: Stays strictly on this laptop (never uses API)";
+    } else {
+      privateToggleBtn.classList.remove("active");
+      if (privacyIcon) privacyIcon.textContent = "🔓";
+      if (privacyLabel) privacyLabel.textContent = "Standard";
+      privateToggleBtn.title = "Standard Chat: Uses hybrid auto router (Local + API)";
+    }
+  }
+
+  // Toggle privacy button
+  privateToggleBtn.addEventListener("click", async () => {
+    const newState = !isCurrentChatPrivate;
+    updatePrivacyUI(newState);
+    if (currentConversationId) {
+      try {
+        await fetch(`/api/conversations/${currentConversationId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ is_private: newState })
+        });
+        loadConversations();
+      } catch (e) {
+        console.error("Failed to update privacy:", e);
+      }
+    }
+  });
 
   // Fetch status info
   async function checkInfo() {
@@ -42,8 +79,10 @@ document.addEventListener("DOMContentLoaded", () => {
       const res = await fetch("/api/info");
       if (res.ok) {
         const data = await res.json();
-        const modelName = data.default_model || "qwen3.5:4b";
-        modelBadge.textContent = `${modelName} • local`;
+        const mode = data.router?.mode || "auto";
+        const localModel = data.default_model || "qwen3.5:4b";
+        modelBadge.textContent = `${mode} • ${localModel}`;
+
         if (data.ollama_status && data.ollama_status.online) {
           statusIndicator.classList.remove("offline");
           statusIndicator.title = "Ollama online";
@@ -51,8 +90,9 @@ document.addEventListener("DOMContentLoaded", () => {
           statusIndicator.classList.add("offline");
           statusIndicator.title = "Ollama offline or model not found";
         }
-        if (data.persona) {
-          updatePersonaNotice(data.persona.is_fallback, data.persona.notice);
+
+        if (data.persona && data.persona.is_fallback) {
+          updateNoticeBanner(true, data.persona.notice);
         }
       }
     } catch (e) {
@@ -106,10 +146,14 @@ document.addEventListener("DOMContentLoaded", () => {
         item.className = `conversation-item ${c.id === currentConversationId ? "active" : ""}`;
         item.dataset.id = c.id;
 
-        const titleSpan = document.createElement("span");
-        titleSpan.className = "conv-title";
-        titleSpan.textContent = c.title || "Untitled";
-        titleSpan.title = c.title || "Untitled";
+        const titleWrapper = document.createElement("span");
+        titleWrapper.className = "conv-title";
+        if (c.is_private) {
+          titleWrapper.innerHTML = `<span style="font-size: 11px; margin-right: 4px;">🔒</span>${escapeHtml(c.title || "Untitled")}`;
+        } else {
+          titleWrapper.textContent = c.title || "Untitled";
+        }
+        titleWrapper.title = c.title || "Untitled";
 
         const actionsDiv = document.createElement("div");
         actionsDiv.className = "conv-actions";
@@ -148,7 +192,7 @@ document.addEventListener("DOMContentLoaded", () => {
         actionsDiv.appendChild(renameBtn);
         actionsDiv.appendChild(deleteBtn);
 
-        item.appendChild(titleSpan);
+        item.appendChild(titleWrapper);
         item.appendChild(actionsDiv);
 
         item.addEventListener("click", () => {
@@ -160,6 +204,12 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (e) {
       console.error("Failed to load conversations:", e);
     }
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement("div");
+    div.textContent = text;
+    return div.innerHTML;
   }
 
   function startInlineRename(itemDiv, convId, currentTitle) {
@@ -211,11 +261,12 @@ document.addEventListener("DOMContentLoaded", () => {
       const conv = await res.json();
 
       currentConversationId = conv.id;
+      updatePrivacyUI(Boolean(conv.is_private));
       messagesContainer.innerHTML = "";
 
       if (conv.messages && conv.messages.length > 0) {
         conv.messages.forEach((m) => {
-          renderMessage(m.role, m.content);
+          renderMessage(m.role, m.content, false, m.model, m.backend);
         });
       } else {
         renderIntroMessage();
@@ -247,6 +298,7 @@ document.addEventListener("DOMContentLoaded", () => {
       <div class="message assistant intro-message">
         <div class="message-meta">
           <span class="sender-name">HINAKU</span>
+          <span class="backend-tag local">local</span>
         </div>
         <div class="message-body">
           I am HINAKU. I am listening.
@@ -258,6 +310,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function startNewChat() {
     if (isGenerating) return;
     currentConversationId = null;
+    updatePrivacyUI(false);
     renderIntroMessage();
     loadConversations();
     closeMobileSidebar();
@@ -283,13 +336,29 @@ document.addEventListener("DOMContentLoaded", () => {
     sendMessage();
   });
 
-  function renderMessage(role, content, isStreaming = false) {
+  function renderMessage(role, content, isStreaming = false, model = null, backend = null) {
     const msgDiv = document.createElement("div");
     msgDiv.className = `message ${role}`;
 
     const metaDiv = document.createElement("div");
     metaDiv.className = "message-meta";
-    metaDiv.textContent = role === "user" ? "You" : "HINAKU";
+
+    if (role === "user") {
+      metaDiv.textContent = "You";
+    } else {
+      const nameSpan = document.createElement("span");
+      nameSpan.className = "sender-name";
+      nameSpan.textContent = "HINAKU";
+      metaDiv.appendChild(nameSpan);
+
+      const tag = document.createElement("span");
+      const bKind = (backend || "local").toLowerCase();
+      tag.className = `backend-tag ${bKind}`;
+      tag.dataset.tag = "backend";
+      const mName = model ? model.split("/").pop() : "local";
+      tag.textContent = `${mName} · ${bKind === "api" ? "API" : "local"}`;
+      metaDiv.appendChild(tag);
+    }
     msgDiv.appendChild(metaDiv);
 
     const bodyDiv = document.createElement("div");
@@ -314,7 +383,7 @@ document.addEventListener("DOMContentLoaded", () => {
     msgDiv.appendChild(bodyDiv);
     messagesContainer.appendChild(msgDiv);
     scrollToBottom();
-    return { msgDiv, bodyDiv };
+    return { msgDiv, metaDiv, bodyDiv };
   }
 
   function attachCopyButtons(container) {
@@ -356,7 +425,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Create assistant message placeholder
     let assistantText = "";
-    const { bodyDiv } = renderMessage("assistant", "", true);
+    const { metaDiv, bodyDiv } = renderMessage("assistant", "", true, "routing...", "local");
 
     activeAbortController = new AbortController();
 
@@ -402,8 +471,17 @@ document.addEventListener("DOMContentLoaded", () => {
             if (parsed.conversation_id) {
               currentConversationId = parsed.conversation_id;
             }
-            if (parsed.persona_fallback !== undefined) {
-              updatePersonaNotice(parsed.persona_fallback, parsed.notice);
+            if (parsed.notice) {
+              updateNoticeBanner(true, parsed.notice);
+            }
+            if (parsed.backend) {
+              const bTag = metaDiv.querySelector("[data-tag='backend']");
+              if (bTag) {
+                const bKind = parsed.backend.toLowerCase();
+                bTag.className = `backend-tag ${bKind}`;
+                const mName = parsed.model ? parsed.model.split("/").pop() : "local";
+                bTag.textContent = `${mName} · ${bKind === "api" ? "API" : "local"}`;
+              }
             }
             if (parsed.chunk) {
               assistantText += parsed.chunk;
@@ -428,7 +506,6 @@ document.addEventListener("DOMContentLoaded", () => {
       if (cursor) cursor.remove();
       attachCopyButtons(bodyDiv);
 
-      // Refresh sidebar so newly titled or updated conversation reflects at top
       loadConversations();
 
     } catch (err) {

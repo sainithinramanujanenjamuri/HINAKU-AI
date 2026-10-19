@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 import yaml
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -73,6 +73,55 @@ class Settings:
         p = self.memory.get("sqlite_path", "data/hinaku.db")
         path = Path(p)
         return path if path.is_absolute() else ROOT_DIR / path
+
+    @property
+    def router_mode(self) -> str:
+        return self.router.get("mode", "auto").lower()
+
+    @property
+    def fallback_on_failure(self) -> bool:
+        return self.router.get("fallback_on_failure", True)
+
+    @property
+    def local_max_prompt_tokens(self) -> int:
+        return self.router.get("local_max_prompt_tokens", 1500)
+
+    @property
+    def api_provider(self) -> str:
+        return self.api.get("provider", "openai_compatible").lower()
+
+    @property
+    def api_base_url(self) -> str:
+        default_url = "https://api.anthropic.com/v1" if "anthropic" in self.api_provider else "https://api.openai.com/v1"
+        return self.api.get("base_url", default_url).rstrip("/")
+
+    @property
+    def api_model(self) -> str:
+        return self.api.get("model", "")
+
+    @property
+    def api_key_env(self) -> str:
+        return self.api.get("api_key_env", "HINAKU_API_KEY")
+
+    @property
+    def api_max_tokens(self) -> int:
+        return self.api.get("max_tokens", 1024)
+
+    @property
+    def api_timeout_seconds(self) -> int:
+        return self.api.get("timeout_seconds", 60)
+
+    @property
+    def api_max_requests_per_day(self) -> int:
+        return self.api.get("max_requests_per_day", 100)
+
+    def get_api_key(self) -> Optional[str]:
+        import os
+        from dotenv import load_dotenv
+        load_dotenv(ROOT_DIR / ".env")
+        key = os.getenv(self.api_key_env)
+        return key.strip() if key and key.strip() else None
+
 
 
 

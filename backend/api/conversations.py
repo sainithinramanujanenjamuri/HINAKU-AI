@@ -10,9 +10,11 @@ history_manager = ChatHistoryManager(db_path=settings.sqlite_path)
 
 class CreateConversationRequest(BaseModel):
     title: Optional[str] = "New conversation"
+    is_private: Optional[bool] = False
 
-class RenameConversationRequest(BaseModel):
-    title: str
+class UpdateConversationRequest(BaseModel):
+    title: Optional[str] = None
+    is_private: Optional[bool] = None
 
 @router.get("/conversations")
 async def list_conversations():
@@ -20,7 +22,10 @@ async def list_conversations():
 
 @router.post("/conversations")
 async def create_conversation(req: CreateConversationRequest):
-    return history_manager.create_conversation(title=req.title or "New conversation")
+    return history_manager.create_conversation(
+        title=req.title or "New conversation",
+        is_private=req.is_private or False
+    )
 
 @router.get("/conversations/{conv_id}")
 async def get_conversation(conv_id: str):
@@ -30,10 +35,16 @@ async def get_conversation(conv_id: str):
     return conv
 
 @router.patch("/conversations/{conv_id}")
-async def rename_conversation(conv_id: str, req: RenameConversationRequest):
-    conv = history_manager.rename_conversation(conv_id, req.title)
+async def update_conversation(conv_id: str, req: UpdateConversationRequest):
+    conv = history_manager.get_conversation(conv_id)
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
+
+    if req.title is not None:
+        conv = history_manager.rename_conversation(conv_id, req.title)
+    if req.is_private is not None:
+        conv = history_manager.set_conversation_privacy(conv_id, req.is_private)
+
     return conv
 
 @router.delete("/conversations/{conv_id}")
@@ -42,4 +53,3 @@ async def delete_conversation(conv_id: str):
     if not deleted:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return {"status": "deleted", "id": conv_id}
-

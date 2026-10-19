@@ -28,18 +28,15 @@ def trim_history(messages: List[Dict[str, str]], max_tokens: int = 2000) -> List
     if not non_system_msgs:
         return system_msgs
 
-    # Calculate tokens used by system messages
     sys_tokens = sum(estimate_tokens(m.get("content", "")) for m in system_msgs)
     available_tokens = max(100, max_tokens - sys_tokens)
 
-    # Always keep the most recent message
     latest_msg = non_system_msgs[-1]
     latest_tokens = estimate_tokens(latest_msg.get("content", ""))
 
     included_non_system = [latest_msg]
     used_tokens = latest_tokens
 
-    # Walk backwards through remaining messages
     for msg in reversed(non_system_msgs[:-1]):
         msg_tokens = estimate_tokens(msg.get("content", ""))
         if used_tokens + msg_tokens > available_tokens:
@@ -47,9 +44,7 @@ def trim_history(messages: List[Dict[str, str]], max_tokens: int = 2000) -> List
         included_non_system.append(msg)
         used_tokens += msg_tokens
 
-    # Restore chronological order
     included_non_system.reverse()
-
     return system_msgs + included_non_system
 
 def generate_title(first_message: str, max_len: int = 40) -> str:
@@ -59,7 +54,6 @@ def generate_title(first_message: str, max_len: int = 40) -> str:
         return "New conversation"
     if len(clean) <= max_len:
         return clean
-    # Truncate at word boundary if possible
     truncated = clean[:max_len]
     last_space = truncated.rfind(" ")
     if last_space > 15:
@@ -84,6 +78,7 @@ class ChatHistoryManager:
                 CREATE TABLE IF NOT EXISTS conversations (
                     id TEXT PRIMARY KEY,
                     title TEXT NOT NULL,
+                    is_private INTEGER DEFAULT 0,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
@@ -94,48 +89,91 @@ class ChatHistoryManager:
                     role TEXT NOT NULL,
                     content TEXT NOT NULL,
                     model TEXT,
+                    backend TEXT,
                     created_at TEXT NOT NULL,
                     FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
                 );
 
+                CREATE TABLE IF NOT EXISTS interactions (
+                    id TEXT PRIMARY KEY,
+                    conversation_id TEXT,
+                    user_prompt TEXT,
+                    answer TEXT,
+                    model TEXT,
+                    backend TEXT,
+                    feedback TEXT,
+                    edited_answer TEXT,
+                    created_at TEXT
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages (conversation_id, created_at ASC);
                 CREATE INDEX IF NOT EXISTS idx_conversations_updated ON conversations (updated_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_interactions_backend ON interactions (backend, created_at);
             """)
 
-    def create_conversation(self, title: str = "New conversation", conv_id: Optional[str] = None) -> Dict[str, Any]:
+            # Soft migrations for existing tables if needed
+            conv_cols = [c["name"] for c in conn.execute("PRAGMA table_info(conversations)").fetchall()]
+            if "is_private" not in conv_cols:
+                conn.execute("ALTER TABLE conversations ADD COLUMN is_private INTEGER DEFAULT 0")
+
+            msg_cols = [c["name"] for c in conn.execute("PRAGMA table_info(messages)").fetchall()]
+            if "backend" not in msg_cols:
+                conn.execute("ALTER TABLE messages ADD COLUMN backend TEXT")
+
+    def create_conversation(
+        self,
+        title: str = "New conversation",
+        conv_id: Optional[str] = None,
+        is_private: bool = False
+    ) -> Dict[str, Any]:
         cid = conv_id or str(uuid.uuid4())
         now = datetime.datetime.now(datetime.timezone.utc).isoformat()
         with self._get_connection() as conn:
             conn.execute(
-                "INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)",
-                (cid, title, now, now)
+                "INSERT INTO conversations (id, title, is_private, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+                (cid, title, 1 if is_private else 0, now, now)
             )
             conn.commit()
-        return {"id": cid, "title": title, "created_at": now, "updated_at": now}
+        return {"id": cid, "title": title, "is_private": is_private, "created_at": now, "updated_at": now}
 
     def list_conversations(self) -> List[Dict[str, Any]]:
         with self._get_connection() as conn:
             rows = conn.execute(
-                "SELECT id, title, created_at, updated_at FROM conversations ORDER BY updated_at DESC"
+                "SELECT id, title, is_private, created_at, updated_at FROM conversations ORDER BY updated_at DESC"
             ).fetchall()
-            return [dict(r) for r in rows]
+            return [
+                {
+                    "id": r["id"],
+                    "title": r["title"],
+                    "is_private": bool(r["is_private"]),
+                    "created_at": r["created_at"],
+                    "updated_at": r["updated_at"]
+                }
+                for r in rows
+            ]
 
     def get_conversation(self, conv_id: str) -> Optional[Dict[str, Any]]:
         with self._get_connection() as conn:
             conv = conn.execute(
-                "SELECT id, title, created_at, updated_at FROM conversations WHERE id = ?",
+                "SELECT id, title, is_private, created_at, updated_at FROM conversations WHERE id = ?",
                 (conv_id,)
             ).fetchone()
             if not conv:
                 return None
 
             msgs = conn.execute(
-                "SELECT id, conversation_id, role, content, model, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC",
+                "SELECT id, conversation_id, role, content, model, backend, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC",
                 (conv_id,)
             ).fetchall()
 
-            conv_dict = dict(conv)
-            conv_dict["messages"] = [dict(m) for m in msgs]
+            conv_dict = {
+                "id": conv["id"],
+                "title": conv["title"],
+                "is_private": bool(conv["is_private"]),
+                "created_at": conv["created_at"],
+                "updated_at": conv["updated_at"],
+                "messages": [dict(m) for m in msgs]
+            }
             return conv_dict
 
     def rename_conversation(self, conv_id: str, new_title: str) -> Optional[Dict[str, Any]]:
@@ -150,9 +188,20 @@ class ChatHistoryManager:
                 return None
         return self.get_conversation(conv_id)
 
+    def set_conversation_privacy(self, conv_id: str, is_private: bool) -> Optional[Dict[str, Any]]:
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                "UPDATE conversations SET is_private = ?, updated_at = ? WHERE id = ?",
+                (1 if is_private else 0, now, conv_id)
+            )
+            conn.commit()
+            if cursor.rowcount == 0:
+                return None
+        return self.get_conversation(conv_id)
+
     def delete_conversation(self, conv_id: str) -> bool:
         with self._get_connection() as conn:
-            # Explicitly delete messages as well as cascade
             conn.execute("DELETE FROM messages WHERE conversation_id = ?", (conv_id,))
             cursor = conn.execute("DELETE FROM conversations WHERE id = ?", (conv_id,))
             conn.commit()
@@ -163,28 +212,27 @@ class ChatHistoryManager:
         conv_id: str,
         role: str,
         content: str,
-        model: Optional[str] = None
+        model: Optional[str] = None,
+        backend: Optional[str] = None
     ) -> Dict[str, Any]:
         msg_id = str(uuid.uuid4())
         now = datetime.datetime.now(datetime.timezone.utc).isoformat()
         with self._get_connection() as conn:
-            # Check if conversation exists, if not create it
             conv = conn.execute("SELECT id, title FROM conversations WHERE id = ?", (conv_id,)).fetchone()
             if not conv:
                 title = generate_title(content) if role == "user" else "New conversation"
                 conn.execute(
-                    "INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)",
+                    "INSERT INTO conversations (id, title, is_private, created_at, updated_at) VALUES (?, ?, 0, ?, ?)",
                     (conv_id, title, now, now)
                 )
             else:
-                # If first user message and title is default, auto-title
                 if role == "user" and conv["title"] in ("New conversation", "Untitled"):
                     new_title = generate_title(content)
                     conn.execute("UPDATE conversations SET title = ? WHERE id = ?", (new_title, conv_id))
 
             conn.execute(
-                "INSERT INTO messages (id, conversation_id, role, content, model, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-                (msg_id, conv_id, role, content, model, now)
+                "INSERT INTO messages (id, conversation_id, role, content, model, backend, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (msg_id, conv_id, role, content, model, backend, now)
             )
             conn.execute("UPDATE conversations SET updated_at = ? WHERE id = ?", (now, conv_id))
             conn.commit()
@@ -195,6 +243,39 @@ class ChatHistoryManager:
             "role": role,
             "content": content,
             "model": model,
+            "backend": backend,
             "created_at": now
         }
 
+    def log_interaction(
+        self,
+        conv_id: str,
+        user_prompt: str,
+        answer: str,
+        model: str,
+        backend: str,
+        feedback: Optional[str] = None,
+        edited_answer: Optional[str] = None
+    ) -> str:
+        interaction_id = str(uuid.uuid4())
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO interactions (
+                    id, conversation_id, user_prompt, answer, model, backend, feedback, edited_answer, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (interaction_id, conv_id, user_prompt, answer, model, backend, feedback, edited_answer, now)
+            )
+            conn.commit()
+        return interaction_id
+
+    def get_daily_api_request_count(self) -> int:
+        now_date = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+        with self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) as count FROM interactions WHERE backend = 'api' AND substr(created_at, 1, 10) = ?",
+                (now_date,)
+            ).fetchone()
+            return row["count"] if row else 0
