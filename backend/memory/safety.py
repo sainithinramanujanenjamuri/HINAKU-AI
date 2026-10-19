@@ -64,3 +64,4 @@ def filter_safe_facts(facts: List[str], categories: List[str] = None) -> List[st
         else:
             logger.info(f"Dropped unsafe memory candidate: {reason}")
     return safe
+

@@ -16,3 +16,4 @@ def normalize_markdown(text: str) -> str:
     # Group 2: A bold heading line starting with **...**
     pattern = r"((?:^|\n)[ \t]*(?:[-*+]|\d+\.)[^\n]+)\n([ \t]*\*\*[^*]+?\*\*.*)"
     return re.sub(pattern, r"\1\n\n\2", text)
+

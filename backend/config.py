@@ -66,10 +66,15 @@ class Settings:
 
     @property
     def sqlite_path(self) -> Path:
-        import os
+        import os, sys, tempfile
         env_override = os.getenv("HINAKU_DB_PATH")
         if env_override:
             return Path(env_override)
+        # Automatic protection: tests must never touch the real database
+        if "pytest" in sys.modules or os.getenv("HINAKU_ENV") == "test":
+            test_dir = Path(tempfile.gettempdir()) / "hinaku_test"
+            test_dir.mkdir(parents=True, exist_ok=True)
+            return test_dir / "test_isolated.db"
         p = self.memory.get("sqlite_path", "data/hinaku.db")
         path = Path(p)
         return path if path.is_absolute() else ROOT_DIR / path
@@ -125,10 +130,15 @@ class Settings:
 
     @property
     def chroma_path(self) -> Path:
-        import os
+        import os, sys, tempfile
         env_override = os.getenv("HINAKU_CHROMA_PATH")
         if env_override:
             return Path(env_override)
+        # Automatic protection: tests must never touch real chroma store
+        if "pytest" in sys.modules or os.getenv("HINAKU_ENV") == "test":
+            test_dir = Path(tempfile.gettempdir()) / "hinaku_test" / "chroma"
+            test_dir.mkdir(parents=True, exist_ok=True)
+            return test_dir
         p = self.memory.get("chroma_path", "data/chroma")
         path = Path(p)
         return path if path.is_absolute() else ROOT_DIR / path

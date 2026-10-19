@@ -93,3 +93,4 @@ def test_markdown_bold_heading_after_list_item():
     # Case 4: Asterisk and plus bullet lists
     raw_star = "* Point A\n**Key Takeaway**"
     assert normalize_markdown(raw_star) == "* Point A\n\n**Key Takeaway**"
+

@@ -337,3 +337,4 @@ class MemoryStorage:
         except Exception as e:
             logger.error(f"Failed to embed/reindex memories: {e}")
             return 0
+
