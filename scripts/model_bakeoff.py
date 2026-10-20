@@ -28,6 +28,13 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 from backend.config import get_settings
 from backend.persona import PersonaManager
 from backend.memory.storage import MemoryStorage
@@ -162,7 +169,7 @@ def get_model_show_details(host: str, model_name: str) -> Dict[str, Any]:
             flag_note = ""
             if param_count and param_count < 1_500_000_000 and any(s in model_name for s in ["3b", "4b", "7b"]):
                 flagged = True
-                flag_note = f"⚠️ Flagged: ~{param_size} real size is far below name"
+                flag_note = f"[FLAGGED: ~{param_size} real size is far below name]"
 
             return {
                 "parameter_size": param_size,
@@ -213,8 +220,8 @@ async def run_bakeoff(
     think_flag = False
 
     models_to_test = target_models or settings.bakeoff_models
-    print(f"\n--- HINAKU Local Model Bake-off ---")
-    print(f"Target Models from settings: {models_to_test}")
+    print(f"\n--- HINAKU Local Model Bake-off ---", flush=True)
+    print(f"Target Models from settings: {models_to_test}", flush=True)
 
     # Check pulled models
     pulled_models = get_pulled_models(host) if not mock_mode else models_to_test
@@ -233,8 +240,8 @@ async def run_bakeoff(
             skipped_models.append(m)
 
     if skipped_models:
-        print(f"\n[Notice] Skipped unpulled models: {skipped_models}")
-    print(f"Running bake-off for available models: {available_models}\n")
+        print(f"\n[Notice] Skipped unpulled models: {skipped_models}", flush=True)
+    print(f"Running bake-off for available models: {available_models}\n", flush=True)
 
     # Set up isolated temporary storage
     temp_dir = tempfile.mkdtemp(prefix="hinaku_bakeoff_")
@@ -294,9 +301,9 @@ async def run_bakeoff(
 
         # Run 2 passes per model per prompt
         for run_idx in [1, 2]:
-            print(f"=== Starting Run {run_idx} of 2 ===")
+            print(f"\n=== Starting Run {run_idx} of 2 ===", flush=True)
             for p_idx, prompt in enumerate(PROMPTS, 1):
-                print(f"[{run_idx}/2] Prompt {p_idx}/{len(PROMPTS)}: \"{prompt}\"")
+                print(f"\n[{run_idx}/2] Prompt {p_idx}/{len(PROMPTS)}: \"{prompt}\"", flush=True)
 
                 # Retrieve relevant memory context through real app pipeline
                 mem_context = mem_manager.retrieve_context(
@@ -315,6 +322,7 @@ async def run_bakeoff(
                 ]
 
                 for model in available_models:
+                    print(f"  -> Testing {model}...", end="", flush=True)
                     reply_text = ""
                     latency_sec = 0.0
 
@@ -357,6 +365,7 @@ async def run_bakeoff(
 
                     # Evaluate automatic checks
                     chk = check_reply(prompt, reply_text)
+                    print(f" done ({latency_sec:.2f}s, {'PASS' if chk['passed'] else 'FAIL'})", flush=True)
                     results_by_prompt[prompt][run_idx][model] = {
                         "reply": reply_text,
                         "latency": latency_sec,
@@ -427,7 +436,7 @@ async def run_bakeoff(
                     rep = run_data.get("reply", "").replace("\n", " ")
                     lat = f"{run_data.get('latency', 0.0):.2f}s"
                     chk = run_data.get("check", {})
-                    status = "✅ PASS" if chk.get("passed") else f"❌ FAIL ({', '.join(chk.get('reasons', []))})"
+                    status = "[PASS]" if chk.get("passed") else f"[FAIL: {', '.join(chk.get('reasons', []))}]"
                     md_lines.append(f"- **Run {run_idx}** [{lat}] [{status}]: {rep}")
                 md_lines.append("")
 
