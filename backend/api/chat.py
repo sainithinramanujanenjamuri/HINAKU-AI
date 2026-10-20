@@ -80,6 +80,7 @@ class ChatRequest(BaseModel):
     conversation_id: Optional[str] = None
     model: Optional[str] = None
     stream: Optional[bool] = True
+    is_private: Optional[bool] = None
 
 class ChatResponse(BaseModel):
     role: str
@@ -130,11 +131,15 @@ async def chat_endpoint(req: ChatRequest, response: Response):
     # Determine or create conversation
     conv_id = req.conversation_id or str(uuid.uuid4())
     conv = history_manager.get_conversation(conv_id)
-    is_private = False
     if not conv:
-        history_manager.create_conversation(conv_id=conv_id)
+        is_private = bool(req.is_private)
+        history_manager.create_conversation(conv_id=conv_id, is_private=is_private)
     else:
-        is_private = conv.get("is_private", False)
+        if req.is_private is not None:
+            is_private = bool(req.is_private)
+            history_manager.set_conversation_privacy(conv_id, is_private)
+        else:
+            is_private = bool(conv.get("is_private", False))
 
     # Save latest user message to SQLite history
     latest_msg = req.messages[-1]

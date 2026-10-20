@@ -29,6 +29,42 @@ API_KEYWORDS = [
     r"\b(?:code|function|class|import|def|python|javascript|typescript|c\+\+|rust|sql|bug|regex|algorithm|api|git)\b",
 ]
 
+QUESTION_INDICATORS = [
+    r"^(?:should|can|could|may|shall|how\s+do|how\s+can|how\s+should|what\s+should|what\s+do|where\s+do|why\s+do)\s+i\b",
+]
+
+PERSONAL_STATEMENT_PATTERNS = [
+    # "my <attribute>" (e.g. my favorite, my preferred, my laptop, my editor, my name, my gpu, my setup, etc.)
+    r"\bmy\s+(?:favorite|favourite|preferred|name|job|work|project|laptop|pc|computer|gpu|specs|cpu|editor|os|setup|hobby|preference|stack|hardware|card|pin|password)\b",
+    # "I use / I prefer / I like / I work / I live / I own / I have / I run / I code..."
+    r"\bi\s+(?:use|used|using|prefer|preferred|like|liked|love|loved|hate|dislike|have|had|work|worked|live|lived|own|owned|code|program|run|develop)\b",
+    # "I am / I'm / I've / I have been..." (declarative statements about self)
+    r"\b(?:i\s+am|i'm|im|i\s+was)\b",
+    r"\b(?:i've|ive)\s+(?:been|got|had|used|built|created|configured)\b",
+    # "Remember [that] I..." or "Remember [that] my..."
+    r"\bremember\s+(?:that\s+)?(?:i|my)\b",
+    r"\bnote\s+(?:that\s+)?(?:i|my)\b"
+]
+
+def is_personal_statement(text: str) -> bool:
+    """
+    Check if a user prompt is a first-person statement about the owner
+    (e.g., 'I use...', 'my favorite...', 'I am...').
+    Such statements must stay local for privacy and local memory extraction.
+    """
+    clean = text.strip().lower()
+
+    # If it is an inquiry asking for advice/instructions ("Should I...", "Can I...", "How do I..."), it is not a statement of fact/preference
+    for q_pat in QUESTION_INDICATORS:
+        if re.search(q_pat, clean):
+            return False
+
+    for pat in PERSONAL_STATEMENT_PATTERNS:
+        if re.search(pat, clean):
+            return True
+
+    return False
+
 def is_short_followup(text: str) -> bool:
     """
     Check if a user prompt is a short follow-up (under 12 words, no new topic).
@@ -42,6 +78,10 @@ def is_short_followup(text: str) -> bool:
 
     # Greetings are conversational resets, not topic follow-ups
     if clean_stripped in GREETINGS:
+        return False
+
+    # Personal statements stay local, not topic follow-ups
+    if is_personal_statement(clean):
         return False
 
     # Explicit new topic or new question indicators
@@ -81,6 +121,10 @@ def classify_prompt(text: str, is_private: bool = False, max_local_tokens: int =
 
     clean_stripped = re.sub(r"[^\w\s]", "", clean).strip()
     if clean_stripped in GREETINGS or clean_stripped in SMALL_TALK or clean_stripped in FOLLOW_UPS:
+        return "local"
+
+    # Personal statements about the owner stay local (safe, private, extracted locally)
+    if is_personal_statement(clean):
         return "local"
 
     # API patterns (factual, code, math, comparisons)

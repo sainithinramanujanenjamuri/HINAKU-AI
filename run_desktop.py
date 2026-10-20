@@ -1,3 +1,6 @@
+import os
+os.environ["HINAKU_USE_REAL_DATA"] = "1"
+
 import argparse
 import sys
 import threading

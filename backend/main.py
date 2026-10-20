@@ -36,6 +36,8 @@ async def health():
     return {"status": "ok"}
 
 if __name__ == "__main__":
+    import os
+    os.environ["HINAKU_USE_REAL_DATA"] = "1"
     import uvicorn
     uvicorn.run("backend.main:app", host="127.0.0.1", port=8000, reload=True)
 

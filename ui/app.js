@@ -87,7 +87,22 @@ document.addEventListener("DOMContentLoaded", () => {
   privateToggleBtn.addEventListener("click", async () => {
     const newState = !isCurrentChatPrivate;
     updatePrivacyUI(newState);
-    if (currentConversationId) {
+    if (!currentConversationId) {
+      try {
+        const res = await fetch("/api/conversations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ is_private: newState, title: "New conversation" })
+        });
+        if (res.ok) {
+          const conv = await res.json();
+          currentConversationId = conv.id;
+          loadConversations();
+        }
+      } catch (e) {
+        console.error("Failed to create private conversation:", e);
+      }
+    } else {
       try {
         await fetch(`/api/conversations/${currentConversationId}`, {
           method: "PATCH",
@@ -475,6 +490,7 @@ document.addEventListener("DOMContentLoaded", () => {
         body: JSON.stringify({
           messages: [{ role: "user", content: text }],
           conversation_id: currentConversationId,
+          is_private: isCurrentChatPrivate,
           stream: true
         }),
         signal: activeAbortController.signal
