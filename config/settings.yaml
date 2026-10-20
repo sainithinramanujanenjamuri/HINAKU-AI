@@ -28,6 +28,7 @@ local:
     temperature: 0.6
     top_p: 0.9
     repeat_penalty: 1.1
+    presence_penalty: 0.0
     num_predict: 300
 
 api:
@@ -100,3 +101,11 @@ evaluation:
 paths:
   logs: logs
   data: data
+
+bakeoff:
+  models:
+    - qwen3.5:4b
+    - qwen3:4b
+    - llama3.2:3b
+    - qwen2.5:3b
+    - gemma3:4b

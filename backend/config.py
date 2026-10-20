@@ -53,8 +53,19 @@ class Settings:
             "temperature": 0.6,
             "top_p": 0.9,
             "repeat_penalty": 1.1,
+            "presence_penalty": 0.0,
             "num_predict": 300
         })
+
+    @property
+    def bakeoff_models(self) -> List[str]:
+        return self.raw.get("bakeoff", {}).get("models", [
+            "qwen3.5:4b",
+            "qwen3:4b",
+            "llama3.2:3b",
+            "qwen2.5:3b",
+            "gemma3:4b"
+        ])
 
     @property
     def local_think(self) -> bool:
