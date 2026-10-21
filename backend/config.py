@@ -78,7 +78,11 @@ class Settings:
 
     @property
     def max_context_tokens(self) -> int:
-        return self.local.get("max_context_tokens", 2000)
+        return int(self.local.get("max_context_tokens", 2500))
+
+    @property
+    def local_num_ctx(self) -> int:
+        return int(self.local_options.get("num_ctx", 4096))
 
     @property
     def sqlite_path(self) -> Path:

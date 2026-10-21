@@ -429,3 +429,103 @@ def test_plain_task_requests_route_to_api():
     for t in plain_tasks:
         assert is_personal_statement(t) is False, f"Incorrectly marked personal: '{t}'"
         assert classify_prompt(t, is_private=False) == "api", f"Failed to route to API: '{t}'"
+
+
+# ==============================================================================
+# 8. Context Budget & Persona Preservation Test
+# ==============================================================================
+
+def test_long_conversation_context_budget_and_persona_preserved(tmp_path):
+    from backend.history import trim_history, estimate_tokens
+    from backend.config import get_settings
+    settings = get_settings()
+
+    persona_path = Path("config/hinaku_persona.md")
+    persona_text = persona_path.read_text(encoding="utf-8") if persona_path.exists() else "You are HINAKU."
+
+    memory_block = (
+        "What you remember about the owner:\n"
+        "- Owner's name is Sai Nithin Ramanujan\n"
+        "- Works as an AI systems engineer\n"
+        "- Lives in Hyderabad\n"
+        "- Hardware is an HP V15 laptop with RTX 4050 6GB VRAM\n"
+        "- Favorite languages are Python and Rust"
+    )
+
+    system_content = f"{persona_text}\n\n{memory_block}"
+
+    long_conversation = []
+    for i in range(50):
+        long_conversation.append({
+            "role": "user",
+            "content": f"User turn {i}: Can you explain the detailed design of step {i} in an asynchronous event-driven system with message queues and persistence layers?"
+        })
+        long_conversation.append({
+            "role": "assistant",
+            "content": f"Assistant reply {i}: For step {i}, each node consumes tasks from the queue with backpressure control. The worker state is kept minimal, and messages are acknowledged only after commit."
+        })
+
+    long_conversation.append({
+        "role": "user",
+        "content": "User final turn 50: Can you summarize the entire architecture?"
+    })
+
+    raw_messages = [{"role": "system", "content": system_content}] + long_conversation
+    untrimmed_tokens = sum(estimate_tokens(m["content"]) for m in raw_messages)
+    assert untrimmed_tokens > 4000, f"Expected long conversation > 4000 tokens, got {untrimmed_tokens}"
+
+    max_ctx = settings.max_context_tokens
+    num_ctx = settings.local_num_ctx
+    num_predict = settings.local_options.get("num_predict", 300)
+
+    trimmed = trim_history(raw_messages, max_tokens=max_ctx)
+
+    assert len(trimmed) > 1
+    assert trimmed[0]["role"] == "system"
+    assert persona_text in trimmed[0]["content"], "Persona text was truncated or modified in system message"
+    assert memory_block in trimmed[0]["content"], "Memory block was missing from system message"
+
+    trimmed_tokens = sum(estimate_tokens(m["content"]) for m in trimmed)
+    total_with_generation = trimmed_tokens + num_predict
+    assert total_with_generation <= num_ctx, (
+        f"Total tokens with generation ({total_with_generation}) exceeded num_ctx ({num_ctx}). "
+        f"Trimmed: {trimmed_tokens}, num_predict: {num_predict}"
+    )
+
+    assert trimmed[-1]["role"] == "user"
+    assert "User final turn 50" in trimmed[-1]["content"]
+
+
+# ==============================================================================
+# 9. Pre-warm Functionality Test
+# ==============================================================================
+
+@pytest.mark.asyncio
+async def test_prewarm_functionality():
+    import backend.models.prewarm as prewarm_module
+
+    warmed_urls = []
+    warmed_payloads = []
+
+    def mock_urlopen(req, timeout=120):
+        warmed_urls.append(req.full_url)
+        import json
+        warmed_payloads.append(json.loads(req.data.decode("utf-8")))
+        mock_resp = MagicMock()
+        mock_resp.status = 200
+        mock_resp.__enter__.return_value = mock_resp
+        return mock_resp
+
+    with patch("urllib.request.urlopen", side_effect=mock_urlopen):
+        await prewarm_module.prewarm_local_models()
+
+    assert any("/api/generate" in u for u in warmed_urls), "LLM pre-warm endpoint not called"
+    assert any("/api/embed" in u for u in warmed_urls), "Embedding pre-warm endpoint not called"
+
+    llm_payload = next(p for p in warmed_payloads if "model" in p and p["model"] == "gemma3:4b")
+    assert llm_payload["options"]["num_ctx"] == 4096
+    assert llm_payload["keep_alive"] == "30m"
+
+    embed_payload = next(p for p in warmed_payloads if "model" in p and p["model"] == "qwen3-embedding:0.6b")
+    assert embed_payload["options"]["num_ctx"] == 512
+    assert embed_payload["keep_alive"] == "5m"

@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,7 +15,14 @@ from backend.api import (
 )
 from backend.config import ROOT_DIR
 
-app = FastAPI(title="HINAKU API", version="0.1.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    import asyncio
+    from backend.models.prewarm import prewarm_local_models
+    asyncio.create_task(prewarm_local_models())
+    yield
+
+app = FastAPI(title="HINAKU API", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

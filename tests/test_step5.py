@@ -271,21 +271,19 @@ def test_retrieval_quality_12_memories():
     except Exception:
         ollama_online = False
 
-    if ollama_online:
-        # Live embedding test with qwen3-embedding:0.6b
-        def embedder(texts, prefix=""):
-            body = json.dumps({"model": "qwen3-embedding:0.6b", "input": [f"{prefix}{t}" for t in texts]}).encode()
-            req = urllib.request.Request("http://localhost:11434/api/embed", data=body, headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=60) as r:
-                return [l2_normalize(v) for v in json.loads(r.read())["embeddings"]]
+    if not ollama_online:
+        pytest.skip("Local Ollama embedding model qwen3-embedding:0.6b is not online or ready")
 
-        q_prefix = "Instruct: Given the owner's message, retrieve stored facts about the owner that help answer it\nQuery: "
-        doc_vectors = embedder(memories)
-        query_vectors = embedder([q for q, _ in queries], prefix=q_prefix)
-    else:
-        # Fallback offline embedding
-        doc_vectors = fake_word_embedder("", memories)
-        query_vectors = fake_word_embedder("", [q for q, _ in queries])
+    # Live embedding test with qwen3-embedding:0.6b
+    def embedder(texts, prefix=""):
+        body = json.dumps({"model": "qwen3-embedding:0.6b", "input": [f"{prefix}{t}" for t in texts]}).encode()
+        req = urllib.request.Request("http://localhost:11434/api/embed", data=body, headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=60) as r:
+            return [l2_normalize(v) for v in json.loads(r.read())["embeddings"]]
+
+    q_prefix = "Instruct: Given the owner's message, retrieve stored facts about the owner that help answer it\nQuery: "
+    doc_vectors = embedder(memories)
+    query_vectors = embedder([q for q, _ in queries], prefix=q_prefix)
 
     def cosine_sim(a, b):
         return sum(x * y for x, y in zip(a, b))

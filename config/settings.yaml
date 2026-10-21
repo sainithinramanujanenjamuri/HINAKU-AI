@@ -48,7 +48,7 @@ local:
     - qwen2.5:3b
     - qwen2.5-coder:3b
     - qwen2.5:7b
-  max_context_tokens: 2000
+  max_context_tokens: 2500
   think: false
   options:
     temperature: 0.6
@@ -56,7 +56,7 @@ local:
     repeat_penalty: 1.1
     presence_penalty: 0.0
     num_predict: 300
-    num_ctx: 2048
+    num_ctx: 4096
 
 api:
   provider: openai_compatible   # "openai_compatible" (or "openrouter", "openai") | "anthropic"

@@ -103,7 +103,8 @@ class SelfBuildScheduler:
                 elapsed_months = None
 
         due = time_due and has_enough_examples and not is_snoozed
-        show_remind_later = due and within_7_days
+        # Show snooze button whenever the self-build banner is shown
+        show_remind_later = due
 
         if not time_due:
             msg = "Self-build is up to date."
