@@ -11,6 +11,7 @@ from backend.models.router import ModelRouter
 from backend.persona import PersonaManager
 from backend.history import ChatHistoryManager, trim_history
 from backend.memory import MemoryStorage, MemoryExtractor, MemoryManager
+from backend.guards import check_and_redact_sensitive_data, is_live_data_query
 
 router = APIRouter()
 settings = get_settings()
@@ -22,7 +23,8 @@ local_adapter = OllamaAdapter(
     host=settings.local_host,
     default_model=settings.default_local_model,
     default_options=settings.local_options,
-    default_think=settings.local_think
+    default_think=settings.local_think,
+    default_keep_alive=settings.local_keep_alive
 )
 adapter = local_adapter
 
@@ -141,9 +143,129 @@ async def chat_endpoint(req: ChatRequest, response: Response):
         else:
             is_private = bool(conv.get("is_private", False))
 
-    # Save latest user message to SQLite history
+    # Identify latest user message
     latest_msg = req.messages[-1]
     latest_user_text = latest_msg.content if latest_msg.role == "user" else ""
+
+    # GUARD 1: Sensitive-Data Guard (PIN, password, card number, bank account, government ID)
+    is_sensitive, sanitized_user_text = check_and_redact_sensitive_data(latest_user_text)
+    if is_sensitive and settings.guards_sensitive_data_enabled:
+        if latest_msg.role == "user":
+            history_manager.add_message(conv_id, "user", sanitized_user_text)
+        reply_content = settings.guards_sensitive_data_reply
+        history_manager.add_message(conv_id, "assistant", reply_content, model="guard", backend="guard")
+        history_manager.log_interaction(
+            conv_id=conv_id,
+            user_prompt=sanitized_user_text,
+            answer=reply_content,
+            model="guard",
+            backend="guard"
+        )
+        response.headers["X-Persona-Fallback"] = str(persona_state.is_fallback).lower()
+        response.headers["X-Conversation-Id"] = conv_id
+
+        if req.stream:
+            async def sensitive_stream():
+                init_meta = {
+                    "type": "meta",
+                    "conversation_id": conv_id,
+                    "persona_fallback": persona_state.is_fallback,
+                    "notice": None,
+                    "is_private": is_private,
+                    "logged_by_provider": False
+                }
+                yield f"data: {json.dumps(init_meta)}\n\n"
+                chunk_data = {
+                    "chunk": reply_content,
+                    "backend": "guard",
+                    "model": "guard",
+                    "notice": None
+                }
+                yield f"data: {json.dumps(chunk_data)}\n\n"
+                yield "data: [DONE]\n\n"
+
+            return StreamingResponse(
+                sensitive_stream(),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "X-Accel-Buffering": "no",
+                    "X-Persona-Fallback": str(persona_state.is_fallback).lower(),
+                    "X-Conversation-Id": conv_id
+                }
+            )
+        else:
+            return ChatResponse(
+                role="assistant",
+                content=reply_content,
+                model="guard",
+                backend="guard",
+                conversation_id=conv_id,
+                persona_fallback=persona_state.is_fallback,
+                notice=None
+            )
+
+    # GUARD 2: Live-Data Guard (real-time prices, weather, news, sports, current date/time)
+    is_live = is_live_data_query(latest_user_text, settings.guards_live_data_patterns)
+    if is_live and settings.guards_live_data_enabled:
+        if latest_msg.role == "user":
+            history_manager.add_message(conv_id, "user", latest_user_text)
+        reply_content = settings.guards_live_data_reply
+        history_manager.add_message(conv_id, "assistant", reply_content, model="guard", backend="guard")
+        history_manager.log_interaction(
+            conv_id=conv_id,
+            user_prompt=latest_user_text,
+            answer=reply_content,
+            model="guard",
+            backend="guard"
+        )
+        response.headers["X-Persona-Fallback"] = str(persona_state.is_fallback).lower()
+        response.headers["X-Conversation-Id"] = conv_id
+
+        if req.stream:
+            async def live_stream():
+                init_meta = {
+                    "type": "meta",
+                    "conversation_id": conv_id,
+                    "persona_fallback": persona_state.is_fallback,
+                    "notice": None,
+                    "is_private": is_private,
+                    "logged_by_provider": False
+                }
+                yield f"data: {json.dumps(init_meta)}\n\n"
+                chunk_data = {
+                    "chunk": reply_content,
+                    "backend": "guard",
+                    "model": "guard",
+                    "notice": None
+                }
+                yield f"data: {json.dumps(chunk_data)}\n\n"
+                yield "data: [DONE]\n\n"
+
+            return StreamingResponse(
+                live_stream(),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "X-Accel-Buffering": "no",
+                    "X-Persona-Fallback": str(persona_state.is_fallback).lower(),
+                    "X-Conversation-Id": conv_id
+                }
+            )
+        else:
+            return ChatResponse(
+                role="assistant",
+                content=reply_content,
+                model="guard",
+                backend="guard",
+                conversation_id=conv_id,
+                persona_fallback=persona_state.is_fallback,
+                notice=None
+            )
+
+    # Save latest user message to SQLite history (clean of sensitive data)
     if latest_msg.role == "user":
         history_manager.add_message(conv_id, "user", latest_msg.content)
 

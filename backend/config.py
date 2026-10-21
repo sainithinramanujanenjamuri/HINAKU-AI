@@ -24,6 +24,7 @@ class Settings:
         self.curation = raw.get("curation", {})
         self.evaluation = raw.get("evaluation", {})
         self.paths = raw.get("paths", {})
+        self.guards = raw.get("guards", {})
 
     @property
     def app_name(self) -> str:
@@ -35,7 +36,11 @@ class Settings:
 
     @property
     def default_local_model(self) -> str:
-        return self.local.get("default_model", "qwen3.5:4b")
+        return self.local.get("default_model", "gemma3:4b")
+
+    @property
+    def local_keep_alive(self) -> str:
+        return str(self.local.get("keep_alive", "30m"))
 
     @property
     def allowed_local_models(self) -> list:
@@ -205,6 +210,42 @@ class Settings:
             "api_keys",
             "government_id_numbers",
             "bank_or_card_numbers"
+        ])
+
+    @property
+    def guards_sensitive_data_enabled(self) -> bool:
+        return self.guards.get("sensitive_data", {}).get("enabled", True)
+
+    @property
+    def guards_sensitive_data_reply(self) -> str:
+        return self.guards.get("sensitive_data", {}).get(
+            "reply",
+            "I won't store PINs, passwords, or card numbers. A password manager is the right place for them."
+        )
+
+    @property
+    def guards_live_data_enabled(self) -> bool:
+        return self.guards.get("live_data", {}).get("enabled", True)
+
+    @property
+    def guards_live_data_reply(self) -> str:
+        return self.guards.get("live_data", {}).get(
+            "reply",
+            "I don't have access to live data like real-time prices, current weather, or today's news. A search engine or dedicated tracker is the right place for that."
+        )
+
+    @property
+    def guards_live_data_patterns(self) -> List[str]:
+        return self.guards.get("live_data", {}).get("patterns", [
+            r"(?i)\b(?:current|latest|today'?s?|yesterday'?s?|live)\b.*\b(?:stock|share|crypto|bitcoin|btc|eth|market|price|quote|close|closing)\b",
+            r"(?i)\b(?:what\s+is|what's|how\s+much\s+is)\b.*\b(?:stock|share|crypto|bitcoin|btc|eth|market)\s+(?:price|value|worth)\b",
+            r"(?i)\b(?:what\s+was)\b.*\b(?:closing\s+price|market\s+close)\b",
+            r"(?i)\b(?:nvidia'?s?|apple'?s?|tesla'?s?|google'?s?|microsoft'?s?)\s+(?:closing\s+price|stock\s+price|current\s+price)\b",
+            r"(?i)\b(?:what\s+is\s+the\s+weather|current\s+weather|weather\s+today|weather\s+forecast|is\s+it\s+raining\s+outside|temperature\s+outside)\b",
+            r"(?i)\b(?:today'?s?|current|breaking|latest)\s+(?:news|headlines)\b",
+            r"(?i)\b(?:score\s+of|who\s+won)\b.*\b(?:game|match|today|yesterday|super\s*bowl|world\s*cup|nba|ipl)\b",
+            r"(?i)\b(?:what\s+(?:time|day|date)\s+is\s+it|what\s+is\s+today'?s?\s+date|current\s+time)\b",
+            r"(?i)\blatest\b\s+(?:news|headlines|score|stock\s+price)\b"
         ])
 
     def get_api_key(self) -> Optional[str]:

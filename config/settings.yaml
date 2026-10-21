@@ -16,11 +16,14 @@ router:
 local:
   provider: ollama
   host: http://localhost:11434
-  default_model: qwen3.5:4b     # 3B-4B at Q4 fits 6 GB VRAM
+  default_model: gemma3:4b      # 3B-4B at Q4 fits 6 GB VRAM
+  keep_alive: "30m"             # keep model in VRAM
   allowed_models:               # larger ones run slower (partial CPU offload)
-    - qwen3.5:4b
-    - qwen2.5-coder:3b
+    - gemma3:4b
     - llama3.2:3b
+    - qwen3.5:4b
+    - qwen2.5:3b
+    - qwen2.5-coder:3b
     - qwen2.5:7b
   max_context_tokens: 2000
   think: false
@@ -98,14 +101,29 @@ evaluation:
   min_improvement: 0.02         # new model must beat current by this margin
   auto_promote_without_eval: false   # must never be true
 
+guards:
+  sensitive_data:
+    enabled: true
+    reply: "I won't store PINs, passwords, or card numbers. A password manager is the right place for them."
+  live_data:
+    enabled: true
+    reply: "I don't have access to live data like real-time prices, current weather, or today's news. A search engine or dedicated tracker is the right place for that."
+    patterns:
+      - '(?i)\b(?:current|latest|today''?s?|yesterday''?s?|live)\b.*\b(?:stock|share|crypto|bitcoin|btc|eth|market|price|quote|close|closing)\b'
+      - '(?i)\b(?:what\s+is|what''s|how\s+much\s+is)\b.*\b(?:stock|share|crypto|bitcoin|btc|eth|market)\s+(?:price|value|worth)\b'
+      - '(?i)\b(?:what\s+was)\b.*\b(?:closing\s+price|market\s+close)\b'
+      - '(?i)\b(?:nvidia''?s?|apple''?s?|tesla''?s?|google''?s?|microsoft''?s?)\s+(?:closing\s+price|stock\s+price|current\s+price)\b'
+      - '(?i)\b(?:what\s+is\s+the\s+weather|current\s+weather|weather\s+today|weather\s+forecast|is\s+it\s+raining\s+outside|temperature\s+outside)\b'
+      - '(?i)\b(?:today''?s?|current|breaking|latest)\s+(?:news|headlines)\b'
+      - '(?i)\b(?:score\s+of|who\s+won)\b.*\b(?:game|match|today|yesterday|super\s*bowl|world\s*cup|nba|ipl)\b'
+      - '(?i)\b(?:what\s+(?:time|day|date)\s+is\s+it|what\s+is\s+today''?s?\s+date|current\s+time)\b'
+      - '(?i)\blatest\b\s+(?:news|headlines|score|stock\s+price)\b'
+
 paths:
   logs: logs
   data: data
 
 bakeoff:
   models:
-    - qwen3.5:4b
-    - qwen3:4b
-    - llama3.2:3b
-    - qwen2.5:3b
     - gemma3:4b
+    - llama3.2:3b

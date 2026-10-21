@@ -46,11 +46,18 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
     const b = backend.toLowerCase();
-    footerEl.textContent = b === "api" ? "API" : "local";
+    if (b === "guard") {
+      footerEl.textContent = "guard (local)";
+    } else {
+      footerEl.textContent = b === "api" ? "API" : "local";
+    }
   }
 
   function getBackendBadgeText(backend, model) {
     const bKind = (backend || "local").toLowerCase();
+    if (bKind === "guard") {
+      return "security guard · local";
+    }
     const mName = model ? model.split("/").pop() : "local";
     if (bKind === "api") {
       return isApiLoggedByProvider ? "API · logged by provider" : `${mName} · API`;

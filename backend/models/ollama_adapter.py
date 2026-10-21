@@ -7,14 +7,16 @@ class OllamaAdapter:
     def __init__(
         self,
         host: str = "http://localhost:11434",
-        default_model: str = "qwen3.5:4b",
+        default_model: str = "gemma3:4b",
         default_options: Optional[Dict[str, Any]] = None,
         default_think: Optional[bool] = False,
+        default_keep_alive: Optional[str] = "30m",
     ):
         self.host = host.rstrip("/")
         self.default_model = default_model
         self.default_options = default_options or {}
         self.default_think = default_think
+        self.default_keep_alive = default_keep_alive
 
     async def check_health(self) -> Dict[str, bool]:
         url = f"{self.host}/api/tags"
@@ -39,6 +41,7 @@ class OllamaAdapter:
         model: Optional[str] = None,
         options: Optional[Dict[str, Any]] = None,
         think: Optional[bool] = None,
+        keep_alive: Optional[str] = None,
     ) -> AsyncGenerator[str, None]:
         target_model = model or self.default_model
         url = f"{self.host}/api/chat"
@@ -47,6 +50,11 @@ class OllamaAdapter:
             "messages": messages,
             "stream": True,
         }
+
+        # Apply keep_alive
+        use_keep_alive = self.default_keep_alive if keep_alive is None else keep_alive
+        if use_keep_alive is not None:
+            payload["keep_alive"] = use_keep_alive
 
         # Apply configurable options
         merged_options = dict(self.default_options)
@@ -102,9 +110,10 @@ class OllamaAdapter:
         model: Optional[str] = None,
         options: Optional[Dict[str, Any]] = None,
         think: Optional[bool] = None,
+        keep_alive: Optional[str] = None,
     ) -> str:
         parts = []
-        async for chunk in self.stream_chat(messages, model=model, options=options, think=think):
+        async for chunk in self.stream_chat(messages, model=model, options=options, think=think, keep_alive=keep_alive):
             parts.append(chunk)
         return strip_thinking("".join(parts))
 
