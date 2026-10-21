@@ -1276,6 +1276,130 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // --- Self-Build Report Modal Logic (Phase G) ---
+  const reportModal = document.getElementById("report-modal");
+  const btnViewReport = document.getElementById("btn-view-report");
+  const reportModalClose = document.getElementById("report-modal-close");
+  const reportModalBody = document.getElementById("report-modal-body");
+
+  async function openReportModal() {
+    if (!reportModal) return;
+    reportModal.classList.remove("hidden");
+    if (settingsModal) settingsModal.classList.add("hidden");
+    await loadLatestReport();
+  }
+
+  function closeReportModal() {
+    if (!reportModal) return;
+    reportModal.classList.add("hidden");
+  }
+
+  if (btnViewReport) btnViewReport.addEventListener("click", openReportModal);
+  if (reportModalClose) reportModalClose.addEventListener("click", closeReportModal);
+  if (reportModal) {
+    reportModal.addEventListener("click", (e) => {
+      if (e.target === reportModal) closeReportModal();
+    });
+  }
+
+  async function loadLatestReport() {
+    if (!reportModalBody) return;
+    reportModalBody.innerHTML = '<div class="empty-state">Loading latest self-build report...</div>';
+    try {
+      const res = await fetch("/api/self-build/reports/latest");
+      if (!res.ok) {
+        if (res.status === 404) {
+          reportModalBody.innerHTML = '<div class="empty-state">No self-build runs recorded yet.<br><br>The cycle runs every 6 months automatically, or you can trigger it with "Run Self-Build Now".</div>';
+          return;
+        }
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      renderReportView(data);
+    } catch (e) {
+      reportModalBody.innerHTML = `<div class="empty-state">Error loading report: ${e.message}</div>`;
+    }
+  }
+
+  function renderReportView(report) {
+    if (!reportModalBody) return;
+    const isPromoted = report.status === "promoted";
+    const statusColor = isPromoted ? "#34d399" : (report.status === "rejected" ? "#f87171" : "#facc15");
+    const statusBg = isPromoted ? "rgba(16, 185, 129, 0.15)" : (report.status === "rejected" ? "rgba(239, 68, 68, 0.15)" : "rgba(234, 179, 8, 0.15)");
+
+    const ev = report.evaluation || {};
+    const candScore = ev.candidate_score !== undefined ? `${(ev.candidate_score * 100).toFixed(1)}%` : "N/A";
+    const locScore = ev.current_local_score !== undefined ? `${(ev.current_local_score * 100).toFixed(1)}%` : "N/A";
+    const margin = ev.improvement_margin !== undefined ? `${(ev.improvement_margin >= 0 ? "+" : "")}${(ev.improvement_margin * 100).toFixed(1)}%` : "N/A";
+
+    reportModalBody.innerHTML = `
+      <div style="display: flex; flex-direction: column; gap: 16px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; padding-bottom: 12px; border-bottom: 1px solid var(--border-color);">
+          <div>
+            <h3 style="font-size: 15px; color: #fff; margin-bottom: 4px;">Version hinaku-${escapeHtml(report.version || "unknown")}</h3>
+            <span style="font-size: 11px; color: var(--text-muted);">${escapeHtml(report.timestamp || "")}</span>
+          </div>
+          <span style="background: ${statusBg}; color: ${statusColor}; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 12px; text-transform: uppercase;">
+            ${escapeHtml(report.status || "UNKNOWN")}
+          </span>
+        </div>
+
+        <div class="dataset-stats-bar">
+          <div class="stat-item">
+            <span class="stat-value">${candScore}</span>
+            <span class="stat-label">Candidate Score</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-value">${locScore}</span>
+            <span class="stat-label">Current Local</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-value" style="color: ${statusColor};">${margin}</span>
+            <span class="stat-label">Improvement</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-value">${report.dataset ? report.dataset.example_count : 0}</span>
+            <span class="stat-label">Training Examples</span>
+          </div>
+        </div>
+
+        <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); border-radius: 8px; padding: 14px; font-size: 12px; line-height: 1.6; color: #cbd5e1;">
+          <h4 style="font-size: 12px; font-weight: 600; color: #94a3b8; text-transform: uppercase; margin-bottom: 6px;">Cycle Summary</h4>
+          <p><strong>Outcome:</strong> ${escapeHtml(report.status === "promoted" ? "Model passed evaluation and was promoted as active local model." : (report.evaluation && report.evaluation.rejection_reason ? report.evaluation.rejection_reason : report.message || "Completed."))}</p>
+          <p><strong>Dry Run:</strong> ${report.dry_run ? "Yes (simulated weights & preflight validation)" : "No (full GPU weights)"}</p>
+          ${report.preflight ? `<p><strong>Preflight:</strong> ${escapeHtml(report.preflight.message || "")}</p>` : ""}
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 8px;">
+          <button id="btn-report-rollback" class="secondary-btn" style="padding: 6px 14px; font-size: 12px;">Rollback Model</button>
+        </div>
+      </div>
+    `;
+
+    const btnRollback = reportModalBody.querySelector("#btn-report-rollback");
+    if (btnRollback) {
+      btnRollback.addEventListener("click", async () => {
+        if (!confirm("Rollback active model to the previous promoted version?")) return;
+        try {
+          const res = await fetch("/api/training/rollback", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({})
+          });
+          if (res.ok) {
+            alert("Model rolled back successfully!");
+            loadLatestReport();
+          } else {
+            const err = await res.json();
+            alert("Rollback failed: " + (err.detail || "Unknown error"));
+          }
+        } catch (e) {
+          alert("Rollback error: " + e.message);
+        }
+      });
+    }
+  }
+
   // Load initial conversations
   loadConversations();
 

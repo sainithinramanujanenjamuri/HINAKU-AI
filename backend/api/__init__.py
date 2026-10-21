@@ -4,6 +4,7 @@ from .memories import router as memories_router
 from .settings import router as settings_router
 from .interactions import router as interactions_router
 from .training import router as training_router
+from .self_build import router as self_build_router
 
 __all__ = [
     "chat_router",
@@ -11,5 +12,6 @@ __all__ = [
     "memories_router",
     "settings_router",
     "interactions_router",
-    "training_router"
+    "training_router",
+    "self_build_router"
 ]

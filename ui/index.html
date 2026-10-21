@@ -229,6 +229,7 @@
             <p class="setting-desc">6-month cycle fine-tunes a local model on high-quality interactions.</p>
             <div class="button-row">
               <button id="btn-review-dataset" class="secondary-btn">Review Curated Data</button>
+              <button id="btn-view-report" class="secondary-btn">View Report</button>
               <button id="btn-run-selfbuild" class="secondary-btn action-btn">Run Self-Build Now</button>
             </div>
             <div id="selfbuild-status" class="status-msg hidden"></div>
@@ -269,6 +270,22 @@
           <div class="dataset-candidates-list" id="dataset-candidates-list">
             <div class="empty-state">Loading candidate interactions...</div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Self-Build Report Modal (Phase G) -->
+    <div id="report-modal" class="modal-overlay hidden">
+      <div class="modal-container wide-modal">
+        <div class="modal-header">
+          <div class="modal-title-group">
+            <h2 class="modal-title">Self-Build Report</h2>
+            <span class="modal-subtitle" style="font-size: 11px; color: var(--text-muted);">6-month intelligence cycle results</span>
+          </div>
+          <button id="report-modal-close" class="icon-btn" title="Close">✕</button>
+        </div>
+        <div class="modal-body" id="report-modal-body">
+          <div class="empty-state">Loading latest self-build report...</div>
         </div>
       </div>
     </div>
