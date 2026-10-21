@@ -12,6 +12,29 @@ router:
   # In auto mode: short/simple/private -> local, hard reasoning -> api
   local_max_prompt_tokens: 1500
   show_backend_indicator: true  # show "local" or "API" on every reply
+  personal_statement_patterns:
+    - '(?i)\b(?:i\s+feel|i''?m\s+feeling|i\s+am\s+feeling)\b'
+    - '(?i)\b(?:i''?m|i\s+am)\s+(?:worried|anxious|stressed|sad|depressed|happy|scared|upset|hurting|sick|exhausted|tired|burned\s+out|overwhelmed)\b'
+    - '(?i)\bmy\s+(?:family|mom|mother|dad|father|parents|brother|sister|wife|husband|partner|boyfriend|girlfriend|child|kids|son|daughter)\b'
+    - '(?i)\bmy\s+(?:health|doctor|illness|fever|headache|surgery|diagnosis|medication|hospital)\b'
+    - '(?i)\bi\s+(?:have|had|got)\s+(?:a\s+)?(?:fever|headache|cough|cold|infection|disease|pain)\b'
+    - '(?i)\bmy\s+(?:salary|savings|money|rent|debt|bank|budget|income|expenses|mortgage|finances)\b'
+    - '(?i)\b(?:i\s+owe|i\s+spent|i\s+invested)\b'
+    - '(?i)\b(?:i\s+live\s+in|my\s+city|my\s+hometown|my\s+home|my\s+house|my\s+apartment|my\s+address|i''?m\s+moving\s+to)\b'
+    - '(?i)\bmy\s+(?:job|boss|company|coworker|career|workplace|school|college|university|exam|exams|grade|grades|degree)\b'
+    - '(?i)\b(?:i\s+just\s+got\s+hired|i\s+just\s+got\s+promoted|i\s+just\s+got\s+fired|i\s+work\s+at)\b'
+    - '(?i)\bmy\s+(?:friend|friends|partner|relationship|ex|breakup)\b'
+    - '(?i)\b(?:i''?m\s+planning\s+to|i\s+am\s+planning\s+to|my\s+plan\s+is|i\s+plan\s+to|i''?m\s+about\s+to)\b'
+    - '(?i)\b(?:i\s+just\s+got|i\s+just\s+bought|i\s+just\s+started|i\s+just\s+lost|i\s+just\s+moved)\b'
+    - '(?i)\bmy\s+(?:project|favorite|favourite|preferred|name|laptop|pc|computer|gpu|specs|cpu|editor|os|setup|hobby|preference|stack|hardware|card|pin|password)\b'
+    - '(?i)\bi\s+(?:use|used|using|prefer|preferred|like|liked|love|loved|hate|dislike|have|had|work|worked|live|lived|own|owned|code|program|run|develop)\b'
+    - '(?i)\b(?:i\s+am|i''?m|im|i\s+was)\b'
+    - '(?i)\b(?:i''?ve|ive)\s+(?:been|got|had|used|built|created|configured)\b'
+    - '(?i)\bremember\s+(?:that\s+)?(?:i|my)\b'
+    - '(?i)\bnote\s+(?:that\s+)?(?:i|my)\b'
+  task_request_patterns:
+    - '(?i)^(?:i\s+want\s+to|i\s+need\s+to|i\s+would\s+like\s+to|can\s+you\s+help\s+me\s+to)\s+(?:learn|build|write|create|debug|understand|solve|implement|code|explain|make|test)\b'
+    - '(?i)\b(?:can\s+you\s+help|help\s+me\s+with|how\s+do\s+i|how\s+can\s+i)\b'
 
 local:
   provider: ollama
@@ -56,6 +79,7 @@ memory:
   min_similarity: 0.46
   embedding_model: qwen3-embedding:0.6b
   embedding_dims: 1024
+  embedding_keep_alive: "5m"
   query_prefix: "Instruct: Given the owner's message, retrieve stored facts about the owner that help answer it\nQuery: "
   document_prefix: ""
   merge_similar: true
@@ -90,6 +114,8 @@ training:
 
 curation:
   min_examples_to_train: 200
+  api_answers_require_thumbs_up: true
+  exclude_api_answers: false
   include: [thumbs_up, owner_edited, accepted_api_answers]
   exclude: [thumbs_down, marked_private, deleted]
   owner_review_required: true   # owner can remove items before training

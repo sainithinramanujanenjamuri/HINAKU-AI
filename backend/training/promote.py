@@ -13,11 +13,12 @@ logger = logging.getLogger(__name__)
 class ModelPromoter:
     def __init__(self, data_dir: Optional[Path] = None, models_dir: Optional[Path] = None):
         settings = get_settings()
-        # Ensure promotion ledger uses test-isolated database/data directory during tests
         if data_dir:
             self.promotions_file = Path(data_dir) / "promotions.json"
+            self.pending_file = Path(data_dir) / "pending_promotion.json"
         else:
             self.promotions_file = settings.sqlite_path.parent / "promotions.json"
+            self.pending_file = settings.sqlite_path.parent / "pending_promotion.json"
         self.models_dir = Path(models_dir) if models_dir else settings.models_dir
         self.keep_versions = settings.training_keep_versions
         self.min_improvement = settings.eval_min_improvement
@@ -47,6 +48,31 @@ class ModelPromoter:
                 return item
         return None
 
+    def get_pending_candidate(self) -> Optional[Dict[str, Any]]:
+        """Retrieves candidate model awaiting owner confirmation."""
+        if not self.pending_file.exists():
+            return None
+        try:
+            with open(self.pending_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"Error reading pending promotion {self.pending_file}: {e}")
+            return None
+
+    def set_pending_candidate(self, candidate_data: Dict[str, Any]):
+        """Saves candidate model details for UI approval gate."""
+        self.pending_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(self.pending_file, "w", encoding="utf-8") as f:
+            json.dump(candidate_data, f, indent=2)
+
+    def clear_pending_candidate(self):
+        """Clears pending promotion candidate upon promotion or rejection."""
+        if self.pending_file.exists():
+            try:
+                self.pending_file.unlink()
+            except Exception as e:
+                logger.error(f"Error removing pending promotion file: {e}")
+
     def can_promote(self, candidate_score: float, current_local_score: float) -> Tuple[bool, str]:
         margin = round(candidate_score - current_local_score, 3)
         if margin >= self.min_improvement:
@@ -59,12 +85,16 @@ class ModelPromoter:
         version: str,
         candidate_score: float,
         current_local_score: float,
+        confirmed: bool = False,
         dry_run: bool = True
     ) -> Dict[str, Any]:
         """
-        Promotes a candidate model if evaluation condition is satisfied.
-        Hard rule: Never auto-promote without passing the eval!
+        Promotes a candidate model if evaluation condition is satisfied AND explicit owner confirmation is given.
+        Hard rule: No trained model may be promoted or activated without explicit confirmation!
         """
+        if not confirmed:
+            raise ValueError("Approval gate: Model promotion requires explicit owner confirmation in the UI.")
+
         eligible, reason = self.can_promote(candidate_score, current_local_score)
         if not eligible:
             raise ValueError(f"Promotion rejected: {reason}")
@@ -92,6 +122,9 @@ class ModelPromoter:
 
         history.append(record)
         self._save_history(history)
+
+        # Clear any pending candidate entry once promoted
+        self.clear_pending_candidate()
 
         # Enforce keeping last N versions
         self._prune_old_versions()
@@ -143,6 +176,5 @@ class ModelPromoter:
         if len(history) <= self.keep_versions:
             return
 
-        # Keep active and the most recent (keep_versions - 1) entries
         kept = history[-self.keep_versions:]
         self._save_history(kept)

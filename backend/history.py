@@ -128,6 +128,28 @@ class ChatHistoryManager:
                 conn.execute("ALTER TABLE interactions ADD COLUMN message_id TEXT")
 
             conn.execute("CREATE INDEX IF NOT EXISTS idx_interactions_msg ON interactions (message_id)")
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS app_metadata (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+            """)
+
+
+    def get_metadata(self, key: str, default: Optional[str] = None) -> Optional[str]:
+        with self._get_connection() as conn:
+            row = conn.execute("SELECT value FROM app_metadata WHERE key = ?", (key,)).fetchone()
+            return row["value"] if row else default
+
+    def set_metadata(self, key: str, value: str):
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        with self._get_connection() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO app_metadata (key, value, updated_at) VALUES (?, ?, ?)",
+                (key, str(value), now)
+            )
+            conn.commit()
 
     def create_conversation(
         self,

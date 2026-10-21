@@ -155,12 +155,12 @@ async def chat_endpoint(req: ChatRequest, response: Response):
         if latest_msg.role == "user":
             history_manager.add_message(conv_id, "user", sanitized_user_text)
         reply_content = settings.guards_sensitive_data_reply
-        ast_msg = history_manager.add_message(conv_id, "assistant", reply_content, model="guard", backend="guard")
+        ast_msg = history_manager.add_message(conv_id, "assistant", reply_content, model="sensitive-data guard", backend="guard")
         inter_id = history_manager.log_interaction(
             conv_id=conv_id,
             user_prompt=sanitized_user_text,
             answer=reply_content,
-            model="guard",
+            model="sensitive-data guard",
             backend="guard",
             message_id=ast_msg["id"]
         )
@@ -183,7 +183,7 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                 chunk_data = {
                     "chunk": reply_content,
                     "backend": "guard",
-                    "model": "guard",
+                    "model": "sensitive-data guard",
                     "notice": None,
                     "message_id": ast_msg["id"],
                     "interaction_id": inter_id
@@ -206,7 +206,7 @@ async def chat_endpoint(req: ChatRequest, response: Response):
             return ChatResponse(
                 role="assistant",
                 content=reply_content,
-                model="guard",
+                model="sensitive-data guard",
                 backend="guard",
                 conversation_id=conv_id,
                 persona_fallback=persona_state.is_fallback,
@@ -221,12 +221,12 @@ async def chat_endpoint(req: ChatRequest, response: Response):
         if latest_msg.role == "user":
             history_manager.add_message(conv_id, "user", latest_user_text)
         reply_content = settings.guards_live_data_reply
-        ast_msg = history_manager.add_message(conv_id, "assistant", reply_content, model="guard", backend="guard")
+        ast_msg = history_manager.add_message(conv_id, "assistant", reply_content, model="live-data guard", backend="guard")
         inter_id = history_manager.log_interaction(
             conv_id=conv_id,
             user_prompt=latest_user_text,
             answer=reply_content,
-            model="guard",
+            model="live-data guard",
             backend="guard",
             message_id=ast_msg["id"]
         )
@@ -249,7 +249,7 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                 chunk_data = {
                     "chunk": reply_content,
                     "backend": "guard",
-                    "model": "guard",
+                    "model": "live-data guard",
                     "notice": None,
                     "message_id": ast_msg["id"],
                     "interaction_id": inter_id
@@ -272,7 +272,7 @@ async def chat_endpoint(req: ChatRequest, response: Response):
             return ChatResponse(
                 role="assistant",
                 content=reply_content,
-                model="guard",
+                model="live-data guard",
                 backend="guard",
                 conversation_id=conv_id,
                 persona_fallback=persona_state.is_fallback,

@@ -302,6 +302,27 @@ class Settings:
     def training_keep_versions(self) -> int:
         return int(self.training.get("keep_versions", 3))
 
+
+    @property
+    def memory_embedding_keep_alive(self) -> str:
+        return str(self.memory.get("embedding_keep_alive", "5m"))
+
+    @property
+    def curation_api_answers_require_thumbs_up(self) -> bool:
+        return bool(self.curation.get("api_answers_require_thumbs_up", True))
+
+    @property
+    def curation_exclude_api_answers(self) -> bool:
+        return bool(self.curation.get("exclude_api_answers", False))
+
+    @property
+    def router_personal_statement_patterns(self) -> List[str]:
+        return self.router.get("personal_statement_patterns", [])
+
+    @property
+    def router_task_request_patterns(self) -> List[str]:
+        return self.router.get("task_request_patterns", [])
+
     def get_api_key(self) -> Optional[str]:
         import os
         from dotenv import load_dotenv

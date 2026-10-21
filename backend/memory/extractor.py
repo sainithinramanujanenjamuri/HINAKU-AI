@@ -16,7 +16,70 @@ Strict Rules:
 4. Do NOT infer or guess anything about mood, health, emotions, or personality.
 5. Do NOT extract conversational filler, temporary thoughts, or questions.
 6. Format: One short fact per line, phrased simply (e.g., "Uses a laptop with an RTX 4050 and 6 GB VRAM", "Favorite code editor is VS Code").
-7. If the owner did not state any durable facts or preferences about themselves, output exactly: NONE."""
+7. If the owner did not state any durable facts or preferences about themselves, output exactly: NONE.
+8. Multiple values for an attribute from one statement (e.g. multiple colors, hobbies, tools, languages) MUST be stored as ONE memory with plural wording (e.g., "Favorite colors are black, red, and blue", NOT "Favorite color is black" + "Favorite color is red"). Never split multiple values into one memory per value."""
+
+def extract_attribute_key(text: str) -> Optional[str]:
+    """
+    Extracts a canonical attribute topic from a fact string.
+    Used to locate existing memories when the owner states a new set of values.
+    """
+    clean = text.lower().strip()
+    if re.search(r"\b(?:favorite|favourite|preferred)\s+colou?rs?\b", clean):
+        return "favorite_color"
+    if re.search(r"\b(?:favorite|favourite|preferred)\s+(?:code\s+)?editors?\b", clean):
+        return "favorite_editor"
+    if re.search(r"\b(?:laptop|gpu|graphics\s+card|vram|specs)\b", clean):
+        return "hardware_specs"
+    if re.search(r"\b(?:lives?\s+in|location|city|hometown)\b", clean):
+        return "location"
+    if re.search(r"\b(?:operating\s+system|os)\b", clean):
+        return "operating_system"
+    if re.search(r"\b(?:primary\s+)?(?:programming\s+)?languages?\b", clean):
+        return "programming_languages"
+    if re.search(r"\b(?:drinks?|beverage)\b", clean):
+        return "beverage"
+    return None
+
+def consolidate_multi_value_facts(facts: List[str]) -> List[str]:
+    """
+    Consolidates facts with multiple values from one statement into ONE memory with plural wording.
+    Never splits multiple values into separate memories.
+    E.g.:
+    ['Favorite color is black', 'Favorite color is red', 'Favorite color is blue']
+    -> ['Favorite colors are black, red, and blue']
+    """
+    if not facts:
+        return []
+
+    color_values = []
+    other_facts = []
+
+    for f in facts:
+        # Match single or plural color fact
+        m = re.match(r"(?i)^favorite\s+colou?rs?\s+(?:is|are|include)\s+(.+)$", f.strip())
+        if m:
+            raw_vals = m.group(1).rstrip(".")
+            # Split by comma or 'and'
+            parts = [p.strip() for p in re.split(r",\s*|\s+and\s+", raw_vals) if p.strip()]
+            for p in parts:
+                if p.lower() not in [c.lower() for c in color_values]:
+                    color_values.append(p)
+        else:
+            other_facts.append(f)
+
+    result = []
+    if color_values:
+        if len(color_values) == 1:
+            result.append(f"Favorite color is {color_values[0]}")
+        elif len(color_values) == 2:
+            result.append(f"Favorite colors are {color_values[0]} and {color_values[1]}")
+        else:
+            joined = ", ".join(color_values[:-1])
+            result.append(f"Favorite colors are {joined}, and {color_values[-1]}")
+
+    result.extend(other_facts)
+    return result
 
 class MemoryExtractor:
     def __init__(
@@ -62,7 +125,7 @@ class MemoryExtractor:
 
     def parse_extracted_text(self, text: str) -> List[str]:
         """
-        Parse raw model output into clean, safe fact strings.
+        Parse raw model output into clean, safe fact strings, consolidating multi-value facts.
         """
         facts = []
         for line in text.splitlines():
@@ -85,7 +148,28 @@ class MemoryExtractor:
 
             facts.append(cleaned)
 
-        return facts
+        # Consolidate multiple values into one memory with plural wording
+        return consolidate_multi_value_facts(facts)
+
+    def find_existing_matching_memory(self, fact: str) -> Optional[Dict[str, Any]]:
+        """
+        Locates an existing memory that covers the same attribute/fact for updating.
+        Checks attribute key matching and semantic similarity.
+        """
+        attr_key = extract_attribute_key(fact)
+        all_memories = self.storage.get_memories(include_deleted=False)
+
+        if attr_key:
+            for mem in all_memories:
+                if extract_attribute_key(mem["text"]) == attr_key:
+                    return mem
+
+        similar_match = self.storage.find_similar(fact, threshold=0.60)
+        if similar_match:
+            existing_mem, _ = similar_match
+            return existing_mem
+
+        return None
 
     async def process_exchange(
         self,
@@ -94,17 +178,16 @@ class MemoryExtractor:
         assistant_message: str
     ) -> List[Dict[str, Any]]:
         """
-        Extract facts, deduplicate or merge, and persist to storage.
+        Extract facts, deduplicate or update existing memories, and persist to storage.
         """
         facts = await self.extract_facts(user_message, assistant_message)
         saved = []
 
         for fact in facts:
-            # Dedupe & merge check
-            similar_match = self.storage.find_similar(fact, threshold=self.merge_threshold)
-            if similar_match:
-                existing_mem, score = similar_match
-                logger.info(f"Merging similar memory '{fact}' into '{existing_mem['text']}' (score: {score:.2f})")
+            # Check if an existing memory exists for this fact/attribute
+            existing_mem = self.find_existing_matching_memory(fact)
+            if existing_mem:
+                logger.info(f"Updating existing memory '{existing_mem['text']}' with new values '{fact}'")
                 updated = self.storage.update_memory(existing_mem["id"], fact)
                 if updated:
                     saved.append(updated)

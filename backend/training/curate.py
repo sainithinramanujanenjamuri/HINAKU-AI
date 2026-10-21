@@ -38,6 +38,10 @@ class DatasetCurator:
           - text containing sensitive data (passwords, PINs, card/bank numbers, IDs, API keys)
           - blank prompt or answer
         """
+        settings = get_settings()
+        api_require_thumbs_up = settings.curation_api_answers_require_thumbs_up
+        exclude_api = settings.curation_exclude_api_answers
+
         with self.history_manager._get_connection() as conn:
             query = """
                 SELECT i.id, i.conversation_id, i.message_id, i.user_prompt, i.answer,
@@ -50,11 +54,6 @@ class DatasetCurator:
                 WHERE (i.backend != 'guard' OR i.backend IS NULL)
                   AND (i.feedback != 'thumbs_down' OR i.feedback IS NULL)
                   AND (c.is_private IS NULL OR c.is_private = 0)
-                  AND (
-                      i.feedback = 'thumbs_up'
-                      OR (i.edited_answer IS NOT NULL AND TRIM(i.edited_answer) != '')
-                      OR (i.backend = 'api' AND (i.feedback IS NULL OR i.feedback != 'thumbs_down'))
-                  )
                 ORDER BY i.created_at ASC
             """
             rows = conn.execute(query).fetchall()
@@ -87,14 +86,36 @@ class DatasetCurator:
             if is_sens_a:
                 continue
 
-            # Determine reason for inclusion
-            reasons = []
-            if r.get("feedback") == "thumbs_up":
-                reasons.append("thumbs_up")
-            if edited:
-                reasons.append("owner_edited")
-            if r.get("backend") == "api" and r.get("feedback") != "thumbs_down":
-                reasons.append("accepted_api")
+            backend_str = (r.get("backend") or "local").lower()
+            feedback = r.get("feedback")
+            is_edited = bool(edited)
+
+            # Determine source: owner-edited, API, or local
+            if is_edited:
+                source = "owner-edited"
+            elif backend_str == "api":
+                source = "API"
+            else:
+                source = "local"
+
+            # Apply curation inclusion / exclusion rules
+            if is_edited:
+                reasons = ["owner_edited"]
+                if feedback == "thumbs_up":
+                    reasons.append("thumbs_up")
+            elif backend_str == "api":
+                if exclude_api:
+                    continue
+                if api_require_thumbs_up and feedback != "thumbs_up":
+                    continue
+                reasons = ["accepted_api"]
+                if feedback == "thumbs_up":
+                    reasons.append("thumbs_up")
+            else:
+                # Local responses require thumbs_up
+                if feedback != "thumbs_up":
+                    continue
+                reasons = ["thumbs_up"]
 
             candidates.append({
                 "interaction_id": r["id"],
@@ -103,10 +124,11 @@ class DatasetCurator:
                 "user_prompt": user_prompt,
                 "original_answer": orig_answer,
                 "final_answer": final_answer,
-                "is_edited": bool(edited),
-                "feedback": r.get("feedback"),
+                "is_edited": is_edited,
+                "feedback": feedback,
                 "backend": r.get("backend") or "local",
                 "model": r.get("model") or "unknown",
+                "source": source,
                 "inclusion_reasons": reasons,
                 "created_at": r.get("created_at")
             })

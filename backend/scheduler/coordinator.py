@@ -125,26 +125,39 @@ class SelfBuildCoordinator:
             local_name="current_local (gemma3:4b)"
         )
 
-        # Stage 6: Promote or Reject
+        # Stage 6: Promote or Reject (Approval Gate)
         cand_score = eval_comparison["candidate_score"]
         loc_score = eval_comparison["local_score"]
         promotable = eval_comparison["promotable"]
         margin = eval_comparison["improvement_margin"]
+        prompts_margin = eval_comparison.get("prompts_margin", 0)
 
         promotion_record = None
         rejection_reason = None
 
         if promotable:
-            promotion_record = self.promoter.promote(
-                version=ver,
-                candidate_score=cand_score,
-                current_local_score=loc_score,
-                dry_run=dry_run
-            )
-            decision = "promoted"
+            pending_data = {
+                "version": ver,
+                "candidate_name": eval_comparison.get("candidate_name", f"hinaku-{ver}"),
+                "local_name": eval_comparison.get("local_name", "current_local (gemma3:4b)"),
+                "api_name": eval_comparison.get("api_name", "API Model"),
+                "candidate_score": cand_score,
+                "local_score": loc_score,
+                "api_score": eval_comparison.get("api_score"),
+                "improvement_margin": margin,
+                "prompts_margin": prompts_margin,
+                "candidate_wins": eval_comparison.get("candidate_wins", 0),
+                "local_wins": eval_comparison.get("local_wins", 0),
+                "category_table": eval_comparison.get("category_table", {}),
+                "side_by_side": eval_comparison.get("side_by_side", [])[:15],
+                "dry_run": dry_run,
+                "timestamp": run_start
+            }
+            self.promoter.set_pending_candidate(pending_data)
+            decision = "pending_approval"
         else:
             decision = "rejected"
-            rejection_reason = f"Candidate score ({cand_score:.1%}) did not beat current model ({loc_score:.1%}) by required margin ({self.evaluator.min_improvement:.1%})"
+            rejection_reason = f"Candidate score failed promotion threshold (prompts margin: {prompts_margin}, required: >=3 with no category worse)."
 
         # Stage 7: Generate Report
         report = {
@@ -163,7 +176,9 @@ class SelfBuildCoordinator:
                 "candidate_score": cand_score,
                 "current_local_score": loc_score,
                 "improvement_margin": margin,
-                "min_improvement_required": self.evaluator.min_improvement,
+                "prompts_margin": prompts_margin,
+                "category_table": eval_comparison.get("category_table", {}),
+                "side_by_side": eval_comparison.get("side_by_side", [])[:15],
                 "decision": decision,
                 "rejection_reason": rejection_reason
             },
@@ -213,7 +228,7 @@ class SelfBuildCoordinator:
 {f"- **Rejection Reason:** {eval_data.get('rejection_reason')}" if eval_data.get('rejection_reason') else ""}
 
 ## 3. Promotion Status
-- **Active Model Version:** {report.get('promotion', {}).get('ollama_name', 'current local unchanged')}
+- **Active Model Version:** {(report.get('promotion') or {}).get('ollama_name', 'current local unchanged')}
 - **Rollback Available:** Yes (retained in promotion ledger)
 """
 

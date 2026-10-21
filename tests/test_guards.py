@@ -125,7 +125,7 @@ def test_sensitive_guard_e2e_blocks_model_and_redacts(monkeypatch):
     data = res.json()
     assert "I won't store PINs, passwords, or card numbers" in data["content"]
     assert data["backend"] == "guard"
-    assert data["model"] == "guard"
+    assert data["model"] == "sensitive-data guard"
     cid = data["conversation_id"]
 
     # Verify history in database has [removed] and not the raw PIN
@@ -178,6 +178,7 @@ def test_live_data_guard_e2e_blocks_model(monkeypatch):
     data = res.json()
     assert "live data" in data["content"].lower()
     assert data["backend"] == "guard"
+    assert data["model"] == "live-data guard"
 
 def test_educational_stock_query_still_routes_to_model(monkeypatch):
     """

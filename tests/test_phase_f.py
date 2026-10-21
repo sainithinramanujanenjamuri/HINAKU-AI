@@ -117,6 +117,7 @@ def test_model_promotion_and_rollback(tmp_path):
         version="2026-10",
         candidate_score=0.92,
         current_local_score=0.85,
+        confirmed=True,
         dry_run=True
     )
     assert res_promo["status"] == "active"
@@ -132,6 +133,7 @@ def test_model_promotion_and_rollback(tmp_path):
             version="2026-11",
             candidate_score=0.80,
             current_local_score=0.85,
+            confirmed=True,
             dry_run=True
         )
 
@@ -143,6 +145,7 @@ def test_model_promotion_and_rollback(tmp_path):
         version="2027-04",
         candidate_score=0.96,
         current_local_score=0.92,
+        confirmed=True,
         dry_run=True
     )
     assert promoter.get_active_model()["version"] == "2027-04"
@@ -168,6 +171,7 @@ def test_training_api_endpoints(tmp_path):
         "version": "2026-10",
         "candidate_score": 0.90,
         "current_local_score": 0.85,
+        "confirmed": True,
         "dry_run": True
     })
     assert res_promo.status_code == 200
@@ -178,6 +182,7 @@ def test_training_api_endpoints(tmp_path):
         "version": "2026-11",
         "candidate_score": 0.82,
         "current_local_score": 0.85,
+        "confirmed": True,
         "dry_run": True
     })
     assert res_reject.status_code == 400

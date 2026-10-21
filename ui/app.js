@@ -42,21 +42,30 @@ document.addEventListener("DOMContentLoaded", () => {
     const footerEl = document.getElementById("footer-backend");
     if (!footerEl) return;
     if (!backend) {
-      footerEl.textContent = "Local inference";
+      footerEl.textContent = "local";
       return;
     }
     const b = backend.toLowerCase();
     if (b === "guard") {
-      footerEl.textContent = "guard (local)";
+      footerEl.textContent = "guard";
+    } else if (b === "api") {
+      footerEl.textContent = "API";
     } else {
-      footerEl.textContent = b === "api" ? "API" : "local";
+      footerEl.textContent = "local";
     }
   }
 
   function getBackendBadgeText(backend, model) {
     const bKind = (backend || "local").toLowerCase();
-    if (bKind === "guard") {
-      return "security guard · local";
+    const mStr = (model || "").toLowerCase();
+    if (bKind === "guard" || mStr.includes("guard")) {
+      if (mStr.includes("sensitive")) {
+        return "sensitive-data guard";
+      }
+      if (mStr.includes("live")) {
+        return "live-data guard";
+      }
+      return "guard";
     }
     const mName = model ? model.split("/").pop() : "local";
     if (bKind === "api") {
@@ -1194,6 +1203,8 @@ document.addEventListener("DOMContentLoaded", () => {
       card.id = `candidate-${c.interaction_id}`;
 
       let tagsHtml = "";
+      const sourceLabel = c.source || (c.is_edited ? "owner-edited" : (c.backend === "api" ? "API" : "local"));
+      tagsHtml += `<span class="candidate-tag source-tag" style="font-weight: 600; background: rgba(147, 51, 234, 0.2); color: #c084fc;">source: ${escapeHtml(sourceLabel)}</span>`;
       if (c.inclusion_reasons && c.inclusion_reasons.length > 0) {
         c.inclusion_reasons.forEach((r) => {
           let label = r;
@@ -1318,16 +1329,84 @@ document.addEventListener("DOMContentLoaded", () => {
   function renderReportView(report) {
     if (!reportModalBody) return;
     const isPromoted = report.status === "promoted";
-    const statusColor = isPromoted ? "#34d399" : (report.status === "rejected" ? "#f87171" : "#facc15");
-    const statusBg = isPromoted ? "rgba(16, 185, 129, 0.15)" : (report.status === "rejected" ? "rgba(239, 68, 68, 0.15)" : "rgba(234, 179, 8, 0.15)");
+    const isPending = report.status === "pending_approval";
+    const statusColor = isPromoted ? "#34d399" : (isPending ? "#38bdf8" : (report.status === "rejected" ? "#f87171" : "#facc15"));
+    const statusBg = isPromoted ? "rgba(16, 185, 129, 0.15)" : (isPending ? "rgba(56, 189, 248, 0.15)" : (report.status === "rejected" ? "rgba(239, 68, 68, 0.15)" : "rgba(234, 179, 8, 0.15)"));
 
     const ev = report.evaluation || {};
     const candScore = ev.candidate_score !== undefined ? `${(ev.candidate_score * 100).toFixed(1)}%` : "N/A";
     const locScore = ev.current_local_score !== undefined ? `${(ev.current_local_score * 100).toFixed(1)}%` : "N/A";
     const margin = ev.improvement_margin !== undefined ? `${(ev.improvement_margin >= 0 ? "+" : "")}${(ev.improvement_margin * 100).toFixed(1)}%` : "N/A";
 
+    // Build Category Score Table (Candidate vs Current vs API)
+    let catTableHtml = "";
+    if (ev.category_table && Object.keys(ev.category_table).length > 0) {
+      let rows = "";
+      for (const [cat, data] of Object.entries(ev.category_table)) {
+        const cVal = data.candidate !== undefined ? `${(data.candidate * 100).toFixed(1)}%` : "-";
+        const lVal = data.local !== undefined ? `${(data.local * 100).toFixed(1)}%` : "-";
+        const aVal = data.api !== null && data.api !== undefined ? `${(data.api * 100).toFixed(1)}%` : "N/A";
+        const worseColor = data.worse ? "#f87171" : "#34d399";
+        rows += `
+          <tr style="border-bottom: 1px solid rgba(255,255,255,0.06);">
+            <td style="padding: 6px 8px; text-transform: capitalize; color: #e2e8f0;">${escapeHtml(cat)}</td>
+            <td style="padding: 6px 8px; font-weight: 600; color: #38bdf8;">${cVal}</td>
+            <td style="padding: 6px 8px; color: var(--text-muted);">${lVal}</td>
+            <td style="padding: 6px 8px; color: var(--text-muted);">${aVal}</td>
+            <td style="padding: 6px 8px; font-weight: 600; color: ${worseColor};">${data.worse ? "Worse" : "OK"}</td>
+          </tr>
+        `;
+      }
+      catTableHtml = `
+        <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; margin-top: 10px;">
+          <h4 style="font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; margin-bottom: 8px;">Score Table: Candidate vs Current Local vs API (Per Category)</h4>
+          <table style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
+            <thead>
+              <tr style="border-bottom: 1px solid var(--border-color); color: var(--text-muted);">
+                <th style="padding: 6px 8px;">Category</th>
+                <th style="padding: 6px 8px;">Candidate</th>
+                <th style="padding: 6px 8px;">Current Local</th>
+                <th style="padding: 6px 8px;">API</th>
+                <th style="padding: 6px 8px;">Status</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    // Build Side-by-Side Responses (At least 10 prompts)
+    let sideBySideHtml = "";
+    if (ev.side_by_side && ev.side_by_side.length > 0) {
+      let cards = "";
+      ev.side_by_side.slice(0, 12).forEach((s, idx) => {
+        cards += `
+          <div style="background: rgba(18,20,28,0.7); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; margin-bottom: 8px; font-size: 11px;">
+            <div style="font-weight: 600; color: #f1f5f9; margin-bottom: 4px;">#${idx + 1} [${escapeHtml(s.category)}] ${escapeHtml(s.prompt)}</div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px;">
+              <div style="background: rgba(56,189,248,0.08); border-left: 2px solid #38bdf8; padding: 6px 8px; border-radius: 4px;">
+                <span style="font-size: 10px; color: #38bdf8; font-weight: 700; text-transform: uppercase;">Candidate (score: ${s.candidate_score})</span>
+                <p style="margin-top: 2px; color: #cbd5e1; white-space: pre-wrap;">${escapeHtml(s.candidate_response || "None")}</p>
+              </div>
+              <div style="background: rgba(255,255,255,0.03); border-left: 2px solid var(--border-color); padding: 6px 8px; border-radius: 4px;">
+                <span style="font-size: 10px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Current Local (score: ${s.local_score})</span>
+                <p style="margin-top: 2px; color: #94a3b8; white-space: pre-wrap;">${escapeHtml(s.local_response || "None")}</p>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+      sideBySideHtml = `
+        <div style="margin-top: 10px;">
+          <h4 style="font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; margin-bottom: 8px;">Side-by-Side Prompt Evaluations (${Math.min(ev.side_by_side.length, 12)} prompts)</h4>
+          <div style="max-height: 280px; overflow-y: auto; padding-right: 4px;">${cards}</div>
+        </div>
+      `;
+    }
+
     reportModalBody.innerHTML = `
-      <div style="display: flex; flex-direction: column; gap: 16px;">
+      <div style="display: flex; flex-direction: column; gap: 14px;">
         <div style="display: flex; align-items: center; justify-content: space-between; padding-bottom: 12px; border-bottom: 1px solid var(--border-color);">
           <div>
             <h3 style="font-size: 15px; color: #fff; margin-bottom: 4px;">Version hinaku-${escapeHtml(report.version || "unknown")}</h3>
@@ -1357,18 +1436,70 @@ document.addEventListener("DOMContentLoaded", () => {
           </div>
         </div>
 
-        <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); border-radius: 8px; padding: 14px; font-size: 12px; line-height: 1.6; color: #cbd5e1;">
-          <h4 style="font-size: 12px; font-weight: 600; color: #94a3b8; text-transform: uppercase; margin-bottom: 6px;">Cycle Summary</h4>
-          <p><strong>Outcome:</strong> ${escapeHtml(report.status === "promoted" ? "Model passed evaluation and was promoted as active local model." : (report.evaluation && report.evaluation.rejection_reason ? report.evaluation.rejection_reason : report.message || "Completed."))}</p>
+        <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; font-size: 12px; line-height: 1.6; color: #cbd5e1;">
+          <h4 style="font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; margin-bottom: 6px;">Approval & Cycle Status</h4>
+          <p><strong>Outcome:</strong> ${escapeHtml(report.status === "promoted" ? "Model promoted and active." : (isPending ? "Passed evaluation. Awaiting owner confirmation to promote." : (report.evaluation && report.evaluation.rejection_reason ? report.evaluation.rejection_reason : report.message || "Completed.")))}</p>
           <p><strong>Dry Run:</strong> ${report.dry_run ? "Yes (simulated weights & preflight validation)" : "No (full GPU weights)"}</p>
           ${report.preflight ? `<p><strong>Preflight:</strong> ${escapeHtml(report.preflight.message || "")}</p>` : ""}
         </div>
 
-        <div style="display: flex; justify-content: flex-end; gap: 8px;">
-          <button id="btn-report-rollback" class="secondary-btn" style="padding: 6px 14px; font-size: 12px;">Rollback Model</button>
+        ${catTableHtml}
+        ${sideBySideHtml}
+
+        <div style="display: flex; justify-content: flex-end; gap: 8px; padding-top: 10px; border-top: 1px solid var(--border-color);">
+          ${isPending ? `
+            <button id="btn-report-reject" class="secondary-btn" style="padding: 6px 14px; font-size: 12px; color: #f87171;">Reject Candidate</button>
+            <button id="btn-report-promote" class="primary-btn action-btn" style="padding: 6px 14px; font-size: 12px; background: #10b981; color: #fff;">Confirm & Promote Model</button>
+          ` : `
+            <button id="btn-report-rollback" class="secondary-btn" style="padding: 6px 14px; font-size: 12px;">Rollback Model</button>
+          `}
         </div>
       </div>
     `;
+
+    const btnPromote = reportModalBody.querySelector("#btn-report-promote");
+    if (btnPromote) {
+      btnPromote.addEventListener("click", async () => {
+        try {
+          const res = await fetch("/api/training/promote", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              version: report.version,
+              candidate_score: ev.candidate_score,
+              current_local_score: ev.current_local_score,
+              confirmed: true,
+              dry_run: Boolean(report.dry_run)
+            })
+          });
+          if (res.ok) {
+            alert("Candidate model confirmed and activated successfully!");
+            loadLatestReport();
+          } else {
+            const err = await res.json();
+            alert("Promotion failed: " + (err.detail || "Unknown error"));
+          }
+        } catch (e) {
+          alert("Promotion error: " + e.message);
+        }
+      });
+    }
+
+    const btnReject = reportModalBody.querySelector("#btn-report-reject");
+    if (btnReject) {
+      btnReject.addEventListener("click", async () => {
+        if (!confirm("Reject this candidate model?")) return;
+        try {
+          const res = await fetch("/api/training/reject-pending", { method: "POST" });
+          if (res.ok) {
+            alert("Candidate rejected.");
+            loadLatestReport();
+          }
+        } catch (e) {
+          alert("Error: " + e.message);
+        }
+      });
+    }
 
     const btnRollback = reportModalBody.querySelector("#btn-report-rollback");
     if (btnRollback) {
@@ -1397,7 +1528,26 @@ document.addEventListener("DOMContentLoaded", () => {
   // Load initial conversations
   loadConversations();
 
-  // Subtle starfield ambient canvas
+
+  // Check if 6-month self-build run is due
+  async function checkSelfBuildDue() {
+    try {
+      const res = await fetch("/api/self-build/check-due");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.due) {
+        updateNoticeBanner(
+          true,
+          `Self-Build due: ${data.message} Open Settings -> 'Review Curated Data' or 'Run Self-Build Now'.`
+        );
+      }
+    } catch (e) {
+      console.warn("Could not check self-build due status:", e);
+    }
+  }
+  checkSelfBuildDue();
+
+    // Subtle starfield ambient canvas
   initStarfield();
 
   function initStarfield() {

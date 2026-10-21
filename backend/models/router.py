@@ -33,24 +33,70 @@ QUESTION_INDICATORS = [
     r"^(?:should|can|could|may|shall|how\s+do|how\s+can|how\s+should|what\s+should|what\s+do|where\s+do|why\s+do)\s+i\b",
 ]
 
-PERSONAL_STATEMENT_PATTERNS = [
-    # "my <attribute>" (e.g. my favorite, my preferred, my laptop, my editor, my name, my gpu, my setup, etc.)
-    r"\bmy\s+(?:favorite|favourite|preferred|name|job|work|project|laptop|pc|computer|gpu|specs|cpu|editor|os|setup|hobby|preference|stack|hardware|card|pin|password)\b",
-    # "I use / I prefer / I like / I work / I live / I own / I have / I run / I code..."
-    r"\bi\s+(?:use|used|using|prefer|preferred|like|liked|love|loved|hate|dislike|have|had|work|worked|live|lived|own|owned|code|program|run|develop)\b",
-    # "I am / I'm / I've / I have been..." (declarative statements about self)
-    r"\b(?:i\s+am|i'm|im|i\s+was)\b",
-    r"\b(?:i've|ive)\s+(?:been|got|had|used|built|created|configured)\b",
-    # "Remember [that] I..." or "Remember [that] my..."
-    r"\bremember\s+(?:that\s+)?(?:i|my)\b",
-    r"\bnote\s+(?:that\s+)?(?:i|my)\b"
+TASK_REQUEST_PATTERNS = [
+    r"(?i)^(?:i\s+want\s+to|i\s+need\s+to|i\s+would\s+like\s+to|can\s+you\s+help\s+me\s+to)\s+(?:learn|build|write|create|debug|understand|solve|implement|code|explain|make|test)\b",
+    r"(?i)\b(?:can\s+you\s+help|help\s+me\s+with|how\s+do\s+i|how\s+can\s+i|can\s+you\s+explain)\b",
 ]
 
-def is_personal_statement(text: str) -> bool:
+PRIVATE_LIFE_INDICATORS = [
+    r"\b(?:feel|feeling|worried|anxious|stressed|sad|depressed|sick|exhausted|tired|overwhelmed)\b",
+    r"\b(?:health|doctor|fever|headache|surgery|diagnosis|medication)\b",
+    r"\b(?:salary|savings|rent|debt|bank|budget|income|expenses|mortgage)\b",
+    r"\b(?:family|mom|mother|dad|father|parents|brother|sister|wife|husband|partner|boyfriend|girlfriend|child|kids|son|daughter)\b",
+    r"\b(?:live\s+in|city|hometown|house|apartment|address)\b",
+    r"\b(?:boss|coworker|fired|promoted)\b",
+]
+
+PERSONAL_STATEMENT_PATTERNS = [
+    # Feelings & mental states ("I feel...", "I'm worried...")
+    r"(?i)\b(?:i\s+feel|i'?m\s+feeling|i\s+am\s+feeling)\b",
+    r"(?i)\b(?:i'?m|i\s+am)\s+(?:worried|anxious|stressed|sad|depressed|happy|scared|upset|hurting|sick|exhausted|tired|burned\s+out|overwhelmed)\b",
+
+    # Health & medical
+    r"(?i)\bmy\s+(?:health|doctor|illness|fever|headache|surgery|diagnosis|medication|hospital)\b",
+    r"(?i)\bi\s+(?:have|got)\s+(?:a\s+)?(?:fever|headache|cough|cold|infection|disease|pain)\b",
+
+    # Money & Finances ("my salary...", "my savings...")
+    r"(?i)\bmy\s+(?:salary|savings|money|rent|debt|bank|budget|income|expenses|mortgage|finances)\b",
+    r"(?i)\b(?:i\s+owe|i\s+spent|i\s+invested)\b",
+
+    # Family ("my family...", "my parents...")
+    r"(?i)\bmy\s+(?:family|mom|mother|dad|father|parents|brother|sister|wife|husband|partner|boyfriend|girlfriend|child|kids|son|daughter)\b",
+
+    # Location ("I live in...", "my city...")
+    r"(?i)\b(?:i\s+live\s+in|my\s+city|my\s+hometown|my\s+home|my\s+house|my\s+apartment|my\s+address|i'?m\s+moving\s+to)\b",
+
+    # School or work ("my job...", "I just got hired...")
+    r"(?i)\bmy\s+(?:job|boss|company|coworker|career|workplace|school|college|university|exam|exams|grade|grades|degree)\b",
+    r"(?i)\b(?:i\s+just\s+got\s+hired|i\s+just\s+got\s+promoted|i\s+just\s+got\s+fired|i\s+work\s+at)\b",
+
+    # Relationships
+    r"(?i)\bmy\s+(?:friend|friends|partner|relationship|ex|breakup)\b",
+
+    # Plans ("I'm planning to...", "my plan is...")
+    r"(?i)\b(?:i'?m\s+planning\s+to|i\s+am\s+planning\s+to|my\s+plan\s+is|i\s+plan\s+to|i'?m\s+about\s+to)\b",
+
+    # Personal events & acquisitions ("I just got...")
+    r"(?i)\b(?:i\s+just\s+got|i\s+just\s+bought|i\s+just\s+started|i\s+just\s+lost|i\s+just\s+moved)\b",
+
+    # Specs and preferences ("my favorite...", "I use...")
+    r"(?i)\bmy\s+(?:project|favorite|favourite|preferred|name|laptop|pc|computer|gpu|specs|cpu|editor|os|setup|hobby|preference|stack|hardware|card|pin|password)\b",
+    r"(?i)\bi\s+(?:use|used|using|prefer|preferred|like|liked|love|loved|hate|dislike|have|had|work|worked|live|lived|own|owned|code|program|run|develop)\b",
+    r"(?i)\b(?:i\s+am|i'm|im|i\s+was)\b",
+    r"(?i)\b(?:i've|ive)\s+(?:been|got|had|used|built|created|configured)\b",
+    r"(?i)\bremember\s+(?:that\s+)?(?:i|my)\b",
+    r"(?i)\bnote\s+(?:that\s+)?(?:i|my)\b"
+]
+
+def is_personal_statement(
+    text: str,
+    custom_personal_patterns: Optional[List[str]] = None,
+    custom_task_patterns: Optional[List[str]] = None
+) -> bool:
     """
     Check if a user prompt is a first-person statement about the owner
-    (e.g., 'I use...', 'my favorite...', 'I am...').
-    Such statements must stay local for privacy and local memory extraction.
+    (e.g., feelings, health, money, family, location, school/work, relationships, plans, hardware).
+    Plain task requests ('I want to learn Python, can you help?') return False so they may use the API.
     """
     clean = text.strip().lower()
 
@@ -59,7 +105,25 @@ def is_personal_statement(text: str) -> bool:
         if re.search(q_pat, clean):
             return False
 
-    for pat in PERSONAL_STATEMENT_PATTERNS:
+    from backend.config import get_settings
+    settings = get_settings()
+
+    pats = custom_personal_patterns or settings.router_personal_statement_patterns or PERSONAL_STATEMENT_PATTERNS
+    t_pats = custom_task_patterns or settings.router_task_request_patterns or TASK_REQUEST_PATTERNS
+
+    # Check if prompt is a plain task request
+    is_task = False
+    for t_pat in t_pats:
+        if re.search(t_pat, clean):
+            is_task = True
+            break
+
+    if is_task:
+        has_private_life = any(re.search(p, clean) for p in PRIVATE_LIFE_INDICATORS)
+        if not has_private_life:
+            return False
+
+    for pat in pats:
         if re.search(pat, clean):
             return True
 

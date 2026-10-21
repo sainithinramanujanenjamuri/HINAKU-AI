@@ -73,7 +73,7 @@ def test_self_build_coordinator_cycle_and_reports(tmp_path):
     # 2. Executed when force=True
     with patch("backend.scheduler.coordinator.check_training_activity_and_power", return_value={"should_pause": False, "message": "Safe"}):
         res_run = coordinator.run_cycle(force=True, dry_run=True, version="2026-10")
-        assert res_run["status"] in ("promoted", "rejected")
+        assert res_run["status"] in ("promoted", "rejected", "pending_approval")
         assert "evaluation" in res_run
         assert "dataset" in res_run
 

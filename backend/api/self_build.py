@@ -29,6 +29,11 @@ async def get_self_build_status_endpoint():
     status["activity"] = activity
     return status
 
+@router.get("/check-due")
+async def check_self_build_due_endpoint():
+    sched = get_scheduler()
+    return sched.check_run_due()
+
 @router.post("/run")
 async def trigger_self_build_endpoint(req: Optional[TriggerRunRequest] = None):
     sched = get_scheduler()
@@ -48,9 +53,9 @@ async def get_self_build_reports_endpoint():
     return sched.coordinator.get_reports()
 
 @router.get("/reports/latest")
-async def get_latest_report_endpoint():
+async def get_latest_self_build_report_endpoint():
     sched = get_scheduler()
-    latest = sched.coordinator.get_latest_report()
-    if not latest:
-        raise HTTPException(status_code=404, detail="No self-build reports found yet")
-    return latest
+    rep = sched.coordinator.get_latest_report()
+    if not rep:
+        raise HTTPException(status_code=404, detail="No self-build reports found.")
+    return rep

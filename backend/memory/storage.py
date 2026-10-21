@@ -2,7 +2,6 @@ import json
 import logging
 import math
 import sqlite3
-import urllib.error
 import urllib.request
 import uuid
 from datetime import datetime, timezone
@@ -10,6 +9,9 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import chromadb
+from chromadb.config import Settings as ChromaSettings
+
+from backend.config import get_settings
 
 logger = logging.getLogger("hinaku.memory.storage")
 
@@ -17,10 +19,10 @@ def l2_normalize(v: List[float]) -> List[float]:
     norm = math.sqrt(sum(x * x for x in v)) or 1.0
     return [x / norm for x in v]
 
-def default_ollama_embedder(host: str, model: str, texts: List[str], keep_alive: str = "0") -> List[List[float]]:
+def default_ollama_embedder(host: str, model: str, texts: List[str], keep_alive: str = "5m") -> List[List[float]]:
     """
     Generate embeddings using Ollama /api/embed endpoint.
-    Uses keep_alive=0 by default to instantly free VRAM for the main LLM.
+    Uses keep_alive="5m" to avoid cold-loading model on every query.
     """
     body = json.dumps({"model": model, "input": texts, "keep_alive": keep_alive}).encode("utf-8")
     req = urllib.request.Request(
@@ -43,8 +45,10 @@ class MemoryStorage:
         query_prefix: str = "",
         document_prefix: str = "",
         ollama_host: str = "http://localhost:11434",
-        custom_embedder: Optional[Callable[[str, List[str]], List[List[float]]]] = None
+        custom_embedder: Optional[Callable[[str, List[str]], List[List[float]]]] = None,
+        embedding_keep_alive: Optional[str] = None
     ):
+        settings = get_settings()
         self.db_path = Path(db_path)
         self.chroma_path = Path(chroma_path)
         self.embedding_model = embedding_model
@@ -53,6 +57,7 @@ class MemoryStorage:
         self.document_prefix = document_prefix
         self.ollama_host = ollama_host
         self._custom_embedder = custom_embedder
+        self.embedding_keep_alive = embedding_keep_alive or settings.memory_embedding_keep_alive
 
         # Ensure directory structures exist
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -64,11 +69,12 @@ class MemoryStorage:
     def _get_connection(self) -> sqlite3.Connection:
         conn = sqlite3.connect(str(self.db_path))
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON;")
         return conn
 
     def _init_sqlite(self):
         with self._get_connection() as conn:
-            conn.execute("""
+            conn.executescript("""
                 CREATE TABLE IF NOT EXISTS memories (
                     id TEXT PRIMARY KEY,
                     text TEXT NOT NULL,
@@ -76,38 +82,40 @@ class MemoryStorage:
                     updated_at TEXT NOT NULL,
                     source_conversation_id TEXT,
                     deleted INTEGER DEFAULT 0
-                )
+                );
+                CREATE INDEX IF NOT EXISTS idx_memories_deleted ON memories (deleted, updated_at DESC);
             """)
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_deleted ON memories(deleted)")
-            conn.commit()
 
     def _init_chroma(self):
-        self.chroma_client = chromadb.PersistentClient(path=str(self.chroma_path))
-        self.collection_name = "hinaku_memories"
+        self.chroma_client = chromadb.PersistentClient(
+            path=str(self.chroma_path),
+            settings=ChromaSettings(anonymized_telemetry=False)
+        )
 
-        # Check existing collection and metadata
-        rebuild_needed = False
+        collection_name = "owner_memories"
         try:
-            col = self.chroma_client.get_collection(self.collection_name)
+            col = self.chroma_client.get_collection(collection_name)
             stored_model = col.metadata.get("embedding_model") if col.metadata else None
             stored_dims = col.metadata.get("embedding_dims") if col.metadata else None
             if stored_model and stored_model != self.embedding_model:
-                logger.info(
+                logger.warning(
                     f"Stored embedding model '{stored_model}' differs from settings '{self.embedding_model}'. "
-                    f"Rebuilding collection from SQLite."
+                    f"Triggering collection re-index."
                 )
-                rebuild_needed = True
+                self.reindex_chroma()
+                return
             elif stored_dims and int(stored_dims) != int(self.embedding_dims):
-                logger.info(
+                logger.warning(
                     f"Stored embedding dimension {stored_dims} differs from settings {self.embedding_dims}. "
-                    f"Rebuilding collection from SQLite."
+                    f"Triggering collection re-index."
                 )
-                rebuild_needed = True
+                self.reindex_chroma()
+                return
             self.collection = col
         except Exception:
-            # Collection does not exist yet
+            # Collection does not exist yet; create it
             self.collection = self.chroma_client.create_collection(
-                name=self.collection_name,
+                name=collection_name,
                 metadata={
                     "hnsw:space": "cosine",
                     "embedding_model": self.embedding_model,
@@ -115,22 +123,19 @@ class MemoryStorage:
                 }
             )
 
-        if rebuild_needed:
-            self.reindex_memories()
-
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         if not texts:
             return []
         prefixed = [f"{self.document_prefix}{t}" for t in texts]
         if self._custom_embedder:
             return [l2_normalize(v) for v in self._custom_embedder(self.embedding_model, prefixed)]
-        return default_ollama_embedder(self.ollama_host, self.embedding_model, prefixed)
+        return default_ollama_embedder(self.ollama_host, self.embedding_model, prefixed, keep_alive=self.embedding_keep_alive)
 
     def embed_query(self, query: str) -> List[float]:
         prefixed = f"{self.query_prefix}{query}"
         if self._custom_embedder:
             return l2_normalize(self._custom_embedder(self.embedding_model, [prefixed])[0])
-        return default_ollama_embedder(self.ollama_host, self.embedding_model, [prefixed])[0]
+        return default_ollama_embedder(self.ollama_host, self.embedding_model, [prefixed], keep_alive=self.embedding_keep_alive)[0]
 
     def add_memory(self, text: str, source_conversation_id: Optional[str] = None) -> Dict[str, Any]:
         clean_text = text.strip()
@@ -140,7 +145,7 @@ class MemoryStorage:
         mem_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
 
-        # 1. Insert into SQLite
+        # Insert SQLite record
         with self._get_connection() as conn:
             conn.execute(
                 """
@@ -151,17 +156,21 @@ class MemoryStorage:
             )
             conn.commit()
 
-        # 2. Embed and add to ChromaDB
+        # Insert ChromaDB vector
         try:
             vec = self.embed_documents([clean_text])[0]
             self.collection.add(
                 ids=[mem_id],
                 documents=[clean_text],
                 embeddings=[vec],
-                metadatas=[{"source_conversation_id": source_conversation_id or ""}]
+                metadatas=[{
+                    "created_at": now,
+                    "updated_at": now,
+                    "source_conversation_id": source_conversation_id or ""
+                }]
             )
         except Exception as e:
-            logger.error(f"Failed to index memory {mem_id} into ChromaDB: {e}")
+            logger.error(f"Failed to index memory into ChromaDB: {e}")
 
         return {
             "id": mem_id,
@@ -187,10 +196,10 @@ class MemoryStorage:
             if cursor.rowcount == 0:
                 return None
 
-        # Update ChromaDB vector
+        # Re-embed updated text into ChromaDB (ensures typo corrections immediately update Chroma vectors)
         try:
             vec = self.embed_documents([clean_text])[0]
-            self.collection.update(
+            self.collection.upsert(
                 ids=[mem_id],
                 documents=[clean_text],
                 embeddings=[vec]
@@ -210,15 +219,15 @@ class MemoryStorage:
                 (mem_id,)
             )
             conn.commit()
-            row_affected = cursor.rowcount > 0
+            if cursor.rowcount == 0:
+                return False
 
-        if row_affected:
-            try:
-                self.collection.delete(ids=[mem_id])
-            except Exception as e:
-                logger.error(f"Failed to delete {mem_id} from Chroma: {e}")
+        try:
+            self.collection.delete(ids=[mem_id])
+        except Exception as e:
+            logger.error(f"Failed to delete memory vector from ChromaDB: {e}")
 
-        return row_affected
+        return True
 
     def get_memory(self, mem_id: str) -> Optional[Dict[str, Any]]:
         with self._get_connection() as conn:
@@ -288,28 +297,59 @@ class MemoryStorage:
         threshold: float = 0.80
     ) -> Optional[Tuple[Dict[str, Any], float]]:
         """
-        Find an existing active memory with similarity >= threshold (for deduplication / merging).
+        Find existing memory highly similar to `text` for merging.
         """
         if self.collection.count() == 0:
             return None
 
-        matches = self.query_memories(text, top_k=1, min_similarity=threshold)
-        return matches[0] if matches else None
+        clean_text = text.strip()
+        vec = self.embed_documents([clean_text])[0]
+        try:
+            results = self.collection.query(
+                query_embeddings=[vec],
+                n_results=1,
+                include=["documents", "distances"]
+            )
+        except Exception as e:
+            logger.error(f"find_similar query failed: {e}")
+            return None
+
+        if not results or not results["ids"] or not results["ids"][0]:
+            return None
+
+        best_id = results["ids"][0][0]
+        best_dist = results["distances"][0][0]
+        best_similarity = 1.0 - best_dist
+
+        if best_similarity >= threshold:
+            mem = self.get_memory(best_id)
+            if mem and mem.get("deleted") == 0:
+                return (mem, best_similarity)
+
+        return None
+
+    def export_all(self) -> List[Dict[str, Any]]:
+        return self.get_memories(include_deleted=False)
 
     def reindex_memories(self) -> int:
+        """Alias for reindex_chroma returning count of active memories."""
+        self.reindex_chroma()
+        return len(self.get_memories(include_deleted=False))
+
+    def reindex_chroma(self):
         """
-        Rebuilds the entire Chroma collection from SQLite active records.
-        Returns the number of reindexed memories.
+        Re-indexes all active memories into ChromaDB using the current embedding model.
+        Used on model change or vector store migration.
         """
         logger.info(f"Re-indexing memories into Chroma with model '{self.embedding_model}' (dims: {self.embedding_dims})")
-        # Reset collection
+        collection_name = "owner_memories"
         try:
-            self.chroma_client.delete_collection(self.collection_name)
+            self.chroma_client.delete_collection(collection_name)
         except Exception:
             pass
 
         self.collection = self.chroma_client.create_collection(
-            name=self.collection_name,
+            name=collection_name,
             metadata={
                 "hnsw:space": "cosine",
                 "embedding_model": self.embedding_model,
@@ -319,11 +359,15 @@ class MemoryStorage:
 
         active_memories = self.get_memories(include_deleted=False)
         if not active_memories:
-            return 0
+            return
 
         texts = [m["text"] for m in active_memories]
         ids = [m["id"] for m in active_memories]
-        metadatas = [{"source_conversation_id": m.get("source_conversation_id") or ""} for m in active_memories]
+        metadatas = [{
+            "created_at": m["created_at"],
+            "updated_at": m["updated_at"],
+            "source_conversation_id": m.get("source_conversation_id") or ""
+        } for m in active_memories]
 
         try:
             vectors = self.embed_documents(texts)
@@ -333,25 +377,25 @@ class MemoryStorage:
                 embeddings=vectors,
                 metadatas=metadatas
             )
-            logger.info(f"Successfully reindexed {len(ids)} memories.")
-            return len(ids)
+            logger.info(f"Re-indexing complete: {len(active_memories)} memories indexed.")
         except Exception as e:
-            logger.error(f"Failed to embed/reindex memories: {e}")
-            return 0
+            logger.error(f"Re-indexing failed: {e}")
 
     def clear_all(self) -> int:
         """
-        Permanently delete all memories from SQLite and reset the Chroma collection.
+        Marks all memories deleted in SQLite and drops Chroma collection.
+        Returns count of memories deleted.
         """
+        now = datetime.now(timezone.utc).isoformat()
         with self._get_connection() as conn:
-            cur = conn.execute("DELETE FROM memories")
+            cur = conn.execute("UPDATE memories SET deleted = 1, updated_at = ? WHERE deleted = 0", (now,))
             conn.commit()
             count = cur.rowcount
 
         try:
-            self.chroma_client.delete_collection(self.collection_name)
+            self.chroma_client.delete_collection("owner_memories")
             self.collection = self.chroma_client.create_collection(
-                name=self.collection_name,
+                name="owner_memories",
                 metadata={
                     "hnsw:space": "cosine",
                     "embedding_model": self.embedding_model,
@@ -359,12 +403,6 @@ class MemoryStorage:
                 }
             )
         except Exception as e:
-            logger.error(f"Failed to reset ChromaDB collection: {e}")
+            logger.error(f"Error resetting Chroma on clear_all: {e}")
 
         return count
-
-    def export_all(self) -> List[Dict[str, Any]]:
-        """Export all non-deleted memories from storage."""
-        return self.get_memories(include_deleted=False)
-
-

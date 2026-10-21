@@ -50,6 +50,7 @@ def test_dataset_curation_inclusion_and_exclusion_rules():
         answer="Dear friend...",
         model="api-model",
         backend="api",
+        feedback="thumbs_up",
         message_id=m6["id"]
     )
 

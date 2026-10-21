@@ -23,6 +23,7 @@ class PromoteRequest(BaseModel):
     version: str
     candidate_score: float
     current_local_score: float
+    confirmed: bool = False
     dry_run: Optional[bool] = True
 
 class RollbackRequest(BaseModel):
@@ -103,14 +104,32 @@ async def get_promotions_endpoint():
         "history": promoter.get_history()
     }
 
+@router.get("/pending-approval")
+async def get_pending_approval_endpoint():
+    promoter = get_promoter()
+    candidate = promoter.get_pending_candidate()
+    return candidate or {"status": "none"}
+
+@router.post("/reject-pending")
+async def reject_pending_endpoint():
+    promoter = get_promoter()
+    promoter.clear_pending_candidate()
+    return {"status": "rejected"}
+
 @router.post("/promote")
 async def promote_model_endpoint(req: PromoteRequest):
     promoter = get_promoter()
+    if not req.confirmed:
+        raise HTTPException(
+            status_code=400,
+            detail="Approval gate: Model promotion requires explicit owner confirmation in the UI."
+        )
     try:
         record = promoter.promote(
             version=req.version,
             candidate_score=req.candidate_score,
             current_local_score=req.current_local_score,
+            confirmed=True,
             dry_run=bool(req.dry_run)
         )
         return {"status": "promoted", "record": record}
