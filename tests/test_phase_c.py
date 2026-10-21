@@ -47,9 +47,9 @@ def test_memories_crud_endpoints():
     assert res_del.status_code == 200
     assert res_del.json()["status"] == "deleted"
 
-    # Verify marked deleted
+    # Verify hard-deleted
     stored_del = memory_storage.get_memory(mem_id)
-    assert stored_del["deleted"] == 1
+    assert stored_del is None
 
 def test_settings_endpoints():
     """Test GET and POST /api/settings."""

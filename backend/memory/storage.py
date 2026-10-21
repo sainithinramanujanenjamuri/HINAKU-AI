@@ -213,16 +213,21 @@ class MemoryStorage:
 
     def delete_memory(self, mem_id: str) -> bool:
         """
-        Permanently remove memory: set deleted=1 in SQLite and remove vector from Chroma.
+        Permanently remove memory: hard-delete row from SQLite and remove vector from Chroma.
+        No deleted flag left behind. Runs VACUUM on database.
         """
         with self._get_connection() as conn:
-            cursor = conn.execute(
-                "UPDATE memories SET deleted = 1 WHERE id = ? AND deleted = 0",
-                (mem_id,)
-            )
+            cursor = conn.execute("DELETE FROM memories WHERE id = ?", (mem_id,))
             conn.commit()
             if cursor.rowcount == 0:
                 return False
+            try:
+                old_iso = conn.isolation_level
+                conn.isolation_level = None
+                conn.execute("VACUUM")
+                conn.isolation_level = old_iso
+            except Exception as e:
+                logger.error(f"Failed to vacuum: {e}")
 
         try:
             self.collection.delete(ids=[mem_id])
@@ -385,14 +390,20 @@ class MemoryStorage:
 
     def clear_all(self) -> int:
         """
-        Marks all memories deleted in SQLite and drops Chroma collection.
+        Hard-deletes all memories from SQLite, runs VACUUM, and drops/recreates Chroma collection.
         Returns count of memories deleted.
         """
-        now = datetime.now(timezone.utc).isoformat()
         with self._get_connection() as conn:
-            cur = conn.execute("UPDATE memories SET deleted = 1, updated_at = ? WHERE deleted = 0", (now,))
+            cur = conn.execute("DELETE FROM memories")
             conn.commit()
             count = cur.rowcount
+            try:
+                old_iso = conn.isolation_level
+                conn.isolation_level = None
+                conn.execute("VACUUM")
+                conn.isolation_level = old_iso
+            except Exception as e:
+                logger.error(f"Failed to vacuum: {e}")
 
         try:
             self.chroma_client.delete_collection("owner_memories")

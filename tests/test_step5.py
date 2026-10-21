@@ -57,11 +57,12 @@ def test_sqlite_and_chroma_crud(storage):
     assert updated["text"] == "Uses an RTX 4050 GPU with 6 GB VRAM"
     assert storage.get_memory(mem1["id"])["text"] == "Uses an RTX 4050 GPU with 6 GB VRAM"
 
-    # 4. Delete memory (sets deleted=1 in SQLite and deletes from Chroma)
+    # 4. Delete memory (hard-deletes from SQLite and deletes from Chroma)
     deleted = storage.delete_memory(mem1["id"])
     assert deleted is True
     assert len(storage.get_memories(include_deleted=False)) == 0
-    assert len(storage.get_memories(include_deleted=True)) == 1
+    assert len(storage.get_memories(include_deleted=True)) == 0
+    assert storage.get_memory(mem1["id"]) is None
     assert storage.collection.count() == 0
 
 def test_auto_rebuild_and_manual_reindex(tmp_path):
@@ -214,8 +215,8 @@ def test_memory_api_endpoints():
     del_res = client.delete(f"/api/memories/{new_mem['id']}")
     assert del_res.status_code == 200
 
-    # Confirm deleted
-    assert memory_storage.get_memory(new_mem['id'])["deleted"] == 1
+    # Confirm hard-deleted
+    assert memory_storage.get_memory(new_mem['id']) is None
     assert client.get("/api/memories").json() == []
 
     # 4. Reindex endpoint

@@ -529,3 +529,220 @@ async def test_prewarm_functionality():
     embed_payload = next(p for p in warmed_payloads if "model" in p and p["model"] == "qwen3-embedding:0.6b")
     assert embed_payload["options"]["num_ctx"] == 512
     assert embed_payload["keep_alive"] == "5m"
+
+
+# ==============================================================================
+# 10. Hard Deletion & Raw SQLite File Byte Tests
+# ==============================================================================
+
+def test_hard_delete_memory_removes_sqlite_row_chroma_and_raw_bytes(tmp_path):
+    from backend.memory.storage import MemoryStorage
+    import sqlite3
+
+    db_file = tmp_path / "hard_del_mem.db"
+    chroma_dir = tmp_path / "hard_del_chroma"
+    storage = MemoryStorage(
+        db_path=db_file,
+        chroma_path=chroma_dir,
+        embedding_model="test-embed",
+        embedding_dims=4
+    )
+    storage._custom_embedder = lambda model, texts: [[0.1, 0.2, 0.3, 0.4] for _ in texts]
+
+    secret_text = "CONFIDENTIAL_MEMORY_TOKEN_ALPHA_9988"
+    mem = storage.add_memory(secret_text)
+    mem_id = mem["id"]
+
+    # Verify present in SQLite and Chroma
+    assert storage.get_memory(mem_id) is not None
+    assert storage.collection.count() == 1
+
+    # Verify present in raw SQLite file bytes before deletion
+    raw_before = db_file.read_bytes()
+    assert secret_text.encode("utf-8") in raw_before
+
+    # Hard delete
+    res = storage.delete_memory(mem_id)
+    assert res is True
+
+    # 1. Row is gone from SQLite (no deleted flag left behind)
+    assert storage.get_memory(mem_id) is None
+    with sqlite3.connect(str(db_file)) as conn:
+        count = conn.execute("SELECT COUNT(*) FROM memories WHERE id = ?", (mem_id,)).fetchone()[0]
+        assert count == 0
+        total_mems = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
+        assert total_mems == 0
+
+    # 2. Vector is gone from Chroma
+    assert storage.collection.count() == 0
+
+    # 3. Direct SQLite file inspection: VACUUM has repacked pages, no text remains in raw bytes
+    raw_after = db_file.read_bytes()
+    assert secret_text.encode("utf-8") not in raw_after
+
+
+def test_hard_delete_conversation_removes_messages_interactions_and_raw_bytes(tmp_path):
+    from backend.history import ChatHistoryManager
+    import sqlite3
+
+    db_file = tmp_path / "hard_del_conv.db"
+    mgr = ChatHistoryManager(db_file)
+
+    secret_title = "CONV_TITLE_CONFIDENTIAL_XYZ789"
+    secret_user_msg = "USER_PROMPT_VERY_SECRET_TOKEN_4321"
+    secret_assistant_msg = "ASSISTANT_REPLY_SECRET_TOKEN_8765"
+
+    conv = mgr.create_conversation(title=secret_title)
+    cid = conv["id"]
+
+    msg1 = mgr.add_message(cid, "user", secret_user_msg)
+    msg2 = mgr.add_message(cid, "assistant", secret_assistant_msg, model="gemma3:4b", backend="local")
+
+    # Record interaction
+    mgr.log_interaction(
+        conv_id=cid,
+        message_id=msg2["id"],
+        user_prompt=secret_user_msg,
+        answer=secret_assistant_msg,
+        model="gemma3:4b",
+        backend="local"
+    )
+
+    # Verify present in tables
+    with sqlite3.connect(str(db_file)) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM conversations WHERE id = ?", (cid,)).fetchone()[0] == 1
+        assert conn.execute("SELECT COUNT(*) FROM messages WHERE conversation_id = ?", (cid,)).fetchone()[0] == 2
+        assert conn.execute("SELECT COUNT(*) FROM interactions WHERE conversation_id = ?", (cid,)).fetchone()[0] == 1
+
+    # Verify present in raw SQLite bytes before deletion
+    raw_before = db_file.read_bytes()
+    assert secret_title.encode("utf-8") in raw_before
+    assert secret_user_msg.encode("utf-8") in raw_before
+    assert secret_assistant_msg.encode("utf-8") in raw_before
+
+    # Delete conversation
+    success = mgr.delete_conversation(cid)
+    assert success is True
+
+    # 1. Assert rows completely removed from conversations, messages, interactions
+    with sqlite3.connect(str(db_file)) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM conversations WHERE id = ?", (cid,)).fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM messages WHERE conversation_id = ?", (cid,)).fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM interactions WHERE conversation_id = ?", (cid,)).fetchone()[0] == 0
+
+    # 2. Assert direct SQLite file contains no text fragments in raw bytes
+    raw_after = db_file.read_bytes()
+    assert secret_title.encode("utf-8") not in raw_after
+    assert secret_user_msg.encode("utf-8") not in raw_after
+    assert secret_assistant_msg.encode("utf-8") not in raw_after
+
+
+def test_clear_and_wipe_hard_deletes_and_vacuums_file(tmp_path):
+    from backend.history import ChatHistoryManager
+    from backend.memory.storage import MemoryStorage
+
+    db_file = tmp_path / "wipe_test.db"
+    chroma_dir = tmp_path / "wipe_chroma"
+
+    mgr = ChatHistoryManager(db_file)
+    storage = MemoryStorage(
+        db_path=db_file,
+        chroma_path=chroma_dir,
+        embedding_model="test-embed",
+        embedding_dims=4
+    )
+    storage._custom_embedder = lambda model, texts: [[0.1, 0.2, 0.3, 0.4] for _ in texts]
+
+    secret_mem = "SECRET_MEMORY_WIPE_TOKEN_1111"
+    secret_chat = "SECRET_CHAT_WIPE_TOKEN_2222"
+
+    storage.add_memory(secret_mem)
+    conv = mgr.create_conversation("Wipe Conv")
+    mgr.add_message(conv["id"], "user", secret_chat)
+
+    assert secret_mem.encode("utf-8") in db_file.read_bytes()
+    assert secret_chat.encode("utf-8") in db_file.read_bytes()
+
+    # Clear memories
+    deleted_mems = storage.clear_all()
+    assert deleted_mems >= 1
+    assert secret_mem.encode("utf-8") not in db_file.read_bytes()
+
+    # Wipe all data
+    mgr.wipe_all_data()
+    assert secret_chat.encode("utf-8") not in db_file.read_bytes()
+
+
+def test_migrate_hard_delete_script(tmp_path):
+    from scripts.migrate_hard_delete import inspect_deleted_rows, migrate_hard_delete
+    import sqlite3
+
+    db_file = tmp_path / "migrate_test.db"
+    conn = sqlite3.connect(str(db_file))
+    conn.execute("""
+        CREATE TABLE memories (
+            id TEXT PRIMARY KEY,
+            text TEXT,
+            created_at TEXT,
+            updated_at TEXT,
+            source_conversation_id TEXT,
+            deleted INTEGER DEFAULT 0
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE conversations (
+            id TEXT PRIMARY KEY,
+            title TEXT,
+            created_at TEXT,
+            updated_at TEXT
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE messages (
+            id TEXT PRIMARY KEY,
+            conversation_id TEXT,
+            content TEXT
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE interactions (
+            id TEXT PRIMARY KEY,
+            conversation_id TEXT,
+            user_prompt TEXT
+        )
+    """)
+
+    secret_old_deleted = "DELETED_SECRET_FACT_TO_BE_PURGED_999"
+    active_fact = "ACTIVE_FACT_SHOULD_REMAIN_888"
+
+    conn.execute("INSERT INTO memories VALUES ('m1', ?, '2026-01-01', '2026-01-01', NULL, 1)", (secret_old_deleted,))
+    conn.execute("INSERT INTO memories VALUES ('m2', ?, '2026-01-01', '2026-01-01', NULL, 0)", (active_fact,))
+
+    conn.execute("INSERT INTO messages VALUES ('msg1', 'nonexistent_conv', 'orphan message text')")
+    conn.execute("INSERT INTO interactions VALUES ('int1', 'nonexistent_conv', 'orphan interaction prompt')")
+
+    conn.commit()
+    conn.close()
+
+    stats = inspect_deleted_rows(db_file)
+    assert stats["deleted_memories"] == 1
+    assert stats["orphan_messages"] == 1
+    assert stats["orphan_interactions"] == 1
+
+    assert secret_old_deleted.encode("utf-8") in db_file.read_bytes()
+
+    res = migrate_hard_delete(db_file, dry_run=False)
+    assert res["status"] == "migrated"
+    assert res["removed_memories"] == 1
+    assert res["vacuumed"] is True
+
+    conn = sqlite3.connect(str(db_file))
+    remaining = conn.execute("SELECT id, text, deleted FROM memories").fetchall()
+    assert len(remaining) == 1
+    assert remaining[0][1] == active_fact
+    assert conn.execute("SELECT COUNT(*) FROM messages").fetchone()[0] == 0
+    assert conn.execute("SELECT COUNT(*) FROM interactions").fetchone()[0] == 0
+    conn.close()
+
+    assert secret_old_deleted.encode("utf-8") not in db_file.read_bytes()
+    assert active_fact.encode("utf-8") in db_file.read_bytes()

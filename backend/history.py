@@ -240,10 +240,20 @@ class ChatHistoryManager:
 
     def delete_conversation(self, conv_id: str) -> bool:
         with self._get_connection() as conn:
+            conn.execute("DELETE FROM interactions WHERE conversation_id = ?", (conv_id,))
             conn.execute("DELETE FROM messages WHERE conversation_id = ?", (conv_id,))
             cursor = conn.execute("DELETE FROM conversations WHERE id = ?", (conv_id,))
             conn.commit()
-            return cursor.rowcount > 0
+            if cursor.rowcount > 0:
+                try:
+                    old_iso = conn.isolation_level
+                    conn.isolation_level = None
+                    conn.execute("VACUUM")
+                    conn.isolation_level = old_iso
+                except Exception as e:
+                    logger.error(f"Failed to vacuum after delete_conversation: {e}")
+                return True
+            return False
 
     def add_message(
         self,
@@ -428,8 +438,15 @@ class ChatHistoryManager:
     def wipe_all_data(self) -> None:
         """Permanently delete all conversations, messages, and interactions."""
         with self._get_connection() as conn:
-            conn.execute("DELETE FROM messages")
             conn.execute("DELETE FROM interactions")
+            conn.execute("DELETE FROM messages")
             conn.execute("DELETE FROM conversations")
             conn.commit()
+            try:
+                old_iso = conn.isolation_level
+                conn.isolation_level = None
+                conn.execute("VACUUM")
+                conn.isolation_level = old_iso
+            except Exception as e:
+                logger.error(f"Failed to vacuum on wipe_all_data: {e}")
 
