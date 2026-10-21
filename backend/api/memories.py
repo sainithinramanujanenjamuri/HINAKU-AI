@@ -27,6 +27,7 @@ async def list_memories():
     return get_storage().get_memories(include_deleted=False)
 
 @router.patch("/{memory_id}", response_model=MemoryResponse)
+@router.put("/{memory_id}", response_model=MemoryResponse)
 async def update_memory_endpoint(memory_id: str, req: MemoryPatchRequest):
     if not req.text.strip():
         raise HTTPException(status_code=400, detail="Memory text cannot be empty")
@@ -41,6 +42,11 @@ async def delete_memory_endpoint(memory_id: str):
     if not success:
         raise HTTPException(status_code=404, detail="Memory not found")
     return {"status": "deleted", "id": memory_id}
+
+@router.post("/clear")
+async def clear_all_memories_endpoint():
+    count = get_storage().clear_all()
+    return {"status": "cleared", "deleted_count": count}
 
 @router.post("/reindex")
 async def reindex_memories_endpoint():

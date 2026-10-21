@@ -339,3 +339,32 @@ class MemoryStorage:
             logger.error(f"Failed to embed/reindex memories: {e}")
             return 0
 
+    def clear_all(self) -> int:
+        """
+        Permanently delete all memories from SQLite and reset the Chroma collection.
+        """
+        with self._get_connection() as conn:
+            cur = conn.execute("DELETE FROM memories")
+            conn.commit()
+            count = cur.rowcount
+
+        try:
+            self.chroma_client.delete_collection(self.collection_name)
+            self.collection = self.chroma_client.create_collection(
+                name=self.collection_name,
+                metadata={
+                    "hnsw:space": "cosine",
+                    "embedding_model": self.embedding_model,
+                    "embedding_dims": self.embedding_dims
+                }
+            )
+        except Exception as e:
+            logger.error(f"Failed to reset ChromaDB collection: {e}")
+
+        return count
+
+    def export_all(self) -> List[Dict[str, Any]]:
+        """Export all non-deleted memories from storage."""
+        return self.get_memories(include_deleted=False)
+
+

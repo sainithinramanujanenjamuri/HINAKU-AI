@@ -279,3 +279,24 @@ class ChatHistoryManager:
                 (now_date,)
             ).fetchone()
             return row["count"] if row else 0
+
+    def export_all_data(self) -> Dict[str, Any]:
+        """Export all conversations, messages, and interactions from SQLite."""
+        with self._get_connection() as conn:
+            convs = [dict(r) for r in conn.execute("SELECT * FROM conversations ORDER BY created_at ASC").fetchall()]
+            msgs = [dict(r) for r in conn.execute("SELECT * FROM messages ORDER BY created_at ASC").fetchall()]
+            interactions = [dict(r) for r in conn.execute("SELECT * FROM interactions ORDER BY created_at ASC").fetchall()]
+            return {
+                "conversations": convs,
+                "messages": msgs,
+                "interactions": interactions
+            }
+
+    def wipe_all_data(self) -> None:
+        """Permanently delete all conversations, messages, and interactions."""
+        with self._get_connection() as conn:
+            conn.execute("DELETE FROM messages")
+            conn.execute("DELETE FROM interactions")
+            conn.execute("DELETE FROM conversations")
+            conn.commit()
+

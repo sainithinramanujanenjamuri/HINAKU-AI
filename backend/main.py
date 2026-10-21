@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from backend.api import chat_router, conversations_router, memories_router
+from backend.api import chat_router, conversations_router, memories_router, settings_router
 from backend.config import ROOT_DIR
 
 app = FastAPI(title="HINAKU API", version="0.1.0")
@@ -19,6 +19,7 @@ app.add_middleware(
 app.include_router(chat_router, prefix="/api")
 app.include_router(conversations_router, prefix="/api")
 app.include_router(memories_router, prefix="/api")
+app.include_router(settings_router, prefix="/api")
 
 UI_DIR = ROOT_DIR / "ui"
 if UI_DIR.exists():

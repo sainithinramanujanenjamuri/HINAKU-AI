@@ -67,6 +67,13 @@
             <span id="privacy-icon" class="privacy-icon">🔓</span>
             <span id="privacy-label" class="privacy-label">Standard</span>
           </button>
+          <button id="memory-toggle-btn" class="header-action-btn" title="What HINAKU remembers">
+            <span class="btn-icon">🧠</span>
+            <span class="btn-text">Memories</span>
+          </button>
+          <button id="settings-toggle-btn" class="header-action-btn icon-only" title="Settings">
+            <span class="btn-icon">⚙️</span>
+          </button>
           <span class="status-indicator" id="status-indicator"></span>
           <span class="model-badge" id="model-badge">auto &bull; hybrid</span>
         </div>
@@ -111,6 +118,118 @@
           <span class="hint">HP V15 &bull; RTX 4050 &bull; <span id="footer-backend">Local inference</span></span>
         </div>
       </footer>
+    </div>
+
+    <!-- Right Drawer: What HINAKU remembers -->
+    <aside id="memory-drawer" class="memory-drawer closed">
+      <div class="drawer-header">
+        <div class="drawer-title-group">
+          <h2 class="drawer-title">What HINAKU remembers</h2>
+          <span class="drawer-subtitle">Durable facts & preferences</span>
+        </div>
+        <div class="drawer-actions">
+          <button id="reindex-memory-btn" class="drawer-action-btn" title="Re-index memories in ChromaDB">Re-index</button>
+          <button id="drawer-close-btn" class="icon-btn" title="Close drawer">✕</button>
+        </div>
+      </div>
+      <div class="drawer-body">
+        <div class="drawer-search-wrapper">
+          <input type="text" id="memory-search-input" placeholder="Filter memories..." class="drawer-search-input" />
+        </div>
+        <div id="memories-container" class="memories-container">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+    </aside>
+
+    <!-- Overlay for Memory Drawer on mobile -->
+    <div id="drawer-overlay" class="drawer-overlay"></div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal-overlay hidden">
+      <div class="modal-container">
+        <div class="modal-header">
+          <h2 class="modal-title">Settings</h2>
+          <button id="settings-close-btn" class="icon-btn" title="Close">✕</button>
+        </div>
+        <div class="modal-body">
+          <!-- Router Mode -->
+          <div class="settings-group">
+            <label class="settings-label">Model Router Mode</label>
+            <div class="radio-group">
+              <label class="radio-label">
+                <input type="radio" name="router-mode-radio" value="auto" checked />
+                <div>
+                  <strong>Auto Mode</strong>
+                  <span class="desc">Local for simple/personal; API for reasoning & code</span>
+                </div>
+              </label>
+              <label class="radio-label">
+                <input type="radio" name="router-mode-radio" value="local_only" />
+                <div>
+                  <strong>Local Only</strong>
+                  <span class="desc">Strictly stays on laptop (never calls external API)</span>
+                </div>
+              </label>
+              <label class="radio-label">
+                <input type="radio" name="router-mode-radio" value="api_only" />
+                <div>
+                  <strong>API Only</strong>
+                  <span class="desc">Routes to API (except chats marked Private)</span>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- Memory Toggle -->
+          <div class="settings-group">
+            <div class="setting-row">
+              <div>
+                <label class="settings-label">Semantic Memory</label>
+                <p class="setting-desc">Extract facts locally after turns and retrieve context</p>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="setting-memory-enabled" checked />
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Reduced Motion -->
+          <div class="settings-group">
+            <div class="setting-row">
+              <div>
+                <label class="settings-label">Reduced Motion</label>
+                <p class="setting-desc">Disable cosmos drifting starfield and ambient effects</p>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="setting-reduced-motion" />
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Data Management -->
+          <div class="settings-group">
+            <label class="settings-label">Data Management</label>
+            <div class="button-row">
+              <button id="btn-export-data" class="secondary-btn">Export All Data</button>
+              <button id="btn-clear-memory" class="secondary-btn warning-btn">Clear Memory</button>
+              <button id="btn-wipe-all" class="secondary-btn danger-btn">Wipe All Data</button>
+            </div>
+          </div>
+
+          <!-- Self-Build -->
+          <div class="settings-group">
+            <label class="settings-label">Self-Build Cycle</label>
+            <p class="setting-desc">6-month cycle fine-tunes a local model on high-quality interactions.</p>
+            <div class="button-row">
+              <button id="btn-run-selfbuild" class="secondary-btn action-btn">Run Self-Build Now</button>
+            </div>
+            <div id="selfbuild-status" class="status-msg hidden"></div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 

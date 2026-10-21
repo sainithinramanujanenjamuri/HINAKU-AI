@@ -30,6 +30,7 @@ def isolate_test_database(tmp_path, monkeypatch):
     monkeypatch.setenv("HINAKU_CHROMA_PATH", str(test_chroma))
 
     import backend.config as cfg
+    cfg._settings_instance = None
     monkeypatch.setattr(cfg.Settings, "sqlite_path", property(lambda self: test_db))
     monkeypatch.setattr(cfg.Settings, "chroma_path", property(lambda self: test_chroma))
 

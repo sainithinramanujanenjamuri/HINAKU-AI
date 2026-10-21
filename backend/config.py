@@ -258,6 +258,11 @@ class Settings:
 
 
 
-def get_settings() -> Settings:
-    return Settings(load_settings())
+_settings_instance: Optional[Settings] = None
+
+def get_settings(reload: bool = False) -> Settings:
+    global _settings_instance
+    if _settings_instance is None or reload:
+        _settings_instance = Settings(load_settings())
+    return _settings_instance
 

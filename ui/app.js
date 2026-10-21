@@ -580,6 +580,355 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  // --- Memory Drawer Logic ---
+  const memoryDrawer = document.getElementById("memory-drawer");
+  const memoryToggleBtn = document.getElementById("memory-toggle-btn");
+  const drawerCloseBtn = document.getElementById("drawer-close-btn");
+  const drawerOverlay = document.getElementById("drawer-overlay");
+  const reindexMemoryBtn = document.getElementById("reindex-memory-btn");
+  const memorySearchInput = document.getElementById("memory-search-input");
+  const memoriesContainer = document.getElementById("memories-container");
+
+  let allMemories = [];
+
+  async function loadMemories() {
+    if (!memoriesContainer) return;
+    try {
+      memoriesContainer.innerHTML = '<div class="empty-state">Loading memories...</div>';
+      const res = await fetch("/api/memories");
+      if (res.ok) {
+        allMemories = await res.json();
+        renderMemories(allMemories);
+      } else {
+        memoriesContainer.innerHTML = '<div class="empty-state">Failed to load memories.</div>';
+      }
+    } catch (e) {
+      memoriesContainer.innerHTML = `<div class="empty-state">Error: ${e.message}</div>`;
+    }
+  }
+
+  function escapeHtml(str) {
+    if (!str) return "";
+    return str.replace(/[&<>'"]/g, tag => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      "'": '&#39;',
+      '"': '&quot;'
+    }[tag] || tag));
+  }
+
+  function renderMemories(memories) {
+    if (!memoriesContainer) return;
+    if (!memories || memories.length === 0) {
+      memoriesContainer.innerHTML = '<div class="empty-state">No memories recorded yet.<br><br>HINAKU extracts facts about you automatically as you converse.</div>';
+      return;
+    }
+
+    memoriesContainer.innerHTML = "";
+    memories.forEach(mem => {
+      const card = document.createElement("div");
+      card.className = "memory-card";
+      card.id = `memory-${mem.id}`;
+
+      let dateStr = "";
+      try {
+        dateStr = new Date(mem.updated_at || mem.created_at).toLocaleDateString(undefined, {
+          month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"
+        });
+      } catch (e) {
+        dateStr = mem.updated_at || mem.created_at || "";
+      }
+
+      card.innerHTML = `
+        <div class="memory-card-text" id="memory-text-${mem.id}">${escapeHtml(mem.text)}</div>
+        <div class="memory-card-footer">
+          <span class="memory-date">${dateStr}</span>
+          <div class="memory-card-actions">
+            <button class="memory-btn-icon memory-btn-edit" title="Edit memory" data-id="${mem.id}">✏️</button>
+            <button class="memory-btn-icon memory-btn-delete" title="Delete memory" data-id="${mem.id}">🗑️</button>
+          </div>
+        </div>
+      `;
+
+      card.querySelector(".memory-btn-edit").addEventListener("click", () => editMemoryInline(mem));
+      card.querySelector(".memory-btn-delete").addEventListener("click", () => deleteMemoryItem(mem.id));
+
+      memoriesContainer.appendChild(card);
+    });
+  }
+
+  function editMemoryInline(mem) {
+    const card = document.getElementById(`memory-${mem.id}`);
+    if (!card) return;
+
+    card.innerHTML = `
+      <textarea class="memory-edit-area" id="edit-area-${mem.id}">${escapeHtml(mem.text)}</textarea>
+      <div class="memory-edit-controls">
+        <button class="btn-small" id="cancel-edit-${mem.id}">Cancel</button>
+        <button class="btn-small primary" id="save-edit-${mem.id}">Save</button>
+      </div>
+    `;
+
+    document.getElementById(`cancel-edit-${mem.id}`).addEventListener("click", () => renderMemories(allMemories));
+    document.getElementById(`save-edit-${mem.id}`).addEventListener("click", async () => {
+      const newText = document.getElementById(`edit-area-${mem.id}`).value.trim();
+      if (!newText) return;
+      try {
+        const res = await fetch(`/api/memories/${mem.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: newText })
+        });
+        if (res.ok) {
+          const updated = await res.json();
+          const idx = allMemories.findIndex(m => m.id === mem.id);
+          if (idx !== -1) allMemories[idx] = updated;
+          renderMemories(allMemories);
+        }
+      } catch (e) {
+        alert("Failed to update memory: " + e.message);
+      }
+    });
+  }
+
+  async function deleteMemoryItem(memId) {
+    if (!confirm("Permanently delete this memory?")) return;
+    try {
+      const res = await fetch(`/api/memories/${memId}`, { method: "DELETE" });
+      if (res.ok) {
+        allMemories = allMemories.filter(m => m.id !== memId);
+        renderMemories(allMemories);
+      }
+    } catch (e) {
+      alert("Failed to delete memory: " + e.message);
+    }
+  }
+
+  if (memoryToggleBtn) {
+    memoryToggleBtn.addEventListener("click", () => {
+      const isClosed = memoryDrawer.classList.contains("closed");
+      if (isClosed) {
+        memoryDrawer.classList.remove("closed");
+        if (drawerOverlay) drawerOverlay.classList.add("active");
+        loadMemories();
+      } else {
+        memoryDrawer.classList.add("closed");
+        if (drawerOverlay) drawerOverlay.classList.remove("active");
+      }
+    });
+  }
+
+  if (drawerCloseBtn) {
+    drawerCloseBtn.addEventListener("click", () => {
+      memoryDrawer.classList.add("closed");
+      if (drawerOverlay) drawerOverlay.classList.remove("active");
+    });
+  }
+
+  if (drawerOverlay) {
+    drawerOverlay.addEventListener("click", () => {
+      memoryDrawer.classList.add("closed");
+      drawerOverlay.classList.remove("active");
+    });
+  }
+
+  if (reindexMemoryBtn) {
+    reindexMemoryBtn.addEventListener("click", async () => {
+      reindexMemoryBtn.textContent = "Indexing...";
+      reindexMemoryBtn.disabled = true;
+      try {
+        const res = await fetch("/api/memories/reindex", { method: "POST" });
+        if (res.ok) {
+          const data = await res.json();
+          alert(`Re-indexed ${data.count} memories into ChromaDB.`);
+          loadMemories();
+        }
+      } catch (e) {
+        alert("Re-index failed: " + e.message);
+      } finally {
+        reindexMemoryBtn.textContent = "Re-index";
+        reindexMemoryBtn.disabled = false;
+      }
+    });
+  }
+
+  if (memorySearchInput) {
+    memorySearchInput.addEventListener("input", (e) => {
+      const query = e.target.value.toLowerCase().trim();
+      if (!query) {
+        renderMemories(allMemories);
+      } else {
+        const filtered = allMemories.filter(m => m.text.toLowerCase().includes(query));
+        renderMemories(filtered);
+      }
+    });
+  }
+
+  // --- Settings Modal Logic ---
+  const settingsToggleBtn = document.getElementById("settings-toggle-btn");
+  const settingsModal = document.getElementById("settings-modal");
+  const settingsCloseBtn = document.getElementById("settings-close-btn");
+  const settingMemoryEnabled = document.getElementById("setting-memory-enabled");
+  const settingReducedMotion = document.getElementById("setting-reduced-motion");
+  const btnExportData = document.getElementById("btn-export-data");
+  const btnClearMemory = document.getElementById("btn-clear-memory");
+  const btnWipeAll = document.getElementById("btn-wipe-all");
+  const btnRunSelfbuild = document.getElementById("btn-run-selfbuild");
+  const selfbuildStatus = document.getElementById("selfbuild-status");
+  const routerRadios = document.querySelectorAll("input[name='router-mode-radio']");
+
+  async function openSettings() {
+    if (!settingsModal) return;
+    settingsModal.classList.remove("hidden");
+    try {
+      const res = await fetch("/api/settings");
+      if (res.ok) {
+        const s = await res.json();
+        routerRadios.forEach(r => {
+          r.checked = (r.value === s.router_mode);
+        });
+        if (settingMemoryEnabled) settingMemoryEnabled.checked = s.memory_enabled;
+        if (settingReducedMotion) {
+          settingReducedMotion.checked = s.reduced_motion;
+          applyReducedMotion(s.reduced_motion);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load settings:", e);
+    }
+  }
+
+  function closeSettings() {
+    if (settingsModal) settingsModal.classList.add("hidden");
+  }
+
+  if (settingsToggleBtn) settingsToggleBtn.addEventListener("click", openSettings);
+  if (settingsCloseBtn) settingsCloseBtn.addEventListener("click", closeSettings);
+
+  routerRadios.forEach(radio => {
+    radio.addEventListener("change", async (e) => {
+      if (e.target.checked) {
+        await fetch("/api/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ router_mode: e.target.value })
+        });
+        checkInfo();
+      }
+    });
+  });
+
+  if (settingMemoryEnabled) {
+    settingMemoryEnabled.addEventListener("change", async (e) => {
+      await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ memory_enabled: e.target.checked })
+      });
+    });
+  }
+
+  function applyReducedMotion(enabled) {
+    if (enabled) {
+      document.body.classList.add("reduced-motion");
+    } else {
+      document.body.classList.remove("reduced-motion");
+    }
+  }
+
+  if (settingReducedMotion) {
+    settingReducedMotion.addEventListener("change", async (e) => {
+      const enabled = e.target.checked;
+      applyReducedMotion(enabled);
+      await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reduced_motion: enabled })
+      });
+    });
+  }
+
+  if (btnExportData) {
+    btnExportData.addEventListener("click", async () => {
+      try {
+        const res = await fetch("/api/settings/export");
+        if (res.ok) {
+          const data = await res.json();
+          const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          const dateStr = new Date().toISOString().slice(0, 10);
+          a.href = url;
+          a.download = `hinaku_export_${dateStr}.json`;
+          a.click();
+          URL.revokeObjectURL(url);
+        }
+      } catch (e) {
+        alert("Export failed: " + e.message);
+      }
+    });
+  }
+
+  if (btnClearMemory) {
+    btnClearMemory.addEventListener("click", async () => {
+      if (!confirm("Are you sure you want to clear all semantic memories? This cannot be undone.")) return;
+      try {
+        const res = await fetch("/api/settings/clear-memory", { method: "POST" });
+        if (res.ok) {
+          alert("All memories have been cleared.");
+          allMemories = [];
+          renderMemories([]);
+        }
+      } catch (e) {
+        alert("Clear memory failed: " + e.message);
+      }
+    });
+  }
+
+  if (btnWipeAll) {
+    btnWipeAll.addEventListener("click", async () => {
+      const token = prompt("CAUTION: This will permanently wipe all conversations, messages, interactions, and memories.\n\nType 'WIPE_ALL' to confirm:");
+      if (token !== "WIPE_ALL") return;
+
+      try {
+        const res = await fetch("/api/settings/wipe-all", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ confirm: "WIPE_ALL" })
+        });
+        if (res.ok) {
+          alert("All data wiped successfully. Reloading HINAKU...");
+          window.location.reload();
+        }
+      } catch (e) {
+        alert("Wipe failed: " + e.message);
+      }
+    });
+  }
+
+  if (btnRunSelfbuild) {
+    btnRunSelfbuild.addEventListener("click", async () => {
+      if (selfbuildStatus) {
+        selfbuildStatus.textContent = "Starting self-build cycle...";
+        selfbuildStatus.classList.remove("hidden");
+      }
+      try {
+        const res = await fetch("/api/settings/self-build/run", { method: "POST" });
+        if (res.ok) {
+          const data = await res.json();
+          if (selfbuildStatus) {
+            selfbuildStatus.textContent = `Self-build initiated at ${data.timestamp}. ${data.message}`;
+          }
+        }
+      } catch (e) {
+        if (selfbuildStatus) {
+          selfbuildStatus.textContent = `Self-build error: ${e.message}`;
+        }
+      }
+    });
+  }
+
   // Load initial conversations
   loadConversations();
 
