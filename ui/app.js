@@ -1125,6 +1125,157 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // --- Dataset Review Modal Logic (Phase E) ---
+  const datasetModal = document.getElementById("dataset-modal");
+  const datasetToggleBtn = document.getElementById("dataset-toggle-btn");
+  const btnReviewDataset = document.getElementById("btn-review-dataset");
+  const datasetModalClose = document.getElementById("dataset-modal-close");
+  const datasetCandidateCount = document.getElementById("dataset-candidate-count");
+  const datasetMinRequired = document.getElementById("dataset-min-required");
+  const datasetReadyBadge = document.getElementById("dataset-ready-badge");
+  const datasetCandidatesList = document.getElementById("dataset-candidates-list");
+  const btnBuildDataset = document.getElementById("btn-build-dataset");
+  const datasetBuildStatus = document.getElementById("dataset-build-status");
+
+  async function openDatasetModal() {
+    if (!datasetModal) return;
+    datasetModal.classList.remove("hidden");
+    if (settingsModal) settingsModal.classList.add("hidden");
+    await loadCurationCandidates();
+  }
+
+  function closeDatasetModal() {
+    if (!datasetModal) return;
+    datasetModal.classList.add("hidden");
+  }
+
+  if (datasetToggleBtn) datasetToggleBtn.addEventListener("click", openDatasetModal);
+  if (btnReviewDataset) btnReviewDataset.addEventListener("click", openDatasetModal);
+  if (datasetModalClose) datasetModalClose.addEventListener("click", closeDatasetModal);
+  if (datasetModal) {
+    datasetModal.addEventListener("click", (e) => {
+      if (e.target === datasetModal) closeDatasetModal();
+    });
+  }
+
+  async function loadCurationCandidates() {
+    if (!datasetCandidatesList) return;
+    datasetCandidatesList.innerHTML = '<div class="empty-state">Loading candidate interactions...</div>';
+    try {
+      const res = await fetch("/api/training/curate");
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+
+      if (datasetCandidateCount) datasetCandidateCount.textContent = data.total_candidates;
+      if (datasetMinRequired) datasetMinRequired.textContent = data.min_examples_required;
+
+      if (datasetReadyBadge) {
+        if (data.ready_for_training) {
+          datasetReadyBadge.textContent = "Ready";
+          datasetReadyBadge.className = "stat-badge ready";
+        } else {
+          const needed = Math.max(0, data.min_examples_required - data.total_candidates);
+          datasetReadyBadge.textContent = `Need ${needed} more`;
+          datasetReadyBadge.className = "stat-badge waiting";
+        }
+      }
+
+      renderDatasetCandidates(data.candidates || []);
+    } catch (e) {
+      datasetCandidatesList.innerHTML = `<div class="empty-state">Error loading curation: ${e.message}</div>`;
+    }
+  }
+
+  function renderDatasetCandidates(candidates) {
+    if (!datasetCandidatesList) return;
+    if (candidates.length === 0) {
+      datasetCandidatesList.innerHTML = '<div class="empty-state">No qualifying interaction examples found yet.<br><br>Examples appear when you rate assistant responses with thumbs-up, edit a response, or accept API responses.</div>';
+      return;
+    }
+
+    datasetCandidatesList.innerHTML = "";
+    candidates.forEach((c) => {
+      const card = document.createElement("div");
+      card.className = "dataset-candidate-card";
+      card.id = `candidate-${c.interaction_id}`;
+
+      let tagsHtml = "";
+      if (c.inclusion_reasons && c.inclusion_reasons.length > 0) {
+        c.inclusion_reasons.forEach((r) => {
+          let label = r;
+          if (r === "thumbs_up") label = "👍 thumbs-up";
+          if (r === "owner_edited") label = "✏️ edited";
+          if (r === "accepted_api") label = "🌐 API";
+          tagsHtml += `<span class="candidate-tag ${r}">${label}</span>`;
+        });
+      }
+
+      card.innerHTML = `
+        <div class="candidate-header">
+          <div class="candidate-tags">${tagsHtml}</div>
+          <button class="candidate-btn-remove" title="Exclude from training dataset" data-id="${c.interaction_id}">Remove</button>
+        </div>
+        <div class="candidate-content">
+          <div class="candidate-prompt">${escapeHtml(c.user_prompt)}</div>
+          <div class="candidate-answer">${escapeHtml(c.final_answer)}</div>
+        </div>
+      `;
+
+      card.querySelector(".candidate-btn-remove").addEventListener("click", async () => {
+        try {
+          const res = await fetch("/api/training/curate/exclude", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ interaction_id: c.interaction_id })
+          });
+          if (res.ok) {
+            card.remove();
+            const remaining = datasetCandidatesList.querySelectorAll(".dataset-candidate-card").length;
+            if (datasetCandidateCount) datasetCandidateCount.textContent = remaining;
+            if (remaining === 0) {
+              datasetCandidatesList.innerHTML = '<div class="empty-state">All candidates removed.</div>';
+            }
+          }
+        } catch (e) {
+          alert("Failed to remove item: " + e.message);
+        }
+      });
+
+      datasetCandidatesList.appendChild(card);
+    });
+  }
+
+  if (btnBuildDataset) {
+    btnBuildDataset.addEventListener("click", async () => {
+      if (datasetBuildStatus) {
+        datasetBuildStatus.textContent = "Building instruction dataset...";
+        datasetBuildStatus.classList.remove("hidden");
+      }
+      try {
+        const res = await fetch("/api/training/datasets/build", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({})
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (datasetBuildStatus) {
+            datasetBuildStatus.textContent = `Dataset built successfully: ${data.metadata.example_count} examples written to ${data.dataset_path}`;
+          }
+        } else {
+          const err = await res.json();
+          if (datasetBuildStatus) {
+            datasetBuildStatus.textContent = `Build failed: ${err.detail || "Unknown error"}`;
+          }
+        }
+      } catch (e) {
+        if (datasetBuildStatus) {
+          datasetBuildStatus.textContent = `Build error: ${e.message}`;
+        }
+      }
+    });
+  }
+
   // Load initial conversations
   loadConversations();
 

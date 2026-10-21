@@ -266,7 +266,7 @@ def test_retrieval_quality_12_memories():
         import urllib.request
         body = json.dumps({"model": "qwen3-embedding:0.6b", "input": ["test"]}).encode()
         req = urllib.request.Request("http://localhost:11434/api/embed", data=body, headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=5) as r:
+        with urllib.request.urlopen(req, timeout=15) as r:
             ollama_online = r.status == 200
     except Exception:
         ollama_online = False

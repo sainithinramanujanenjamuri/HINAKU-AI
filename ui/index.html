@@ -71,6 +71,10 @@
             <span class="btn-icon">🧠</span>
             <span class="btn-text">Memories</span>
           </button>
+          <button id="dataset-toggle-btn" class="header-action-btn" title="Dataset Review & Curation">
+            <span class="btn-icon">📦</span>
+            <span class="btn-text">Dataset</span>
+          </button>
           <button id="settings-toggle-btn" class="header-action-btn icon-only" title="Settings">
             <span class="btn-icon">⚙️</span>
           </button>
@@ -224,9 +228,46 @@
             <label class="settings-label">Self-Build Cycle</label>
             <p class="setting-desc">6-month cycle fine-tunes a local model on high-quality interactions.</p>
             <div class="button-row">
+              <button id="btn-review-dataset" class="secondary-btn">Review Curated Data</button>
               <button id="btn-run-selfbuild" class="secondary-btn action-btn">Run Self-Build Now</button>
             </div>
             <div id="selfbuild-status" class="status-msg hidden"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dataset Review Modal (Phase E) -->
+    <div id="dataset-modal" class="modal-overlay hidden">
+      <div class="modal-container wide-modal">
+        <div class="modal-header">
+          <div class="modal-title-group">
+            <h2 class="modal-title">Dataset Curation & Review</h2>
+            <span class="modal-subtitle" style="font-size: 11px; color: var(--text-muted);">Curated interaction training data</span>
+          </div>
+          <button id="dataset-modal-close" class="icon-btn" title="Close">✕</button>
+        </div>
+        <div class="modal-body dataset-modal-body">
+          <div class="dataset-stats-bar">
+            <div class="stat-item">
+              <span class="stat-value" id="dataset-candidate-count">0</span>
+              <span class="stat-label">Candidates</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-value" id="dataset-min-required">200</span>
+              <span class="stat-label">Required Minimum</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-badge waiting" id="dataset-ready-badge">Checking...</span>
+              <span class="stat-label">Status</span>
+            </div>
+            <div class="stat-actions">
+              <button id="btn-build-dataset" class="secondary-btn action-btn" style="padding: 6px 14px; font-size: 12px;">Build Dataset</button>
+            </div>
+          </div>
+          <div id="dataset-build-status" class="status-msg hidden"></div>
+          <div class="dataset-candidates-list" id="dataset-candidates-list">
+            <div class="empty-state">Loading candidate interactions...</div>
           </div>
         </div>
       </div>

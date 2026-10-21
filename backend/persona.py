@@ -25,6 +25,10 @@ class PersonaManager:
         self._is_fallback: bool = False
         self._notice: Optional[str] = None
 
+    @property
+    def file_path(self) -> Optional[Path]:
+        return self._file_path
+
     def set_file_path(self, path: Path):
         self._file_path = path
         self._last_mtime = None

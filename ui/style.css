@@ -1279,3 +1279,172 @@ body.reduced-motion * {
   color: var(--text-main);
   background: rgba(255, 255, 255, 0.1);
 }
+
+/* Dataset Review Modal (Phase E) */
+.wide-modal {
+  width: 760px;
+  max-width: 95vw;
+}
+
+.dataset-stats-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 12px 16px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stat-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+  font-family: var(--font-mono);
+}
+
+.stat-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.stat-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.stat-badge.ready {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.stat-badge.waiting {
+  background: rgba(234, 179, 8, 0.15);
+  color: #facc15;
+  border: 1px solid rgba(234, 179, 8, 0.35);
+}
+
+.dataset-candidates-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 52vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.dataset-candidate-card {
+  background: rgba(15, 18, 25, 0.85);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: border-color 0.15s ease;
+}
+
+.dataset-candidate-card:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.candidate-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+}
+
+.candidate-tags {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.candidate-tag {
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+}
+
+.candidate-tag.thumbs_up {
+  background: rgba(16, 185, 129, 0.15);
+  color: #6ee7b7;
+}
+
+.candidate-tag.owner_edited {
+  background: rgba(139, 92, 246, 0.2);
+  color: #c4b5fd;
+}
+
+.candidate-tag.accepted_api {
+  background: rgba(59, 130, 246, 0.15);
+  color: #93c5fd;
+}
+
+.candidate-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.candidate-prompt {
+  color: #e2e8f0;
+  font-weight: 500;
+}
+
+.candidate-prompt::before {
+  content: "User: ";
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.candidate-answer {
+  color: #cbd5e1;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.45;
+}
+
+.candidate-answer::before {
+  content: "HINAKU: ";
+  color: var(--accent-primary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.candidate-btn-remove {
+  background: transparent;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #f87171;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.candidate-btn-remove:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: #ef4444;
+}

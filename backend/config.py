@@ -248,6 +248,24 @@ class Settings:
             r"(?i)\blatest\b\s+(?:news|headlines|score|stock\s+price)\b"
         ])
 
+    @property
+    def datasets_dir(self) -> Path:
+        import os, tempfile
+        env_override = os.getenv("HINAKU_DATASETS_DIR")
+        if env_override:
+            return Path(env_override)
+        if os.getenv("HINAKU_USE_REAL_DATA") == "1":
+            p = self.training.get("datasets_dir", "data/datasets")
+            path = Path(p)
+            return path if path.is_absolute() else ROOT_DIR / path
+        temp_dir = Path(tempfile.gettempdir()) / "hinaku_temp" / "datasets"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        return temp_dir
+
+    @property
+    def curation_min_examples(self) -> int:
+        return int(self.curation.get("min_examples_to_train", 200))
+
     def get_api_key(self) -> Optional[str]:
         import os
         from dotenv import load_dotenv
