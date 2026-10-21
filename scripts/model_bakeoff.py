@@ -457,6 +457,35 @@ async def run_bakeoff(
             notes = dtl.get("flag_note", "") or ("Baseline" if m == "qwen3.5:4b" else "Candidate")
             md_lines.append(f"| **{m}** | {param_str} | {quant_str} | {passed_str} | {avg_lat} | {vram_str} | {notes} |")
 
+        # Collect and list all failed checks
+        failed_entries = []
+        for prompt in PROMPTS:
+            for run_idx in [1, 2]:
+                for model in available_models:
+                    run_data = results_by_prompt[prompt][run_idx].get(model, {})
+                    chk = run_data.get("check", {})
+                    if not chk.get("passed"):
+                        failed_entries.append({
+                            "model": model,
+                            "run": run_idx,
+                            "prompt": prompt,
+                            "reasons": chk.get("reasons", ["Failed check"]),
+                            "reply": run_data.get("reply", "").replace("\n", " ")
+                        })
+
+        md_lines.append("\n## Failed Checks Breakdown\n")
+        if not failed_entries:
+            md_lines.append("> No checks failed across any tested model.\n")
+        else:
+            md_lines.append("| Model | Run | Prompt | Failed Check / Reason | Actual Reply |")
+            md_lines.append("| :--- | :---: | :--- | :--- | :--- |")
+            for f in failed_entries:
+                reasons_str = "; ".join(f["reasons"])
+                # Truncate reply to avoid oversized table cells while preserving readability
+                rep_snippet = f["reply"] if len(f["reply"]) <= 120 else f["reply"][:117] + "..."
+                md_lines.append(f"| `{f['model']}` | Run {f['run']} | \"{f['prompt']}\" | {reasons_str} | {rep_snippet} |")
+            md_lines.append("")
+
         md_lines.append("\n---\n")
         md_lines.append("## Side-by-Side Prompt Replies\n")
 
