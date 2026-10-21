@@ -192,3 +192,53 @@ def test_ollama_adapter_payload_options_and_think(monkeypatch):
     assert captured_payload["think"] is False
 
 
+def test_persona_examples_no_overlap():
+    import json
+    import re
+    settings = get_settings()
+    persona_text = settings.persona_file.read_text(encoding="utf-8")
+
+    # Extract all example owner situations from hinaku_persona.md
+    example_situations = re.findall(r"^\s*Owner:\s*(.+)$", persona_text, flags=re.MULTILINE | re.IGNORECASE)
+    assert len(example_situations) >= 4, "Expected at least 4 persona examples"
+
+    # Load prompts from eval/golden.jsonl
+    from backend.config import ROOT_DIR
+    golden_path = ROOT_DIR / "eval" / "golden.jsonl"
+    golden_prompts = []
+    if golden_path.exists():
+        for line in golden_path.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                golden_prompts.append(json.loads(line).get("prompt", ""))
+
+    # Load prompts from scripts/model_bakeoff.py
+    from scripts.model_bakeoff import PROMPTS as bakeoff_prompts
+
+    eval_prompts = golden_prompts + bakeoff_prompts
+
+    stop_words = {"a", "an", "the", "and", "or", "to", "in", "of", "for", "is", "my", "your", "on", "it", "what", "how", "i", "im"}
+
+    for sit in example_situations:
+        sit_clean = re.sub(r"[^\w\s]", "", sit).strip().lower()
+        sit_words = {w for w in sit_clean.split() if w not in stop_words}
+
+        for p in eval_prompts:
+            p_clean = re.sub(r"[^\w\s]", "", p).strip().lower()
+            # 1. Exact string match
+            assert sit_clean != p_clean, f"Persona example '{sit}' matches eval prompt '{p}' exactly!"
+
+            # 2. Substring match
+            if len(sit_clean) > 8 and len(p_clean) > 8:
+                assert sit_clean not in p_clean and p_clean not in sit_clean, (
+                    f"Persona example '{sit}' overlaps eval prompt '{p}'!"
+                )
+
+            # 3. High keyword overlap (3 or more significant words in common)
+            p_words = {w for w in p_clean.split() if w not in stop_words}
+            overlap = sit_words.intersection(p_words)
+            assert len(overlap) < 3, (
+                f"Persona example '{sit}' shares too many keywords {overlap} with eval prompt '{p}'!"
+            )
+
+
+

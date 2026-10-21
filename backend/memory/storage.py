@@ -17,9 +17,10 @@ def l2_normalize(v: List[float]) -> List[float]:
     norm = math.sqrt(sum(x * x for x in v)) or 1.0
     return [x / norm for x in v]
 
-def default_ollama_embedder(host: str, model: str, texts: List[str], keep_alive: str = "30m") -> List[List[float]]:
+def default_ollama_embedder(host: str, model: str, texts: List[str], keep_alive: str = "0") -> List[List[float]]:
     """
     Generate embeddings using Ollama /api/embed endpoint.
+    Uses keep_alive=0 by default to instantly free VRAM for the main LLM.
     """
     body = json.dumps({"model": model, "input": texts, "keep_alive": keep_alive}).encode("utf-8")
     req = urllib.request.Request(

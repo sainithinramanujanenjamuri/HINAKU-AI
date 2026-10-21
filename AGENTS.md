@@ -30,7 +30,11 @@ Instructions for Codex (and any coding agent) working on this repository. Read t
 
 - Laptop: HP V15, AMD Ryzen 7, NVIDIA RTX 4050 with **6 GB VRAM**.
 - Design everything to fit this. Do not assume more VRAM.
-- Local inference default: 3B-4B models at Q4 via Ollama. 7B Q4 is allowed but slower (partial CPU offload).
+- Local inference default: `gemma3:4b` at Q4 via Ollama with `keep_alive: 30m` so model stays loaded. 7B Q4 is allowed but slower (partial CPU offload).
+- Language: English only for now.
+- Guards in code (never call a model):
+  - Sensitive-data guard: PINs, passwords, card/bank numbers, government IDs get an immediate fixed refusal; redacted to `[removed]` in DB/interactions; no memory extracted.
+  - Live-data guard: Real-time queries (crypto/stock prices, weather, news, scores, current time/date) get an immediate refusal with search tracker guidance.
 - Training: QLoRA (4-bit), base model 1B-1.5B, short sequence lengths.
 - Heavier training must be exportable to a rented cloud GPU and importable back (see section 8).
 
@@ -113,15 +117,18 @@ Dark, minimal, "a universe without light."
 ## 7. Model router and memory
 
 ### Model router
-- One interface, two backends: **local (Ollama)** and **API**.
-- Auto mode: simple or private requests go local; hard reasoning goes to API.
+- One interface, two backends: **local (Ollama - gemma3:4b)** and **API (OpenRouter free API or OpenAI/Anthropic compatible)**.
+- Auto mode: simple, personal, or private requests go local; complex reasoning goes to API.
 - Forced modes: local-only, API-only.
-- Every request/response pair is logged to `data/interactions.db`: prompt, answer, model used, feedback, any owner edit, timestamp.
+- Privacy rule: no personal owner facts or memories are sent to the API (`api_send_personal_context: false`).
+- Private chats: marked Private before first message, never call the API under any mode, and never store memories.
+- Every request/response pair is logged to `data/hinaku.db`: prompt, answer, model used, feedback, any owner edit, timestamp.
 - Handle failures gracefully: if one backend is down, fall back to the other (unless the owner forced a mode) and say so.
 
 ### Memory
-- After each turn, extract durable facts and preferences about the owner and store them as short plain-language notes with timestamps.
-- Before each reply, retrieve the most relevant memories and inject them into context.
+- Storage: SQLite table `memories` plus ChromaDB collection with `qwen3-embedding:0.6b` (1024 dims, `min_similarity: 0.46`). Automatic re-indexing if model changes.
+- After each turn, extract durable facts and preferences about the owner using the LOCAL model only and store them as short plain-language notes with timestamps.
+- Before each reply, retrieve the most relevant memories and inject them into context (local requests only).
 - Merge or update older memories instead of duplicating.
 - The memory drawer lets the owner view, edit, and delete any memory.
 - Only apply a memory when it improves the answer. No random personal asides.

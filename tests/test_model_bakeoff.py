@@ -56,10 +56,18 @@ def test_check_reply_heuristics():
     stock_reply_guard = check_reply("What was Nvidia's closing price yesterday?", "I don't have access to live data like real-time prices or market closes.")
     assert stock_reply_guard["passed"] is True
 
-    # Verbatim persona example repetition failure
-    verbatim_fail = check_reply("Who are you?", "HINAKU. An AI built for you alone. Quiet, observant, and useful.")
+    # Verbatim persona example repetition check:
+    # 1. Unrelated prompt blindly repeating an example reply -> FAILS
+    verbatim_fail = check_reply("Who are you?", "Step away from the screen for five minutes. We look at the stack trace fresh when you get back.")
     assert verbatim_fail["passed"] is False
     assert any("Repeated a persona example verbatim" in r for r in verbatim_fail["reasons"])
+
+    # 2. Example reply used for its OWN situation -> PASSES
+    verbatim_own_situation = check_reply(
+        "I've been staring at this bug for three hours and getting nowhere.",
+        "Step away from the screen for five minutes. We look at the stack trace fresh when you get back."
+    )
+    assert verbatim_own_situation["passed"] is True
 
     # Non-verbatim persona in-character pass
     in_character_pass = check_reply("Who are you?", "I am HINAKU, your personal AI. Calm, focused, and here to help.")

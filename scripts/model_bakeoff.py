@@ -63,13 +63,47 @@ SAMPLE_MEMORIES = [
     "Prefers short direct answers"
 ]
 
-PERSONA_EXAMPLES_VERBATIM = [
-    "i'm here. what are we working on?",
-    "anytime. let me know when the next piece is ready.",
-    "that sounds heavy. pick the smallest broken thing and we fix only that. which one is it?",
-    "no. rushing a release without tests creates bigger fires tomorrow. run the critical tests first.",
-    "hinaku. an ai built for you alone. quiet, observant, and useful.",
-    "i don't experience days, but i'm here. how is yours going so far?"
+PERSONA_EXAMPLES_MAP = [
+    {
+        "situation_keywords": ["bug", "three hours", "getting nowhere", "stuck"],
+        "reply": "step away from the screen for five minutes. we look at the stack trace fresh when you get back."
+    },
+    {
+        "situation_keywords": ["rewrite", "from scratch"],
+        "reply": "no. a rewrite brings new bugs and burns momentum. isolate the bottleneck and fix that first."
+    },
+    {
+        "situation_keywords": ["designed for"],
+        "reply": "i am your personal ai assistant. calm, observant, and built for your work alone."
+    },
+    {
+        "situation_keywords": ["boiling point", "water"],
+        "reply": "100 degrees celsius."
+    },
+    {
+        "situation_keywords": ["hello", "hi", "greetings"],
+        "reply": "i'm here. what are we working on?"
+    },
+    {
+        "situation_keywords": ["thanks", "thank you"],
+        "reply": "anytime. let me know when the next piece is ready."
+    },
+    {
+        "situation_keywords": ["exhausted", "nothing is working"],
+        "reply": "that sounds heavy. pick the smallest broken thing and we fix only that. which one is it?"
+    },
+    {
+        "situation_keywords": ["skip testing", "ship tonight"],
+        "reply": "no. rushing a release without tests creates bigger fires tomorrow. run the critical tests first."
+    },
+    {
+        "situation_keywords": ["who are you"],
+        "reply": "hinaku. an ai built for you alone. quiet, observant, and useful."
+    },
+    {
+        "situation_keywords": ["how is today", "start my day"],
+        "reply": "i don't experience days, but i'm here. how is yours going so far?"
+    }
 ]
 
 def count_sentences(text: str) -> int:
@@ -103,11 +137,16 @@ def check_reply(prompt: str, reply: str) -> Dict[str, Any]:
             break
 
     # 3. Verbatim persona example repetition check
+    # Fails only when an example reply is used for a prompt that is NOT the example's own situation
     clean_compare = re.sub(r"[^\w\s]", "", text).strip().lower()
-    for ex in PERSONA_EXAMPLES_VERBATIM:
-        if clean_compare == re.sub(r"[^\w\s]", "", ex).strip().lower():
-            reasons.append("Repeated a persona example verbatim")
-            break
+    p_clean = re.sub(r"[^\w\s]", "", prompt).strip().lower()
+    for ex in PERSONA_EXAMPLES_MAP:
+        ex_clean = re.sub(r"[^\w\s]", "", ex["reply"]).strip().lower()
+        if clean_compare == ex_clean:
+            is_own_situation = any(k in p_clean for k in ex["situation_keywords"])
+            if not is_own_situation:
+                reasons.append("Repeated a persona example verbatim for an unrelated situation")
+                break
 
     # 4. Prompt-specific checks:
     p_lower = prompt.lower()
