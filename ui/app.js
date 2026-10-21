@@ -769,12 +769,6 @@ document.addEventListener("DOMContentLoaded", () => {
       promptInput.focus();
     }
   }
-    } finally {
-      isGenerating = false;
-      sendButton.disabled = false;
-      promptInput.focus();
-    }
-  }
 
   // --- Memory Drawer Logic ---
   const memoryDrawer = document.getElementById("memory-drawer");

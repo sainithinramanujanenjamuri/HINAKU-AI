@@ -248,3 +248,4 @@ The repository is clean and synchronized with remote storage:
   - `6423d92` - *Phase C: Memory drawer, settings panel, export/wipe, global hotkey, system tray icon*
   - `1b7d3c0` - *Step 0: Decouple persona examples from golden eval, calibrate bake-off checks, update AGENTS.md*
 - **Secrets Audit:** Zero secrets, credentials, or private API keys committed. All data directories (`data/`, `models/`, `logs/`, `.env`) remain properly git-ignored.
+
