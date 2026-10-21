@@ -266,6 +266,42 @@ class Settings:
     def curation_min_examples(self) -> int:
         return int(self.curation.get("min_examples_to_train", 200))
 
+    @property
+    def models_dir(self) -> Path:
+        import os, tempfile
+        env_override = os.getenv("HINAKU_MODELS_DIR")
+        if env_override:
+            return Path(env_override)
+        if os.getenv("HINAKU_USE_REAL_DATA") == "1":
+            p = self.training.get("models_dir", "models")
+            path = Path(p)
+            return path if path.is_absolute() else ROOT_DIR / path
+        temp_dir = Path(tempfile.gettempdir()) / "hinaku_temp" / "models"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        return temp_dir
+
+    @property
+    def training_min_vram_gb(self) -> float:
+        return float(self.training.get("min_vram_gb", 5.5))
+
+    @property
+    def training_base_model(self) -> str:
+        return str(self.training.get("base_model", "Qwen/Qwen2.5-1.5B-Instruct"))
+
+    @property
+    def eval_golden_file(self) -> Path:
+        p = self.evaluation.get("golden_file", "eval/golden.jsonl")
+        path = Path(p)
+        return path if path.is_absolute() else ROOT_DIR / path
+
+    @property
+    def eval_min_improvement(self) -> float:
+        return float(self.evaluation.get("min_improvement", 0.02))
+
+    @property
+    def training_keep_versions(self) -> int:
+        return int(self.training.get("keep_versions", 3))
+
     def get_api_key(self) -> Optional[str]:
         import os
         from dotenv import load_dotenv

@@ -27,15 +27,18 @@ def isolate_test_database(tmp_path, monkeypatch):
     test_db = tmp_path / "test_isolated.db"
     test_chroma = tmp_path / "test_chroma"
     test_datasets = tmp_path / "test_datasets"
+    test_models = tmp_path / "test_models"
     monkeypatch.setenv("HINAKU_DB_PATH", str(test_db))
     monkeypatch.setenv("HINAKU_CHROMA_PATH", str(test_chroma))
     monkeypatch.setenv("HINAKU_DATASETS_DIR", str(test_datasets))
+    monkeypatch.setenv("HINAKU_MODELS_DIR", str(test_models))
 
     import backend.config as cfg
     cfg._settings_instance = None
     monkeypatch.setattr(cfg.Settings, "sqlite_path", property(lambda self: test_db))
     monkeypatch.setattr(cfg.Settings, "chroma_path", property(lambda self: test_chroma))
     monkeypatch.setattr(cfg.Settings, "datasets_dir", property(lambda self: test_datasets))
+    monkeypatch.setattr(cfg.Settings, "models_dir", property(lambda self: test_models))
 
     from backend.history import ChatHistoryManager
     test_manager = ChatHistoryManager(test_db)
