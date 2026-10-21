@@ -43,6 +43,9 @@ def isolate_test_database(tmp_path, monkeypatch):
     import backend.api.conversations as conv_module
     monkeypatch.setattr(conv_module, "history_manager", test_manager)
 
+    import backend.api.interactions as interactions_module
+    monkeypatch.setattr(interactions_module, "get_history_mgr", lambda: test_manager)
+
     from backend.memory import MemoryStorage, MemoryExtractor, MemoryManager
     test_memory_storage = MemoryStorage(
         db_path=test_db,

@@ -321,7 +321,17 @@ document.addEventListener("DOMContentLoaded", () => {
       if (conv.messages && conv.messages.length > 0) {
         let lastAssistantBackend = null;
         conv.messages.forEach((m) => {
-          renderMessage(m.role, m.content, false, m.model, m.backend);
+          renderMessage(
+            m.role,
+            m.content,
+            false,
+            m.model,
+            m.backend,
+            m.id,
+            m.interaction_id,
+            m.feedback,
+            m.edited_answer
+          );
           if (m.role === "assistant" && m.backend) {
             lastAssistantBackend = m.backend;
           }
@@ -398,9 +408,20 @@ document.addEventListener("DOMContentLoaded", () => {
     sendMessage();
   });
 
-  function renderMessage(role, content, isStreaming = false, model = null, backend = null) {
+  function renderMessage(
+    role,
+    content,
+    isStreaming = false,
+    model = null,
+    backend = null,
+    messageId = null,
+    interactionId = null,
+    feedback = null,
+    editedAnswer = null
+  ) {
     const msgDiv = document.createElement("div");
     msgDiv.className = `message ${role}`;
+    if (messageId) msgDiv.dataset.messageId = messageId;
 
     const metaDiv = document.createElement("div");
     metaDiv.className = "message-meta";
@@ -437,6 +458,10 @@ document.addEventListener("DOMContentLoaded", () => {
         bodyDiv.appendChild(cursor);
       }
       attachCopyButtons(bodyDiv);
+
+      if (!isStreaming && messageId) {
+        attachAssistantActions(msgDiv, bodyDiv, metaDiv, messageId, backend, feedback, editedAnswer, content);
+      }
     } else {
       bodyDiv.textContent = content;
     }
@@ -445,6 +470,160 @@ document.addEventListener("DOMContentLoaded", () => {
     messagesContainer.appendChild(msgDiv);
     scrollToBottom();
     return { msgDiv, metaDiv, bodyDiv };
+  }
+
+  function attachAssistantActions(msgDiv, bodyDiv, metaDiv, messageId, backend, feedback, editedAnswer, initialContent) {
+    if (msgDiv.querySelector(".message-actions")) return;
+    const actionsDiv = document.createElement("div");
+    actionsDiv.className = "message-actions";
+
+    const bKind = (backend || "local").toLowerCase();
+    if (bKind === "guard") {
+      const note = document.createElement("span");
+      note.className = "guard-note";
+      note.textContent = "Guard response · not used for training";
+      actionsDiv.appendChild(note);
+      msgDiv.appendChild(actionsDiv);
+      return;
+    }
+
+    let currentFeedback = feedback;
+    let rawContent = editedAnswer || initialContent || "";
+
+    const thumbUpBtn = document.createElement("button");
+    thumbUpBtn.className = "action-btn thumbs-up" + (currentFeedback === "thumbs_up" ? " active" : "");
+    thumbUpBtn.title = "Good response (thumbs up)";
+    thumbUpBtn.innerHTML = `<span>👍</span>`;
+
+    const thumbDownBtn = document.createElement("button");
+    thumbDownBtn.className = "action-btn thumbs-down" + (currentFeedback === "thumbs_down" ? " active" : "");
+    thumbDownBtn.title = "Poor response (thumbs down)";
+    thumbDownBtn.innerHTML = `<span>👎</span>`;
+
+    const editBtn = document.createElement("button");
+    editBtn.className = "action-btn edit-btn";
+    editBtn.title = "Edit reply (used for future training)";
+    editBtn.innerHTML = `<span>✏️ Edit</span>`;
+
+    const editedBadge = document.createElement("span");
+    editedBadge.className = "edited-badge";
+    editedBadge.textContent = "edited";
+    editedBadge.style.display = editedAnswer ? "inline-block" : "none";
+
+    actionsDiv.appendChild(thumbUpBtn);
+    actionsDiv.appendChild(thumbDownBtn);
+    actionsDiv.appendChild(editBtn);
+    actionsDiv.appendChild(editedBadge);
+
+    thumbUpBtn.addEventListener("click", async () => {
+      const newFeedback = currentFeedback === "thumbs_up" ? null : "thumbs_up";
+      try {
+        const res = await fetch(`/api/messages/${messageId}/feedback`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ feedback: newFeedback })
+        });
+        if (res.ok) {
+          currentFeedback = newFeedback;
+          if (currentFeedback === "thumbs_up") {
+            thumbUpBtn.classList.add("active");
+            thumbDownBtn.classList.remove("active");
+          } else {
+            thumbUpBtn.classList.remove("active");
+          }
+        }
+      } catch (err) {
+        console.error("Feedback error:", err);
+      }
+    });
+
+    thumbDownBtn.addEventListener("click", async () => {
+      const newFeedback = currentFeedback === "thumbs_down" ? null : "thumbs_down";
+      try {
+        const res = await fetch(`/api/messages/${messageId}/feedback`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ feedback: newFeedback })
+        });
+        if (res.ok) {
+          currentFeedback = newFeedback;
+          if (currentFeedback === "thumbs_down") {
+            thumbDownBtn.classList.add("active");
+            thumbUpBtn.classList.remove("active");
+          } else {
+            thumbDownBtn.classList.remove("active");
+          }
+        }
+      } catch (err) {
+        console.error("Feedback error:", err);
+      }
+    });
+
+    editBtn.addEventListener("click", () => {
+      if (bodyDiv.querySelector(".inline-edit-box")) return;
+      const originalHtml = bodyDiv.innerHTML;
+
+      bodyDiv.innerHTML = "";
+      const editBox = document.createElement("div");
+      editBox.className = "inline-edit-box";
+
+      const textarea = document.createElement("textarea");
+      textarea.className = "inline-edit-textarea";
+      textarea.value = rawContent;
+
+      const actionRow = document.createElement("div");
+      actionRow.className = "inline-edit-actions";
+
+      const cancelBtn = document.createElement("button");
+      cancelBtn.className = "btn-cancel";
+      cancelBtn.textContent = "Cancel";
+
+      const saveBtn = document.createElement("button");
+      saveBtn.className = "btn-save";
+      saveBtn.textContent = "Save edit";
+
+      actionRow.appendChild(cancelBtn);
+      actionRow.appendChild(saveBtn);
+      editBox.appendChild(textarea);
+      editBox.appendChild(actionRow);
+      bodyDiv.appendChild(editBox);
+      textarea.focus();
+
+      cancelBtn.addEventListener("click", () => {
+        bodyDiv.innerHTML = originalHtml;
+        attachCopyButtons(bodyDiv);
+      });
+
+      saveBtn.addEventListener("click", async () => {
+        const newText = textarea.value.trim();
+        if (!newText) return;
+        saveBtn.disabled = true;
+        saveBtn.textContent = "Saving...";
+        try {
+          const res = await fetch(`/api/messages/${messageId}/edit`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ edited_answer: newText })
+          });
+          if (res.ok) {
+            rawContent = newText;
+            bodyDiv.innerHTML = formatMarkdown(newText);
+            attachCopyButtons(bodyDiv);
+            editedBadge.style.display = "inline-block";
+          } else {
+            alert("Failed to save edited reply.");
+            bodyDiv.innerHTML = originalHtml;
+            attachCopyButtons(bodyDiv);
+          }
+        } catch (e) {
+          console.error(e);
+          bodyDiv.innerHTML = originalHtml;
+          attachCopyButtons(bodyDiv);
+        }
+      });
+    });
+
+    msgDiv.appendChild(actionsDiv);
   }
 
   function attachCopyButtons(container) {
@@ -486,7 +665,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Create assistant message placeholder
     let assistantText = "";
-    const { metaDiv, bodyDiv } = renderMessage("assistant", "", true, "routing...", "local");
+    let lastMessageId = null;
+    let lastBackend = "local";
+    const { msgDiv, metaDiv, bodyDiv } = renderMessage("assistant", "", true, "routing...", "local");
 
     activeAbortController = new AbortController();
 
@@ -533,6 +714,10 @@ document.addEventListener("DOMContentLoaded", () => {
             if (parsed.conversation_id) {
               currentConversationId = parsed.conversation_id;
             }
+            if (parsed.message_id) {
+              lastMessageId = parsed.message_id;
+              msgDiv.dataset.messageId = parsed.message_id;
+            }
             if (parsed.notice) {
               updateNoticeBanner(true, parsed.notice);
             }
@@ -540,6 +725,7 @@ document.addEventListener("DOMContentLoaded", () => {
               isApiLoggedByProvider = Boolean(parsed.logged_by_provider);
             }
             if (parsed.backend) {
+              lastBackend = parsed.backend;
               updateFooterBackend(parsed.backend);
               const bTag = metaDiv.querySelector("[data-tag='backend']");
               if (bTag) {
@@ -567,12 +753,22 @@ document.addEventListener("DOMContentLoaded", () => {
       if (cursor) cursor.remove();
       attachCopyButtons(bodyDiv);
 
+      if (lastMessageId) {
+        attachAssistantActions(msgDiv, bodyDiv, metaDiv, lastMessageId, lastBackend, null, null, assistantText);
+      }
+
       loadConversations();
 
     } catch (err) {
       if (err.name !== "AbortError") {
         bodyDiv.innerHTML = `<span style="color: #ef4444;">[Error: ${err.message}]</span>`;
       }
+    } finally {
+      isGenerating = false;
+      sendButton.disabled = false;
+      promptInput.focus();
+    }
+  }
     } finally {
       isGenerating = false;
       sendButton.disabled = false;

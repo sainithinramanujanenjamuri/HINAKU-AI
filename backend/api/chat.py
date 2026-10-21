@@ -92,6 +92,8 @@ class ChatResponse(BaseModel):
     conversation_id: str
     persona_fallback: bool = False
     notice: Optional[str] = None
+    message_id: Optional[str] = None
+    interaction_id: Optional[str] = None
 
 @router.get("/info")
 async def get_info():
@@ -153,13 +155,14 @@ async def chat_endpoint(req: ChatRequest, response: Response):
         if latest_msg.role == "user":
             history_manager.add_message(conv_id, "user", sanitized_user_text)
         reply_content = settings.guards_sensitive_data_reply
-        history_manager.add_message(conv_id, "assistant", reply_content, model="guard", backend="guard")
-        history_manager.log_interaction(
+        ast_msg = history_manager.add_message(conv_id, "assistant", reply_content, model="guard", backend="guard")
+        inter_id = history_manager.log_interaction(
             conv_id=conv_id,
             user_prompt=sanitized_user_text,
             answer=reply_content,
             model="guard",
-            backend="guard"
+            backend="guard",
+            message_id=ast_msg["id"]
         )
         response.headers["X-Persona-Fallback"] = str(persona_state.is_fallback).lower()
         response.headers["X-Conversation-Id"] = conv_id
@@ -172,14 +175,18 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                     "persona_fallback": persona_state.is_fallback,
                     "notice": None,
                     "is_private": is_private,
-                    "logged_by_provider": False
+                    "logged_by_provider": False,
+                    "message_id": ast_msg["id"],
+                    "interaction_id": inter_id
                 }
                 yield f"data: {json.dumps(init_meta)}\n\n"
                 chunk_data = {
                     "chunk": reply_content,
                     "backend": "guard",
                     "model": "guard",
-                    "notice": None
+                    "notice": None,
+                    "message_id": ast_msg["id"],
+                    "interaction_id": inter_id
                 }
                 yield f"data: {json.dumps(chunk_data)}\n\n"
                 yield "data: [DONE]\n\n"
@@ -203,7 +210,9 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                 backend="guard",
                 conversation_id=conv_id,
                 persona_fallback=persona_state.is_fallback,
-                notice=None
+                notice=None,
+                message_id=ast_msg["id"],
+                interaction_id=inter_id
             )
 
     # GUARD 2: Live-Data Guard (real-time prices, weather, news, sports, current date/time)
@@ -212,13 +221,14 @@ async def chat_endpoint(req: ChatRequest, response: Response):
         if latest_msg.role == "user":
             history_manager.add_message(conv_id, "user", latest_user_text)
         reply_content = settings.guards_live_data_reply
-        history_manager.add_message(conv_id, "assistant", reply_content, model="guard", backend="guard")
-        history_manager.log_interaction(
+        ast_msg = history_manager.add_message(conv_id, "assistant", reply_content, model="guard", backend="guard")
+        inter_id = history_manager.log_interaction(
             conv_id=conv_id,
             user_prompt=latest_user_text,
             answer=reply_content,
             model="guard",
-            backend="guard"
+            backend="guard",
+            message_id=ast_msg["id"]
         )
         response.headers["X-Persona-Fallback"] = str(persona_state.is_fallback).lower()
         response.headers["X-Conversation-Id"] = conv_id
@@ -231,14 +241,18 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                     "persona_fallback": persona_state.is_fallback,
                     "notice": None,
                     "is_private": is_private,
-                    "logged_by_provider": False
+                    "logged_by_provider": False,
+                    "message_id": ast_msg["id"],
+                    "interaction_id": inter_id
                 }
                 yield f"data: {json.dumps(init_meta)}\n\n"
                 chunk_data = {
                     "chunk": reply_content,
                     "backend": "guard",
                     "model": "guard",
-                    "notice": None
+                    "notice": None,
+                    "message_id": ast_msg["id"],
+                    "interaction_id": inter_id
                 }
                 yield f"data: {json.dumps(chunk_data)}\n\n"
                 yield "data: [DONE]\n\n"
@@ -262,7 +276,9 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                 backend="guard",
                 conversation_id=conv_id,
                 persona_fallback=persona_state.is_fallback,
-                notice=None
+                notice=None,
+                message_id=ast_msg["id"],
+                interaction_id=inter_id
             )
 
     # Save latest user message to SQLite history (clean of sensitive data)
@@ -366,7 +382,7 @@ async def chat_endpoint(req: ChatRequest, response: Response):
             full_response = "".join(accumulated_chunks)
             if full_response.strip():
                 # Persist message with model & backend
-                history_manager.add_message(
+                ast_msg = history_manager.add_message(
                     conv_id,
                     "assistant",
                     full_response,
@@ -374,12 +390,13 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                     backend=used_backend
                 )
                 # Log interaction
-                history_manager.log_interaction(
+                inter_id = history_manager.log_interaction(
                     conv_id=conv_id,
                     user_prompt=latest_user_text,
                     answer=full_response,
                     model=used_model,
-                    backend=used_backend
+                    backend=used_backend,
+                    message_id=ast_msg["id"]
                 )
                 # Background memory extraction using LOCAL model (never API)
                 if not is_private and settings.memory_enabled and settings.memory_extract_after_each_turn:
@@ -392,6 +409,16 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                             is_private=is_private
                         )
                     )
+
+                done_payload = {
+                    "type": "done",
+                    "conversation_id": conv_id,
+                    "message_id": ast_msg["id"],
+                    "interaction_id": inter_id,
+                    "backend": used_backend,
+                    "model": used_model
+                }
+                yield f"data: {json.dumps(done_payload)}\n\n"
 
             yield "data: [DONE]\n\n"
 
@@ -426,19 +453,20 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                 used_notice = event["notice"]
 
         content = "".join(accumulated_chunks)
-        history_manager.add_message(
+        ast_msg = history_manager.add_message(
             conv_id,
             "assistant",
             content,
             model=used_model,
             backend=used_backend
         )
-        history_manager.log_interaction(
+        inter_id = history_manager.log_interaction(
             conv_id=conv_id,
             user_prompt=latest_user_text,
             answer=content,
             model=used_model,
-            backend=used_backend
+            backend=used_backend,
+            message_id=ast_msg["id"]
         )
         if content.strip():
             if not is_private and settings.memory_enabled and settings.memory_extract_after_each_turn:
@@ -458,5 +486,7 @@ async def chat_endpoint(req: ChatRequest, response: Response):
             backend=used_backend,
             conversation_id=conv_id,
             persona_fallback=persona_state.is_fallback,
-            notice=used_notice
+            notice=used_notice,
+            message_id=ast_msg["id"],
+            interaction_id=inter_id
         )

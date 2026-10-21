@@ -1158,3 +1158,124 @@ body.reduced-motion * {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Assistant Message Actions (Phase D) */
+.message-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding-left: 2px;
+  opacity: 0.85;
+  transition: opacity 0.2s ease;
+}
+
+.message.assistant:hover .message-actions {
+  opacity: 1;
+}
+
+.action-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+
+.action-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-main);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.action-btn.active.thumbs-up {
+  background: rgba(16, 185, 129, 0.18);
+  border-color: rgba(16, 185, 129, 0.45);
+  color: #34d399;
+}
+
+.action-btn.active.thumbs-down {
+  background: rgba(239, 68, 68, 0.18);
+  border-color: rgba(239, 68, 68, 0.45);
+  color: #f87171;
+}
+
+.edited-badge {
+  font-size: 10px;
+  color: #94a3b8;
+  font-style: italic;
+  padding: 1px 5px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+}
+
+.guard-note {
+  font-size: 10px;
+  color: #64748b;
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+}
+
+.inline-edit-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.inline-edit-textarea {
+  width: 100%;
+  min-height: 90px;
+  background: #050608;
+  border: 1px solid var(--accent-primary);
+  border-radius: 6px;
+  color: #f1f5f9;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 10px;
+  resize: vertical;
+  outline: none;
+}
+
+.inline-edit-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.inline-edit-actions .btn-save {
+  background: var(--accent-primary);
+  border: 1px solid var(--accent-primary);
+  color: #fff;
+  padding: 5px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.inline-edit-actions .btn-save:hover {
+  opacity: 0.9;
+}
+
+.inline-edit-actions .btn-cancel {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  padding: 5px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.inline-edit-actions .btn-cancel:hover {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.1);
+}
