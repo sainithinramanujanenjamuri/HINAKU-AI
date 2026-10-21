@@ -218,17 +218,37 @@ def test_curation_api_rules_and_source_tagging(tmp_path):
 # 5. Scheduler Catch-Up: Store Date & Never Auto-Start Training
 # ==============================================================================
 
-def test_scheduler_persists_last_run_and_due_prompt(tmp_path):
+def test_scheduler_persists_last_run_and_due_prompt(tmp_path, monkeypatch):
     db_path = tmp_path / "scheduler_test.db"
     hm = ChatHistoryManager(db_path)
 
-    # Initially, no last_run recorded -> due=True
+    # Configure min_examples to 5 for test
+    from backend.config import get_settings
+    settings = get_settings()
+    monkeypatch.setitem(settings.curation, "min_examples_to_train", 5)
+
+    # 1. Fresh db with 0 examples: time_due is True, but has_enough_examples is False -> due is False
     scheduler = SelfBuildScheduler(history_manager=hm)
     due_info = scheduler.check_run_due()
-    assert due_info["due"] is True
+    assert due_info["time_due"] is True
+    assert due_info["has_enough_examples"] is False
+    assert due_info["due"] is False
     assert due_info["last_run"] is None
 
-    # Record a run date 7 months ago
+    # Populate 5 thumbs-up interactions so has_enough_examples becomes True
+    conv = hm.create_conversation("Test Conv")
+    for i in range(5):
+        msg = hm.add_message(conv["id"], "user", f"Question {i}")
+        a_msg = hm.add_message(conv["id"], "assistant", f"Answer {i}", model="gemma3:4b", backend="local")
+        hm.log_interaction(conv["id"], f"Question {i}", f"Answer {i}", "gemma3:4b", "local", feedback="thumbs_up", message_id=a_msg["id"])
+
+    # Now time_due is True AND has_enough_examples is True -> due is True!
+    due_info_ready = scheduler.check_run_due()
+    assert due_info_ready["due"] is True
+    assert due_info_ready["has_enough_examples"] is True
+    assert due_info_ready["show_remind_later"] is True
+
+    # 2. Record a run date 7 months ago
     seven_months_ago = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=215)).isoformat()
     hm.set_metadata("last_self_build_date", seven_months_ago)
 
@@ -238,7 +258,7 @@ def test_scheduler_persists_last_run_and_due_prompt(tmp_path):
     assert due_info2["due"] is True
     assert "due" in due_info2["message"].lower()
 
-    # Record a run date 1 month ago
+    # 3. Record a run date 1 month ago
     one_month_ago = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=30)).isoformat()
     hm.set_metadata("last_self_build_date", one_month_ago)
 
@@ -250,6 +270,57 @@ def test_scheduler_persists_last_run_and_due_prompt(tmp_path):
     scheduler3.start()
     assert scheduler3._is_running is True
     scheduler3.stop()
+
+def test_scheduler_remind_me_later_and_within_7_days(tmp_path, monkeypatch):
+    db_path = tmp_path / "remind_test.db"
+    hm = ChatHistoryManager(db_path)
+    from backend.config import get_settings
+    settings = get_settings()
+    monkeypatch.setitem(settings.curation, "min_examples_to_train", 2)
+
+    conv = hm.create_conversation("Conv")
+    for i in range(2):
+        u = hm.add_message(conv["id"], "user", f"Hi {i}")
+        a = hm.add_message(conv["id"], "assistant", f"Hello {i}", model="gemma3:4b", backend="local")
+        hm.log_interaction(conv["id"], f"Hi {i}", f"Hello {i}", "gemma3:4b", "local", feedback="thumbs_up", message_id=a["id"])
+
+    # Due date is exactly now (initial cycle) -> within 7 days is True
+    scheduler = SelfBuildScheduler(history_manager=hm)
+    info = scheduler.check_run_due()
+    assert info["due"] is True
+    assert info["within_7_days"] is True
+    assert info["show_remind_later"] is True
+
+    # User clicks 'Remind Me Later' -> snoozes for 7 days
+    res = scheduler.remind_me_later(days=7)
+    assert res["status"] == "snoozed"
+
+    # Next check: is_snoozed is True, prompt due is False
+    info_snoozed = scheduler.check_run_due()
+    assert info_snoozed["is_snoozed"] is True
+    assert info_snoozed["due"] is False
+    assert info_snoozed["show_remind_later"] is False
+
+def test_embedding_options_num_ctx(tmp_path):
+    db_path = tmp_path / "embed_ctx.db"
+    chroma_path = tmp_path / "chroma"
+
+    captured_payloads = []
+    def mock_embedder(host, model, texts, keep_alive="5m", num_ctx=512):
+        captured_payloads.append({"host": host, "model": model, "texts": texts, "keep_alive": keep_alive, "num_ctx": num_ctx})
+        return [[0.1] * 1024 for _ in texts]
+
+    with patch("backend.memory.storage.default_ollama_embedder", side_effect=mock_embedder):
+        storage = MemoryStorage(db_path, chroma_path, embedding_num_ctx=512)
+        assert storage.embedding_num_ctx == 512
+        storage.embed_documents(["document text"])
+        assert len(captured_payloads) == 1
+        assert captured_payloads[0]["num_ctx"] == 512
+        assert captured_payloads[0]["keep_alive"] == "5m"
+
+        storage.embed_query("query text")
+        assert len(captured_payloads) == 2
+        assert captured_payloads[1]["num_ctx"] == 512
 
 
 # ==============================================================================

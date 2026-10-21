@@ -308,6 +308,14 @@ class Settings:
         return str(self.memory.get("embedding_keep_alive", "5m"))
 
     @property
+    def memory_embedding_num_ctx(self) -> int:
+        return int(self.memory.get("embedding_num_ctx", 512))
+
+    @property
+    def curation_min_examples_to_train(self) -> int:
+        return self.curation_min_examples
+
+    @property
     def curation_api_answers_require_thumbs_up(self) -> bool:
         return bool(self.curation.get("api_answers_require_thumbs_up", True))
 

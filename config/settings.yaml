@@ -56,6 +56,7 @@ local:
     repeat_penalty: 1.1
     presence_penalty: 0.0
     num_predict: 300
+    num_ctx: 2048
 
 api:
   provider: openai_compatible   # "openai_compatible" (or "openrouter", "openai") | "anthropic"
@@ -80,6 +81,7 @@ memory:
   embedding_model: qwen3-embedding:0.6b
   embedding_dims: 1024
   embedding_keep_alive: "5m"
+  embedding_num_ctx: 512
   query_prefix: "Instruct: Given the owner's message, retrieve stored facts about the owner that help answer it\nQuery: "
   document_prefix: ""
   merge_similar: true

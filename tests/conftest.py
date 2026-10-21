@@ -81,3 +81,8 @@ def isolate_test_database(tmp_path, monkeypatch):
     monkeypatch.setattr(chat_module, "memory_manager", test_memory_manager)
 
     yield test_manager
+    try:
+        from chromadb.api.shared_system_client import SharedSystemClient
+        SharedSystemClient.clear()
+    except Exception:
+        pass

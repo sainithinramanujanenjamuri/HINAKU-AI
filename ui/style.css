@@ -404,6 +404,48 @@ body {
   font-size: 13px;
 }
 
+.notice-text {
+  flex: 1;
+}
+
+.notice-dismiss-btn {
+  background: none;
+  border: none;
+  color: #fef08a;
+  opacity: 0.7;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  transition: opacity 0.15s ease;
+}
+
+.notice-dismiss-btn:hover {
+  opacity: 1;
+}
+
+.notice-action-btn {
+  background: rgba(234, 179, 8, 0.2);
+  border: 1px solid rgba(234, 179, 8, 0.5);
+  color: #fef08a;
+  border-radius: 4px;
+  padding: 3px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  margin-right: 8px;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.notice-action-btn:hover {
+  background: rgba(234, 179, 8, 0.35);
+  border-color: rgba(234, 179, 8, 0.8);
+}
+
+.notice-action-btn.hidden {
+  display: none;
+}
+
 /* Chat container */
 .chat-container {
   flex: 1;

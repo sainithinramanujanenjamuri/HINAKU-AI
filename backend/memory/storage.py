@@ -19,12 +19,12 @@ def l2_normalize(v: List[float]) -> List[float]:
     norm = math.sqrt(sum(x * x for x in v)) or 1.0
     return [x / norm for x in v]
 
-def default_ollama_embedder(host: str, model: str, texts: List[str], keep_alive: str = "5m") -> List[List[float]]:
+def default_ollama_embedder(host: str, model: str, texts: List[str], keep_alive: str = "5m", num_ctx: int = 512) -> List[List[float]]:
     """
     Generate embeddings using Ollama /api/embed endpoint.
     Uses keep_alive="5m" to avoid cold-loading model on every query.
     """
-    body = json.dumps({"model": model, "input": texts, "keep_alive": keep_alive}).encode("utf-8")
+    body = json.dumps({"model": model, "input": texts, "keep_alive": keep_alive, "options": {"num_ctx": num_ctx}}).encode("utf-8")
     req = urllib.request.Request(
         f"{host.rstrip('/')}/api/embed",
         data=body,
@@ -46,7 +46,8 @@ class MemoryStorage:
         document_prefix: str = "",
         ollama_host: str = "http://localhost:11434",
         custom_embedder: Optional[Callable[[str, List[str]], List[List[float]]]] = None,
-        embedding_keep_alive: Optional[str] = None
+        embedding_keep_alive: Optional[str] = None,
+        embedding_num_ctx: Optional[int] = None
     ):
         settings = get_settings()
         self.db_path = Path(db_path)
@@ -58,6 +59,7 @@ class MemoryStorage:
         self.ollama_host = ollama_host
         self._custom_embedder = custom_embedder
         self.embedding_keep_alive = embedding_keep_alive or settings.memory_embedding_keep_alive
+        self.embedding_num_ctx = embedding_num_ctx if embedding_num_ctx is not None else settings.memory_embedding_num_ctx
 
         # Ensure directory structures exist
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -129,13 +131,13 @@ class MemoryStorage:
         prefixed = [f"{self.document_prefix}{t}" for t in texts]
         if self._custom_embedder:
             return [l2_normalize(v) for v in self._custom_embedder(self.embedding_model, prefixed)]
-        return default_ollama_embedder(self.ollama_host, self.embedding_model, prefixed, keep_alive=self.embedding_keep_alive)
+        return default_ollama_embedder(self.ollama_host, self.embedding_model, prefixed, keep_alive=self.embedding_keep_alive, num_ctx=self.embedding_num_ctx)
 
     def embed_query(self, query: str) -> List[float]:
         prefixed = f"{self.query_prefix}{query}"
         if self._custom_embedder:
             return l2_normalize(self._custom_embedder(self.embedding_model, [prefixed])[0])
-        return default_ollama_embedder(self.ollama_host, self.embedding_model, [prefixed], keep_alive=self.embedding_keep_alive)[0]
+        return default_ollama_embedder(self.ollama_host, self.embedding_model, [prefixed], keep_alive=self.embedding_keep_alive, num_ctx=self.embedding_num_ctx)[0]
 
     def add_memory(self, text: str, source_conversation_id: Optional[str] = None) -> Dict[str, Any]:
         clean_text = text.strip()

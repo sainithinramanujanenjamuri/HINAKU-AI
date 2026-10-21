@@ -34,6 +34,11 @@ async def check_self_build_due_endpoint():
     sched = get_scheduler()
     return sched.check_run_due()
 
+@router.post("/remind-later")
+async def remind_later_endpoint():
+    sched = get_scheduler()
+    return sched.remind_me_later()
+
 @router.post("/run")
 async def trigger_self_build_endpoint(req: Optional[TriggerRunRequest] = None):
     sched = get_scheduler()

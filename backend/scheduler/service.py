@@ -52,34 +52,97 @@ class SelfBuildScheduler:
     def check_run_due(self) -> Dict[str, Any]:
         """
         Check if a self-build cycle is due.
-        If last_self_build_date is None or >= 6 months old, a run is due.
         Hard rule: Never start training automatically on app start; only prompt the owner.
+        Condition: Show prompt ONLY if a run is due AND the curated dataset has at least
+        curation.min_examples_to_train examples, and not currently snoozed.
+        Optionally flags show_remind_later if due date is within 7 days.
         """
-        if not self.last_run:
-            return {
-                "due": True,
-                "last_run": None,
-                "months_elapsed": None,
-                "interval_months": self.interval_months,
-                "message": "No self-build run has been recorded yet. A 6-month cycle is due."
-            }
+        from backend.training.curate import DatasetCurator
+        settings = get_settings()
+        min_examples = settings.curation_min_examples
 
-        try:
-            last_dt = datetime.datetime.fromisoformat(self.last_run.replace("Z", "+00:00"))
-            now = datetime.datetime.now(datetime.timezone.utc)
-            elapsed_days = (now - last_dt).total_seconds() / 86400
-            elapsed_months = elapsed_days / 30.4375
-            due = elapsed_months >= self.interval_months
-            return {
-                "due": due,
-                "last_run": self.last_run,
-                "months_elapsed": round(elapsed_months, 1),
-                "interval_months": self.interval_months,
-                "message": f"6-month self-build cycle is due ({round(elapsed_months, 1)} months since last run)." if due else "Self-build is up to date."
-            }
-        except Exception as e:
-            logger.error(f"Error parsing last_run timestamp: {e}")
-            return {"due": True, "last_run": self.last_run, "error": str(e)}
+        curator = DatasetCurator(history_manager=self.history_manager)
+        candidates = curator.get_candidate_interactions()
+        candidate_count = len(candidates)
+        has_enough_examples = candidate_count >= min_examples
+
+        # Check snooze
+        now = datetime.datetime.now(datetime.timezone.utc)
+        snoozed_until_str = self.history_manager.get_metadata("self_build_snoozed_until")
+        is_snoozed = False
+        if snoozed_until_str:
+            try:
+                snoozed_dt = datetime.datetime.fromisoformat(snoozed_until_str.replace("Z", "+00:00"))
+                if now < snoozed_dt:
+                    is_snoozed = True
+            except Exception:
+                pass
+
+        if not self.last_run:
+            time_due = True
+            days_until_due = 0.0
+            within_7_days = True
+            due_date = now.isoformat()
+            elapsed_months = None
+        else:
+            try:
+                last_dt = datetime.datetime.fromisoformat(self.last_run.replace("Z", "+00:00"))
+                due_dt = last_dt + datetime.timedelta(seconds=self.interval_seconds)
+                due_date = due_dt.isoformat()
+                elapsed_days = (now - last_dt).total_seconds() / 86400
+                elapsed_months = elapsed_days / 30.4375
+                time_due = elapsed_months >= self.interval_months
+                days_until_due = (due_dt - now).total_seconds() / 86400
+                within_7_days = abs(days_until_due) <= 7 or (0 <= -days_until_due <= 7)
+            except Exception as e:
+                logger.error(f"Error parsing last_run timestamp: {e}")
+                time_due = True
+                days_until_due = 0.0
+                within_7_days = True
+                due_date = now.isoformat()
+                elapsed_months = None
+
+        due = time_due and has_enough_examples and not is_snoozed
+        show_remind_later = due and within_7_days
+
+        if not time_due:
+            msg = "Self-build is up to date."
+        elif not has_enough_examples:
+            msg = f"Self-build interval reached, but insufficient curated data ({candidate_count}/{min_examples} examples). Prompt deferred."
+        elif is_snoozed:
+            msg = f"Self-build cycle due, but reminder snoozed until {snoozed_until_str}."
+        else:
+            msg = f"6-month self-build cycle is due ({candidate_count} curated examples ready)."
+
+        return {
+            "due": due,
+            "time_due": time_due,
+            "has_enough_examples": has_enough_examples,
+            "candidate_count": candidate_count,
+            "min_examples": min_examples,
+            "is_snoozed": is_snoozed,
+            "snoozed_until": snoozed_until_str if is_snoozed else None,
+            "within_7_days": within_7_days,
+            "show_remind_later": show_remind_later,
+            "last_run": self.last_run,
+            "due_date": due_date,
+            "months_elapsed": round(elapsed_months, 1) if elapsed_months is not None else None,
+            "interval_months": self.interval_months,
+            "message": msg
+        }
+
+    def remind_me_later(self, days: int = 7) -> Dict[str, Any]:
+        """
+        Postpone the self-build reminder prompt by the given number of days.
+        """
+        now = datetime.datetime.now(datetime.timezone.utc)
+        snoozed_until = (now + datetime.timedelta(days=days)).isoformat()
+        self.history_manager.set_metadata("self_build_snoozed_until", snoozed_until)
+        return {
+            "status": "snoozed",
+            "snoozed_until": snoozed_until,
+            "message": f"Self-build prompt snoozed for {days} days."
+        }
 
     def get_status(self) -> Dict[str, Any]:
         due_info = self.check_run_due()

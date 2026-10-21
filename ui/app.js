@@ -7,6 +7,26 @@ document.addEventListener("DOMContentLoaded", () => {
   const statusIndicator = document.getElementById("status-indicator");
   const noticeBanner = document.getElementById("notice-banner");
   const noticeText = document.getElementById("notice-text");
+  const noticeDismissBtn = document.getElementById("notice-dismiss-btn");
+  if (noticeDismissBtn) {
+    noticeDismissBtn.addEventListener("click", () => {
+      if (noticeBanner) noticeBanner.classList.add("hidden");
+    });
+  }
+  const noticeRemindLaterBtn = document.getElementById("notice-remind-later-btn");
+  if (noticeRemindLaterBtn) {
+    noticeRemindLaterBtn.addEventListener("click", async () => {
+      try {
+        const res = await fetch("/api/self-build/remind-later", { method: "POST" });
+        if (res.ok) {
+          if (noticeBanner) noticeBanner.classList.add("hidden");
+          if (noticeRemindLaterBtn) noticeRemindLaterBtn.classList.add("hidden");
+        }
+      } catch (e) {
+        console.warn("Error postponing reminder:", e);
+      }
+    });
+  }
   const conversationsList = document.getElementById("conversations-list");
   const newChatBtn = document.getElementById("new-chat-btn");
   const sidebar = document.getElementById("sidebar");
@@ -1540,6 +1560,16 @@ document.addEventListener("DOMContentLoaded", () => {
           true,
           `Self-Build due: ${data.message} Open Settings -> 'Review Curated Data' or 'Run Self-Build Now'.`
         );
+        if (noticeRemindLaterBtn) {
+          if (data.show_remind_later) {
+            noticeRemindLaterBtn.classList.remove("hidden");
+          } else {
+            noticeRemindLaterBtn.classList.add("hidden");
+          }
+        }
+      } else {
+        if (noticeBanner) noticeBanner.classList.add("hidden");
+        if (noticeRemindLaterBtn) noticeRemindLaterBtn.classList.add("hidden");
       }
     } catch (e) {
       console.warn("Could not check self-build due status:", e);
