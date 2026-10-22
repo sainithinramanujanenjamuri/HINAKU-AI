@@ -75,8 +75,13 @@ class OllamaAdapter:
                 async with client.stream("POST", url, json=payload) as response:
                     if response.status_code != 200:
                         err_text = await response.aread()
-                        yield f"[Ollama Error: Status {response.status_code} - {err_text.decode('utf-8', errors='ignore')}]"
-                        return
+                        raw_err = err_text.decode("utf-8", errors="ignore")
+                        try:
+                            err_json = json.loads(raw_err)
+                            err_msg = err_json.get("error", raw_err)
+                        except Exception:
+                            err_msg = raw_err
+                        raise RuntimeError(f"Ollama server error (Status {response.status_code}): {err_msg}")
 
                     async for line in response.aiter_lines():
                         if not line:
@@ -100,9 +105,9 @@ class OllamaAdapter:
                         yield final_chunk
 
             except httpx.ConnectError:
-                yield "[Error: Unable to connect to local Ollama service at " + self.host + ". Is Ollama running?]"
+                raise RuntimeError(f"Unable to connect to local Ollama service at {self.host}. Is Ollama running?")
             except Exception as e:
-                yield f"[Error streaming from Ollama: {str(e)}]"
+                raise RuntimeError(f"Error streaming from Ollama: {str(e)}")
 
     async def chat(
         self,
