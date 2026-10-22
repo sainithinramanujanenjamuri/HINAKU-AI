@@ -136,31 +136,60 @@ def run_smoke_test(steps: int = 20, max_seq_len: int = 256):
         model = get_peft_model(model, peft_config)
 
         def formatting_func(example):
-            return f"<|im_start|>system\n{example['instruction']}<|im_end|>\n<|im_start|>user\n{example['input']}<|im_end|>\n<|im_start|>assistant\n{example['output']}<|im_end|>"
+            if isinstance(example.get("instruction"), list):
+                return [
+                    f"<|im_start|>system\n{inst}<|im_end|>\n<|im_start|>user\n{inp}<|im_end|>\n<|im_start|>assistant\n{out}<|im_end|>"
+                    for inst, inp, out in zip(example["instruction"], example["input"], example["output"])
+                ]
+            return [
+                f"<|im_start|>system\n{example['instruction']}<|im_end|>\n<|im_start|>user\n{example['input']}<|im_end|>\n<|im_start|>assistant\n{example['output']}<|im_end|>"
+            ]
 
         dataset = load_dataset("json", data_files=str(data_path), split="train")
 
-        training_args = TrainingArguments(
-            output_dir=str(out_dir),
-            max_steps=steps,
-            per_device_train_batch_size=1,
-            gradient_accumulation_steps=1,
-            learning_rate=2e-4,
-            logging_steps=1,
-            fp16=True,
-            save_strategy="no",
-            optim="paged_adamw_8bit",
-            report_to="none"
-        )
-
-        trainer = SFTTrainer(
-            model=model,
-            train_dataset=dataset,
-            formatting_func=formatting_func,
-            max_seq_length=max_seq_len,
-            tokenizer=tokenizer,
-            args=training_args
-        )
+        try:
+            from trl import SFTConfig
+            training_args = SFTConfig(
+                output_dir=str(out_dir),
+                max_steps=steps,
+                per_device_train_batch_size=1,
+                gradient_accumulation_steps=1,
+                learning_rate=2e-4,
+                logging_steps=1,
+                fp16=True,
+                save_strategy="no",
+                optim="paged_adamw_8bit",
+                report_to="none",
+                max_seq_length=max_seq_len,
+            )
+            trainer = SFTTrainer(
+                model=model,
+                train_dataset=dataset,
+                formatting_func=formatting_func,
+                processing_class=tokenizer,
+                args=training_args
+            )
+        except (ImportError, TypeError):
+            training_args = TrainingArguments(
+                output_dir=str(out_dir),
+                max_steps=steps,
+                per_device_train_batch_size=1,
+                gradient_accumulation_steps=1,
+                learning_rate=2e-4,
+                logging_steps=1,
+                fp16=True,
+                save_strategy="no",
+                optim="paged_adamw_8bit",
+                report_to="none"
+            )
+            trainer = SFTTrainer(
+                model=model,
+                train_dataset=dataset,
+                formatting_func=formatting_func,
+                max_seq_length=max_seq_len,
+                tokenizer=tokenizer,
+                args=training_args
+            )
 
         print(f" -> Executing {steps} physical QLoRA optimization steps on GPU...")
         t0 = time.perf_counter()

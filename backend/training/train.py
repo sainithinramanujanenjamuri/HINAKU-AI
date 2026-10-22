@@ -64,7 +64,14 @@ def train_cloud():
     model = get_peft_model(model, peft_config)
 
     def formatting_func(example):
-        return f"<|im_start|>system\\n{example['instruction']}<|im_end|>\\n<|im_start|>user\\n{example['input']}<|im_end|>\\n<|im_start|>assistant\\n{example['output']}<|im_end|>"
+        if isinstance(example.get("instruction"), list):
+            return [
+                f"<|im_start|>system\\n{inst}<|im_end|>\\n<|im_start|>user\\n{inp}<|im_end|>\\n<|im_start|>assistant\\n{out}<|im_end|>"
+                for inst, inp, out in zip(example["instruction"], example["input"], example["output"])
+            ]
+        return [
+            f"<|im_start|>system\\n{example['instruction']}<|im_end|>\\n<|im_start|>user\\n{example['input']}<|im_end|>\\n<|im_start|>assistant\\n{example['output']}<|im_end|>"
+        ]
 
     dataset = load_dataset("json", data_files=dataset_path, split="train")
 
