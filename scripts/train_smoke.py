@@ -126,7 +126,11 @@ def run_smoke_test(steps: int = 20, max_seq_len: int = 256):
             device_map="auto"
         )
         print(f" -> [3/3] Applying PEFT LoRA adapter (r=8, alpha=16)...", flush=True)
-        model = prepare_model_for_kbit_training(model)
+        model = prepare_model_for_kbit_training(
+            model,
+            use_gradient_checkpointing=True,
+            gradient_checkpointing_kwargs={"use_reentrant": False}
+        )
 
         peft_config = LoraConfig(
             r=8,
@@ -165,6 +169,8 @@ def run_smoke_test(steps: int = 20, max_seq_len: int = 256):
                 optim="paged_adamw_8bit",
                 report_to="none",
                 max_seq_length=max_seq_len,
+                gradient_checkpointing=True,
+                gradient_checkpointing_kwargs={"use_reentrant": False},
             )
             trainer = SFTTrainer(
                 model=model,
@@ -184,7 +190,9 @@ def run_smoke_test(steps: int = 20, max_seq_len: int = 256):
                 fp16=True,
                 save_strategy="no",
                 optim="paged_adamw_8bit",
-                report_to="none"
+                report_to="none",
+                gradient_checkpointing=True,
+                gradient_checkpointing_kwargs={"use_reentrant": False},
             )
             trainer = SFTTrainer(
                 model=model,

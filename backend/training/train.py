@@ -52,7 +52,7 @@ def train_cloud():
         quantization_config=bnb_config,
         device_map="auto"
     )
-    model = prepare_model_for_kbit_training(model)
+    model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=True, gradient_checkpointing_kwargs={"use_reentrant": False})
 
     peft_config = LoraConfig(
         r=16,
