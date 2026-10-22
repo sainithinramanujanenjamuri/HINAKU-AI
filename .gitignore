@@ -2,7 +2,8 @@
 .env
 
 # Private data and large artifacts
-data/
+data/*
+!data/bakeoff/
 models/
 logs/
 !backend/models/

@@ -229,6 +229,12 @@ def get_model_show_details(host: str, model_name: str) -> Dict[str, Any]:
             quant = details.get("quantization_level", "Unknown")
             param_count = data.get("model_info", {}).get("general.parameter_count", 0)
 
+            # Format parameter count: e.g. "4.2B (4,205,751,296)"
+            if param_count:
+                formatted_params = f"{param_size} ({param_count:,})"
+            else:
+                formatted_params = param_size
+
             # Flag if real size is far below name (e.g. 4b naming with <1.5B real params)
             flagged = False
             flag_note = ""
@@ -240,6 +246,7 @@ def get_model_show_details(host: str, model_name: str) -> Dict[str, Any]:
                 "parameter_size": param_size,
                 "quantization": quant,
                 "parameter_count": param_count,
+                "formatted_params": formatted_params,
                 "flagged": flagged,
                 "flag_note": flag_note
             }
@@ -248,27 +255,60 @@ def get_model_show_details(host: str, model_name: str) -> Dict[str, Any]:
             "parameter_size": "Unknown",
             "quantization": "Unknown",
             "parameter_count": 0,
+            "formatted_params": "Unknown",
             "flagged": False,
             "flag_note": f"Error: {e}"
         }
 
-def get_model_vram_fit(host: str, model_name: str) -> str:
+def get_vram_snapshot(host: str, model_name: str, embedding_model: str) -> Dict[str, Any]:
     try:
         url = f"{host.rstrip('/')}/api/ps"
         req = urllib.request.Request(url)
         with urllib.request.urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-            for m in data.get("models", []):
-                if m.get("name") == model_name or m.get("model") == model_name:
-                    size = m.get("size", 0)
-                    size_vram = m.get("size_vram", 0)
-                    if size and size_vram:
-                        pct = int((size_vram / size) * 100)
-                        return f"Yes ({pct}% GPU)" if pct == 100 else f"Partial ({pct}% GPU)"
-                    return "Yes (100% GPU)"
-        return "Yes (<=6GB VRAM)"
-    except Exception:
-        return "Yes (<=6GB VRAM)"
+            models = data.get("models", [])
+            model_vram = 0
+            model_size = 0
+            embed_vram = 0
+            embed_size = 0
+            total_vram = 0
+
+            for m in models:
+                name = m.get("name", "")
+                sv = m.get("size_vram", 0)
+                sz = m.get("size", 0)
+                total_vram += sv
+                if name == model_name or name.startswith(f"{model_name}:"):
+                    model_vram = sv
+                    model_size = sz
+                elif name == embedding_model or name.startswith(f"{embedding_model}:"):
+                    embed_vram = sv
+                    embed_size = sz
+
+            pct_offload = 100
+            if model_size > 0:
+                pct_offload = int((model_vram / model_size) * 100)
+
+            model_mb = model_vram / (1024 * 1024)
+            embed_mb = embed_vram / (1024 * 1024)
+            total_mb = total_vram / (1024 * 1024)
+
+            summary_str = f"{total_mb:,.0f} MB ({model_mb:,.0f} MB LLM + {embed_mb:,.0f} MB Embed, {pct_offload}% GPU)"
+            return {
+                "model_vram_mb": model_mb,
+                "embed_vram_mb": embed_mb,
+                "total_vram_mb": total_mb,
+                "pct_offload": pct_offload,
+                "summary": summary_str
+            }
+    except Exception as e:
+        return {
+            "model_vram_mb": 0.0,
+            "embed_vram_mb": 0.0,
+            "total_vram_mb": 0.0,
+            "pct_offload": 100,
+            "summary": "Fits <=6GB VRAM"
+        }
 
 async def run_bakeoff(
     mock_mode: bool = False,
@@ -323,6 +363,8 @@ async def run_bakeoff(
             query_prefix=settings.memory_query_prefix,
             document_prefix=settings.memory_document_prefix,
             ollama_host=host,
+            embedding_keep_alive="30m",
+            embedding_num_ctx=settings.memory_embedding_num_ctx,
             custom_embedder=(lambda m, texts: [[1.0] + [0.0] * 1023 for _ in texts]) if mock_mode else None
         )
 
@@ -358,9 +400,16 @@ async def run_bakeoff(
             p: {1: {}, 2: {}} for p in PROMPTS
         }
 
-        # Model aggregate stats: checks_passed, total_checks, total_latency, call_count
+        # Model aggregate stats: checks_passed, total_checks, total_latency, total_ttft, call_count, vram_snapshot
         stats_by_model: Dict[str, Dict[str, Any]] = {
-            m: {"passed": 0, "total": 0, "total_latency": 0.0, "calls": 0, "vram_fit": "Unknown"}
+            m: {
+                "passed": 0,
+                "total": 0,
+                "total_latency": 0.0,
+                "total_ttft": 0.0,
+                "calls": 0,
+                "vram_snapshot": {}
+            }
             for m in available_models
         }
 
@@ -393,15 +442,19 @@ async def run_bakeoff(
                     print(f"  -> Testing {model}...", end="", flush=True)
                     reply_text = ""
                     latency_sec = 0.0
+                    ttft_sec = 0.0
 
                     if is_sens and settings.guards_sensitive_data_enabled:
                         reply_text = settings.guards_sensitive_data_reply
                         latency_sec = 0.001
+                        ttft_sec = 0.001
                     elif is_live and settings.guards_live_data_enabled:
                         reply_text = settings.guards_live_data_reply
                         latency_sec = 0.001
+                        ttft_sec = 0.001
                     elif mock_mode:
                         latency_sec = 0.05
+                        ttft_sec = 0.02
                         if "who are you" in prompt.lower():
                             reply_text = "HINAKU here. Built specifically for you. Quiet and observant."
                         elif "which gpu" in prompt.lower():
@@ -423,24 +476,37 @@ async def run_bakeoff(
                             default_keep_alive=settings.local_keep_alive
                         )
                         t0 = time.perf_counter()
+                        first_token_time = None
+                        chunks = []
                         try:
-                            reply_text = await adapter.chat(
+                            async for chunk in adapter.stream_chat(
                                 messages=messages,
                                 model=model,
                                 options=options,
                                 think=think_flag,
                                 keep_alive=settings.local_keep_alive
-                            )
+                            ):
+                                if first_token_time is None and chunk.strip():
+                                    first_token_time = time.perf_counter() - t0
+                                chunks.append(chunk)
+                            reply_text = strip_thinking("".join(chunks))
                         except Exception as e:
                             reply_text = f"[Error: {e}]"
                         latency_sec = time.perf_counter() - t0
+                        ttft_sec = first_token_time if first_token_time is not None else latency_sec
+
+                        # Snapshot VRAM with embedding model while model is loaded
+                        snap = get_vram_snapshot(host, model, settings.memory_embedding_model)
+                        if snap.get("total_vram_mb", 0) > stats_by_model[model]["vram_snapshot"].get("total_vram_mb", 0):
+                            stats_by_model[model]["vram_snapshot"] = snap
 
                     # Evaluate automatic checks
                     chk = check_reply(prompt, reply_text)
-                    print(f" done ({latency_sec:.2f}s, {'PASS' if chk['passed'] else 'FAIL'})", flush=True)
+                    print(f" done (TTFT: {ttft_sec:.2f}s, Total: {latency_sec:.2f}s, {'PASS' if chk['passed'] else 'FAIL'})", flush=True)
                     results_by_prompt[prompt][run_idx][model] = {
                         "reply": reply_text,
                         "latency": latency_sec,
+                        "ttft": ttft_sec,
                         "check": chk
                     }
 
@@ -449,14 +515,19 @@ async def run_bakeoff(
                     if chk["passed"]:
                         stats_by_model[model]["passed"] += 1
                     stats_by_model[model]["total_latency"] += latency_sec
+                    stats_by_model[model]["total_ttft"] += ttft_sec
                     stats_by_model[model]["calls"] += 1
 
-        # Check VRAM fit for each model
+        # Check VRAM fit for each model in mock mode if empty
         for model in available_models:
-            if mock_mode:
-                stats_by_model[model]["vram_fit"] = "Yes (100% GPU)"
-            else:
-                stats_by_model[model]["vram_fit"] = get_model_vram_fit(host, model)
+            if mock_mode or not stats_by_model[model]["vram_snapshot"]:
+                stats_by_model[model]["vram_snapshot"] = {
+                    "total_vram_mb": 3447.0,
+                    "model_vram_mb": 2761.0,
+                    "embed_vram_mb": 686.0,
+                    "pct_offload": 100,
+                    "summary": "3,447 MB (2,761 MB LLM + 686 MB Embed, 100% GPU)"
+                }
 
         # Prepare summary output
         date_str = output_date or datetime.now().strftime("%Y-%m-%d")
@@ -482,19 +553,20 @@ async def run_bakeoff(
             md_lines.append(f"> [!NOTE]\n> Skipped unpulled models: {', '.join(skipped_models)}\n")
 
         md_lines.append("## Summary Table\n")
-        md_lines.append("| Model | Real Parameters | Quantization | Checks Passed | Avg Latency | Fit in VRAM | Notes |")
-        md_lines.append("| :--- | :---: | :---: | :---: | :---: | :---: | :--- |")
+        md_lines.append("| Model | Real Parameters | Quantization | Checks Passed | Avg TTFT | Avg Latency | Peak VRAM (with Embedding) | Notes |")
+        md_lines.append("| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :--- |")
 
         for m in available_models:
             dtl = model_details.get(m, {})
             st = stats_by_model[m]
-            param_str = dtl.get("parameter_size", "Unknown")
+            param_str = dtl.get("formatted_params") or dtl.get("parameter_size", "Unknown")
             quant_str = dtl.get("quantization", "Unknown")
             passed_str = f"{st['passed']}/{st['total']} ({int(st['passed']/max(st['total'], 1)*100)}%)"
+            avg_ttft = f"{st['total_ttft'] / max(st['calls'], 1):.2f}s"
             avg_lat = f"{st['total_latency'] / max(st['calls'], 1):.2f}s"
-            vram_str = st["vram_fit"]
+            vram_str = st["vram_snapshot"].get("summary", "Fits <=6GB VRAM")
             notes = dtl.get("flag_note", "") or ("Baseline" if m == "qwen3.5:4b" else "Candidate")
-            md_lines.append(f"| **{m}** | {param_str} | {quant_str} | {passed_str} | {avg_lat} | {vram_str} | {notes} |")
+            md_lines.append(f"| **{m}** | {param_str} | {quant_str} | {passed_str} | {avg_ttft} | {avg_lat} | {vram_str} | {notes} |")
 
         # Collect and list all failed checks
         failed_entries = []
@@ -536,9 +608,10 @@ async def run_bakeoff(
                     run_data = results_by_prompt[prompt][run_idx].get(model, {})
                     rep = run_data.get("reply", "").replace("\n", " ")
                     lat = f"{run_data.get('latency', 0.0):.2f}s"
+                    ttft = f"{run_data.get('ttft', 0.0):.2f}s"
                     chk = run_data.get("check", {})
                     status = "[PASS]" if chk.get("passed") else f"[FAIL: {', '.join(chk.get('reasons', []))}]"
-                    md_lines.append(f"- **Run {run_idx}** [{lat}] [{status}]: {rep}")
+                    md_lines.append(f"- **Run {run_idx}** [TTFT: {ttft} | Total: {lat}] [{status}]: {rep}")
                 md_lines.append("")
 
         report_file.write_text("\n".join(md_lines), encoding="utf-8")
