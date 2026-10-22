@@ -5,8 +5,8 @@ calculates time per step, and checks fit within 6 GB VRAM.
 Writes ONLY to a temporary folder and NEVER promotes anything.
 
 NOTE: Do NOT run automatically; requires owner approval.
-Usage:
-    python scripts/train_smoke.py
+Usage (Windows PowerShell):
+    .\venv-train\Scripts\python.exe scripts/train_smoke.py
 """
 
 import datetime
@@ -54,6 +54,9 @@ SYNTHETIC_DATASET = [
 def run_smoke_test(steps: int = 20, max_seq_len: int = 256):
     print("=" * 70)
     print(" HINAKU QLoRA SMOKE TEST (20 Steps Verification)")
+    print(f" Python Executable: {sys.executable}")
+    if "venv-train" not in sys.executable:
+        print(" [Notice] Recommended environment is .\\venv-train\\Scripts\\python.exe")
     print("=" * 70)
 
     # 1. Hardware Preflight

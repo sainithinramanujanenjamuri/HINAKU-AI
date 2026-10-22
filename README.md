@@ -104,6 +104,34 @@ Navigate to `http://127.0.0.1:8000` in your web browser.
 
 ---
 
+## Training Environment & Fine-Tuning Setup
+
+Training runs use a dedicated virtual environment (`venv-train`) to isolate heavy CUDA, PyTorch, bitsandbytes, and Hugging Face dependencies from the core desktop app:
+
+### 1. Create Training Environment
+```powershell
+python -m venv venv-train
+```
+
+### 2. Install Pinned Training Dependencies
+```powershell
+.\venv-train\Scripts\pip.exe install -r requirements-training.txt
+```
+
+### 3. Verify Hardware & bitsandbytes 4-Bit Execution
+```powershell
+.\venv-train\Scripts\python.exe scripts/check_training_env.py
+```
+
+### 4. QLoRA Smoke Test (20 Steps Verification)
+> [!NOTE]
+> Smoke test runs 20 steps on a synthetic dataset in a temp folder and never promotes models. Requires explicit owner approval before first run.
+```powershell
+.\venv-train\Scripts\python.exe scripts/train_smoke.py
+```
+
+---
+
 ## Running the Test Suite
 
 All tests run against temporary, isolated databases and mock adapters. Tests never touch or delete user data in `data/hinaku.db`.
