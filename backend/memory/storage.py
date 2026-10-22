@@ -12,6 +12,7 @@ import chromadb
 from chromadb.config import Settings as ChromaSettings
 
 from backend.config import get_settings
+from backend.models.ollama_shared import get_shared_embedding_settings, log_ollama_call
 
 logger = logging.getLogger("hinaku.memory.storage")
 
@@ -19,12 +20,30 @@ def l2_normalize(v: List[float]) -> List[float]:
     norm = math.sqrt(sum(x * x for x in v)) or 1.0
     return [x / norm for x in v]
 
-def default_ollama_embedder(host: str, model: str, texts: List[str], keep_alive: str = "5m", num_ctx: int = 512) -> List[List[float]]:
+def default_ollama_embedder(
+    host: str,
+    model: str,
+    texts: List[str],
+    keep_alive: Optional[str] = None,
+    num_ctx: Optional[int] = None,
+    call_type: str = "embeddings"
+) -> List[List[float]]:
     """
     Generate embeddings using Ollama /api/embed endpoint.
-    Uses keep_alive="5m" to avoid cold-loading model on every query.
+    Uses canonical settings to avoid model reloading across requests.
     """
-    body = json.dumps({"model": model, "input": texts, "keep_alive": keep_alive, "options": {"num_ctx": num_ctx}}).encode("utf-8")
+    shared = get_shared_embedding_settings(override_model=model)
+    use_keep_alive = keep_alive if keep_alive is not None else shared["keep_alive"]
+    use_num_ctx = num_ctx if num_ctx is not None else shared["options"]["num_ctx"]
+    options = {"num_ctx": use_num_ctx}
+
+    body = json.dumps({
+        "model": model,
+        "input": texts,
+        "keep_alive": use_keep_alive,
+        "options": options
+    }).encode("utf-8")
+
     req = urllib.request.Request(
         f"{host.rstrip('/')}/api/embed",
         data=body,
@@ -33,6 +52,18 @@ def default_ollama_embedder(host: str, model: str, texts: List[str], keep_alive:
     with urllib.request.urlopen(req, timeout=120) as resp:
         data = json.loads(resp.read().decode("utf-8"))
         raw_embeddings = data.get("embeddings", [])
+        load_dur = data.get("load_duration", 0)
+        total_dur = data.get("total_duration", 0)
+        log_ollama_call(
+            call_type=call_type,
+            model=model,
+            num_ctx=use_num_ctx,
+            keep_alive=use_keep_alive,
+            options=options,
+            load_duration_ns=load_dur,
+            total_duration_ns=total_dur,
+            extra_info=f"texts_count={len(texts)}"
+        )
         return [l2_normalize(vec) for vec in raw_embeddings]
 
 class MemoryStorage:

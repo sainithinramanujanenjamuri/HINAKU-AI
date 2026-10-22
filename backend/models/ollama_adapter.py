@@ -2,21 +2,27 @@ import json
 from typing import Any, AsyncGenerator, Dict, List, Optional
 import httpx
 from .thinking_filter import ThinkingFilter, strip_thinking
+from .ollama_shared import get_shared_llm_settings, log_ollama_call
 
 class OllamaAdapter:
     def __init__(
         self,
         host: str = "http://localhost:11434",
-        default_model: str = "gemma3:4b",
+        default_model: Optional[str] = None,
         default_options: Optional[Dict[str, Any]] = None,
-        default_think: Optional[bool] = False,
-        default_keep_alive: Optional[str] = "30m",
+        default_think: Optional[bool] = None,
+        default_keep_alive: Optional[str] = None,
     ):
         self.host = host.rstrip("/")
-        self.default_model = default_model
-        self.default_options = default_options or {}
-        self.default_think = default_think
-        self.default_keep_alive = default_keep_alive
+        # Resolve shared canonical settings
+        shared = get_shared_llm_settings(override_model=default_model)
+        self.default_model = default_model or shared["model"]
+        self.default_options = default_options if default_options is not None else shared["options"]
+        self.default_think = default_think if default_think is not None else shared["think"]
+        self.default_keep_alive = default_keep_alive if default_keep_alive is not None else shared["keep_alive"]
+
+        self.last_load_duration: int = 0
+        self.last_total_duration: int = 0
 
     async def check_health(self) -> Dict[str, bool]:
         url = f"{self.host}/api/tags"
@@ -42,6 +48,7 @@ class OllamaAdapter:
         options: Optional[Dict[str, Any]] = None,
         think: Optional[bool] = None,
         keep_alive: Optional[str] = None,
+        call_type: str = "chat",
     ) -> AsyncGenerator[str, None]:
         target_model = model or self.default_model
         url = f"{self.host}/api/chat"
@@ -69,6 +76,8 @@ class OllamaAdapter:
             payload["think"] = use_think
 
         thinking_filter = ThinkingFilter()
+        load_duration_ns = 0
+        total_duration_ns = 0
 
         async with httpx.AsyncClient(timeout=120.0) as client:
             try:
@@ -95,6 +104,19 @@ class OllamaAdapter:
                                 if filtered:
                                     yield filtered
                             if chunk.get("done", False):
+                                load_duration_ns = chunk.get("load_duration", 0)
+                                total_duration_ns = chunk.get("total_duration", 0)
+                                self.last_load_duration = load_duration_ns
+                                self.last_total_duration = total_duration_ns
+                                log_ollama_call(
+                                    call_type=call_type,
+                                    model=target_model,
+                                    num_ctx=merged_options.get("num_ctx"),
+                                    keep_alive=use_keep_alive,
+                                    options=merged_options,
+                                    load_duration_ns=load_duration_ns,
+                                    total_duration_ns=total_duration_ns
+                                )
                                 break
                         except json.JSONDecodeError:
                             continue
@@ -116,9 +138,17 @@ class OllamaAdapter:
         options: Optional[Dict[str, Any]] = None,
         think: Optional[bool] = None,
         keep_alive: Optional[str] = None,
+        call_type: str = "chat",
     ) -> str:
         parts = []
-        async for chunk in self.stream_chat(messages, model=model, options=options, think=think, keep_alive=keep_alive):
+        async for chunk in self.stream_chat(
+            messages,
+            model=model,
+            options=options,
+            think=think,
+            keep_alive=keep_alive,
+            call_type=call_type
+        ):
             parts.append(chunk)
         return strip_thinking("".join(parts))
 

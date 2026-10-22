@@ -113,9 +113,9 @@ class MemoryExtractor:
         ]
 
         try:
-            # Always invoke local adapter
+            # Always invoke local adapter with memory extraction call type
             response_text = ""
-            async for chunk in self.local_adapter.stream_chat(messages):
+            async for chunk in self.local_adapter.stream_chat(messages, call_type="memory_extraction"):
                 response_text += chunk
         except Exception as e:
             logger.error(f"Local memory extraction model call failed: {e}")

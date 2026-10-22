@@ -18,6 +18,7 @@ from backend.guards import (
     get_clock_reply,
     get_system_clock_context
 )
+from backend.models.ollama_shared import log_ollama_call
 
 router = APIRouter()
 settings = get_settings()
@@ -158,6 +159,16 @@ async def chat_endpoint(req: ChatRequest, response: Response):
     # GUARD 1: Sensitive-Data Guard (PIN, password, card number, bank account, government ID)
     is_sensitive, sanitized_user_text = check_and_redact_sensitive_data(latest_user_text)
     if is_sensitive and settings.guards_sensitive_data_enabled:
+        log_ollama_call(
+            call_type="guard_sensitive",
+            model="none",
+            num_ctx=None,
+            keep_alive=None,
+            options={},
+            load_duration_ns=0,
+            total_duration_ns=0,
+            extra_info="regex refusal (no model called)"
+        )
         if latest_msg.role == "user":
             history_manager.add_message(conv_id, "user", sanitized_user_text)
         reply_content = settings.guards_sensitive_data_reply
@@ -225,6 +236,16 @@ async def chat_endpoint(req: ChatRequest, response: Response):
     if is_clock_query(latest_user_text):
         clock_reply = get_clock_reply(latest_user_text)
         if clock_reply:
+            log_ollama_call(
+                call_type="guard_clock",
+                model="none",
+                num_ctx=None,
+                keep_alive=None,
+                options={},
+                load_duration_ns=0,
+                total_duration_ns=0,
+                extra_info="system clock reply (no model called)"
+            )
             if latest_msg.role == "user":
                 history_manager.add_message(conv_id, "user", latest_user_text)
             ast_msg = history_manager.add_message(conv_id, "assistant", clock_reply, model="clock guard", backend="guard")
@@ -290,6 +311,16 @@ async def chat_endpoint(req: ChatRequest, response: Response):
     # GUARD 3: Live-Data Guard (real-time prices, weather, news, sports)
     is_live = is_live_data_query(latest_user_text, settings.guards_live_data_patterns)
     if is_live and settings.guards_live_data_enabled:
+        log_ollama_call(
+            call_type="guard_live_data",
+            model="none",
+            num_ctx=None,
+            keep_alive=None,
+            options={},
+            load_duration_ns=0,
+            total_duration_ns=0,
+            extra_info="regex refusal (no model called)"
+        )
         if latest_msg.role == "user":
             history_manager.add_message(conv_id, "user", latest_user_text)
         reply_content = settings.guards_live_data_reply
