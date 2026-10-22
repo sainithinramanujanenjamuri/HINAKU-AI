@@ -105,7 +105,7 @@ def run_smoke_test(steps: int = 20, max_seq_len: int = 256):
         torch.cuda.reset_peak_memory_stats()
 
         base_model_id = "Qwen/Qwen2.5-1.5B-Instruct"
-        print(f" -> Loading {base_model_id} in 4-bit NF4...")
+        print(f" -> Preparing {base_model_id} in 4-bit NF4...", flush=True)
 
         bnb_config = BitsAndBytesConfig(
             load_in_4bit=True,
@@ -114,15 +114,18 @@ def run_smoke_test(steps: int = 20, max_seq_len: int = 256):
             bnb_4bit_use_double_quant=True,
         )
 
+        print(f" -> [1/3] Loading tokenizer for {base_model_id}...", flush=True)
         tokenizer = AutoTokenizer.from_pretrained(base_model_id)
         if not tokenizer.pad_token:
             tokenizer.pad_token = tokenizer.eos_token
 
+        print(f" -> [2/3] Loading 4-bit model weights onto RTX 4050 GPU (takes ~10-15s)...", flush=True)
         model = AutoModelForCausalLM.from_pretrained(
             base_model_id,
             quantization_config=bnb_config,
             device_map="auto"
         )
+        print(f" -> [3/3] Applying PEFT LoRA adapter (r=8, alpha=16)...", flush=True)
         model = prepare_model_for_kbit_training(model)
 
         peft_config = LoraConfig(
@@ -134,6 +137,7 @@ def run_smoke_test(steps: int = 20, max_seq_len: int = 256):
             task_type="CAUSAL_LM"
         )
         model = get_peft_model(model, peft_config)
+        print(f" -> Model and LoRA adapter ready on GPU (VRAM allocated: {torch.cuda.memory_allocated() / (1024**2):.1f} MB).", flush=True)
 
         def formatting_func(example):
             if isinstance(example.get("instruction"), list):
