@@ -63,7 +63,9 @@ def run_smoke_test(steps: int = 20, max_seq_len: int = 256):
     print("\n[1/4] Running Hardware & VRAM Preflight...")
     preflight = run_vram_preflight()
     print(f" -> Hardware: {preflight['message']}")
-    print(f" -> GPU Present: {preflight['gpu_name']} ({preflight['vram_gb']} GB total)")
+    gpu_name = preflight.get("device_name") or preflight.get("gpu_name") or "Unknown GPU"
+    vram_gb = preflight.get("detected_vram_gb") or preflight.get("vram_gb") or 0.0
+    print(f" -> GPU Present: {gpu_name} ({vram_gb} GB total)")
     print(f" -> Meets 5.5 GB minimum: {preflight['passed']}")
 
     # 2. Setup Temporary Working Directory
@@ -161,11 +163,12 @@ def run_smoke_test(steps: int = 20, max_seq_len: int = 256):
         )
 
         print(f" -> Executing {steps} physical QLoRA optimization steps on GPU...")
-        for step in range(1, steps + 1):
-            t0 = time.perf_counter()
-            trainer.train(resume_from_checkpoint=False)
-            t1 = time.perf_counter()
-            step_times.append(t1 - t0)
+        t0 = time.perf_counter()
+        trainer.train(resume_from_checkpoint=False)
+        t1 = time.perf_counter()
+        train_duration = t1 - t0
+        avg_step_time = round(train_duration / steps, 3)
+        step_times = [avg_step_time] * steps
 
         peak_vram_bytes = torch.cuda.max_memory_allocated()
         peak_vram_gb = round(peak_vram_bytes / (1024 ** 3), 3)

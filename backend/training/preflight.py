@@ -79,7 +79,9 @@ def run_vram_preflight(min_gb: Optional[float] = None) -> Dict[str, Any]:
     return {
         "passed": passed,
         "device_name": device_name,
+        "gpu_name": device_name,
         "detected_vram_gb": vram_gb,
+        "vram_gb": vram_gb,
         "min_required_gb": required,
         "message": message,
         "power_info": power_info
