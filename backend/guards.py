@@ -1,4 +1,5 @@
 import re
+from datetime import datetime
 from typing import List, Optional, Tuple
 
 SENSITIVE_REPLACEMENTS = [
@@ -43,9 +44,76 @@ DEFAULT_LIVE_DATA_PATTERNS = [
     r"(?i)\b(?:what\s+is\s+the\s+weather|current\s+weather|weather\s+today|weather\s+forecast|is\s+it\s+raining\s+outside|temperature\s+outside)\b",
     r"(?i)\b(?:today'?s?|current|breaking|latest)\s+(?:news|headlines)\b",
     r"(?i)\b(?:score\s+of|who\s+won)\b.*\b(?:game|match|today|yesterday|super\s*bowl|world\s*cup|nba|ipl)\b",
-    r"(?i)\b(?:what\s+(?:time|day|date)\s+is\s+it|what\s+is\s+today'?s?\s+date|current\s+time)\b",
     r"(?i)\blatest\b\s+(?:news|headlines|score|stock\s+price)\b"
 ]
+
+CLOCK_DATETIME_PATTERNS = [
+    r"(?i)\b(?:what\s+(?:is\s+the\s+)?(?:date\s+and\s+time|time\s+and\s+date)|current\s+(?:date\s+and\s+time|time\s+and\s+date))\b",
+]
+
+CLOCK_DATE_PATTERNS = [
+    r"(?i)\b(?:what\s+is\s+today'?s?\s+date|what\s+date\s+is\s+(?:it|today)|today'?s?\s+date|current\s+date)\b",
+    r"(?i)\b(?:what'?s?\s+the\s+date\s+today|date\s+today)\b",
+]
+
+CLOCK_DAY_PATTERNS = [
+    r"(?i)\b(?:what\s+day\s+is\s+(?:it|today)|which\s+day\s+is\s+(?:it|today)|what\s+day\s+of\s+the\s+week\s+is\s+it)\b",
+    r"(?i)\b(?:what\s+is\s+today'?s?\s+day|day\s+of\s+(?:the\s+)?week)\b",
+]
+
+CLOCK_TIME_PATTERNS = [
+    r"(?i)\b(?:what\s+time\s+is\s+it|what'?s?\s+the\s+time|current\s+time|time\s+right\s+now|time\s+now)\b",
+]
+
+def is_clock_query(text: str) -> bool:
+    """Checks if a user query is asking for the current day, date, or time from the system clock."""
+    if not text:
+        return False
+    clean = text.strip()
+    all_patterns = CLOCK_DATETIME_PATTERNS + CLOCK_DAY_PATTERNS + CLOCK_DATE_PATTERNS + CLOCK_TIME_PATTERNS
+    return any(re.search(pat, clean) for pat in all_patterns)
+
+def get_clock_reply(text: str, dt: Optional[datetime] = None) -> Optional[str]:
+    """
+    Answers questions about current day, date, or time directly from the system clock.
+    Returns None if the query is not a clock query.
+    """
+    if not text:
+        return None
+    clean = text.strip()
+    now = dt or datetime.now().astimezone()
+
+    # Check combined date + time first
+    if any(re.search(pat, clean) for pat in CLOCK_DATETIME_PATTERNS):
+        return f"Today is {now.strftime('%A, %B %d, %Y')}. It is {now.strftime('%I:%M %p').lstrip('0')}."
+
+    # Check day only
+    is_day = any(re.search(pat, clean) for pat in CLOCK_DAY_PATTERNS)
+    # Check date only
+    is_date = any(re.search(pat, clean) for pat in CLOCK_DATE_PATTERNS)
+    # Check time only
+    is_time = any(re.search(pat, clean) for pat in CLOCK_TIME_PATTERNS)
+
+    if is_day and not is_time and not is_date:
+        return f"Today is {now.strftime('%A')}."
+    if is_date and not is_time:
+        return f"Today is {now.strftime('%B %d, %Y')}."
+    if is_time and not is_date and not is_day:
+        return f"It is {now.strftime('%I:%M %p').lstrip('0')}."
+    if is_day or is_date or is_time:
+        return f"Today is {now.strftime('%A, %B %d, %Y')}. It is {now.strftime('%I:%M %p').lstrip('0')}."
+
+    return None
+
+def get_system_clock_context(dt: Optional[datetime] = None) -> str:
+    """Formats current local date, day of week, and time for injection into system context."""
+    now = dt or datetime.now().astimezone()
+    weekday = now.strftime("%A")
+    date_str = now.strftime("%Y-%m-%d")
+    time_str = now.strftime("%I:%M %p").lstrip("0")
+    tz_name = now.tzname() or ""
+    tz_part = f" ({tz_name})" if tz_name else ""
+    return f"Current local time: {weekday}, {date_str} {time_str}{tz_part}."
 
 def check_and_redact_sensitive_data(text: str) -> Tuple[bool, str]:
     """

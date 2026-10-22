@@ -40,7 +40,13 @@ from backend.persona import PersonaManager
 from backend.memory.storage import MemoryStorage
 from backend.memory.manager import MemoryManager
 from backend.models.ollama_adapter import OllamaAdapter, strip_thinking
-from backend.guards import check_and_redact_sensitive_data, is_live_data_query
+from backend.guards import (
+    check_and_redact_sensitive_data,
+    is_live_data_query,
+    is_clock_query,
+    get_clock_reply,
+    get_system_clock_context
+)
 
 PROMPTS = [
     "Who are you?",
@@ -87,22 +93,6 @@ PERSONA_EXAMPLES_MAP = [
     {
         "situation_keywords": ["thanks", "thank you"],
         "reply": "anytime. let me know when the next piece is ready."
-    },
-    {
-        "situation_keywords": ["exhausted", "nothing is working"],
-        "reply": "that sounds heavy. pick the smallest broken thing and we fix only that. which one is it?"
-    },
-    {
-        "situation_keywords": ["skip testing", "ship tonight"],
-        "reply": "no. rushing a release without tests creates bigger fires tomorrow. run the critical tests first."
-    },
-    {
-        "situation_keywords": ["who are you"],
-        "reply": "hinaku. an ai built for you alone. quiet, observant, and useful."
-    },
-    {
-        "situation_keywords": ["how is today", "start my day"],
-        "reply": "i don't experience days, but i'm here. how is yours going so far?"
     }
 ]
 
@@ -112,9 +102,11 @@ def count_sentences(text: str) -> int:
     parts = [p.strip() for p in re.split(r"[.!?]+", clean) if p.strip()]
     return len(parts)
 
-def check_reply(prompt: str, reply: str) -> Dict[str, Any]:
+def check_reply(prompt: str, reply: str, clock_dt: Optional[datetime] = None) -> Dict[str, Any]:
     text = reply.strip()
     reasons = []
+    needs_review = False
+    review_note = ""
 
     # 1. 4 sentences or fewer
     num_s = count_sentences(text)
@@ -137,7 +129,6 @@ def check_reply(prompt: str, reply: str) -> Dict[str, Any]:
             break
 
     # 3. Verbatim persona example repetition check
-    # Fails only when an example reply is used for a prompt that is NOT the example's own situation
     clean_compare = re.sub(r"[^\w\s]", "", text).strip().lower()
     p_clean = re.sub(r"[^\w\s]", "", prompt).strip().lower()
     for ex in PERSONA_EXAMPLES_MAP:
@@ -148,10 +139,36 @@ def check_reply(prompt: str, reply: str) -> Dict[str, Any]:
                 reasons.append("Repeated a persona example verbatim for an unrelated situation")
                 break
 
-    # 4. Prompt-specific checks:
     p_lower = prompt.lower()
     t_lower = text.lower()
 
+    # 4. Weather / Temperature / Clock Weekday Guard checks
+    # Weather conditions must never be hallucinated
+    weather_patterns = [
+        r"(?i)\b(?:partly\s+cloudy|mostly\s+cloudy|overcast|clear\s+skies?|sunny|raining|rainy|snowing|thunderstorm|drizzle)\b",
+        r"(?i)\b(?:weather\s+is|forecast\s+is)\b",
+    ]
+    if any(re.search(pat, text) for pat in weather_patterns):
+        reasons.append("Stated weather conditions")
+
+    # Temperatures must never be stated (unless answering boiling point of water)
+    temp_patterns = [
+        r"(?i)\b\d+(?:\.\d+)?\s*(?:degrees\s+(?:celsius|fahrenheit)|degrees|°[cf]|celsius|fahrenheit)\b",
+    ]
+    if "boiling point" not in p_lower and any(re.search(pat, text) for pat in temp_patterns):
+        reasons.append("Stated a temperature")
+
+    # Weekdays: must never contradict the system clock
+    now_dt = clock_dt or datetime.now()
+    clock_weekday = now_dt.strftime("%A").lower()
+    weekdays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+    other_weekdays = [w for w in weekdays if w != clock_weekday]
+    for w in other_weekdays:
+        if re.search(rf"\b{w}\b", t_lower):
+            reasons.append(f"Stated wrong weekday '{w.capitalize()}' (clock is {clock_weekday.capitalize()})")
+            break
+
+    # 5. Prompt-specific checks:
     if "who are you" in p_lower:
         if "hinaku" not in t_lower:
             reasons.append("Did not identify as HINAKU")
@@ -164,8 +181,8 @@ def check_reply(prompt: str, reply: str) -> Dict[str, Any]:
             reasons.append("Did not mention owner's RTX 4050 / 6 GB VRAM")
         if "powerful" in t_lower or "high-end" in t_lower:
             reasons.append("Called 6 GB GPU powerful")
-        if any(large in t_lower for large in ["70b", "34b", "32b", "13b"]):
-            reasons.append("Suggested too large model for 6 GB VRAM")
+        if any(large in t_lower for large in ["70b", "34b", "32b", "13b", "h100", "a100"]):
+            reasons.append("Suggested too large model or datacenter GPU for local 6 GB VRAM")
 
     if "which editor" in p_lower:
         if "vs code" not in t_lower and "visual studio code" not in t_lower:
@@ -174,6 +191,9 @@ def check_reply(prompt: str, reply: str) -> Dict[str, Any]:
     if "bananas" in p_lower:
         if any(w in t_lower for w in ["gpu", "rtx", "4050", "vram", "vs code", "editor"]):
             reasons.append("Irrelevant memory leaked into bananas reply")
+        elif len(reasons) == 0:
+            needs_review = True
+            review_note = "Specific factual claim requires human review"
 
     if "capital of australia" in p_lower:
         if "canberra" not in t_lower:
@@ -198,9 +218,13 @@ def check_reply(prompt: str, reply: str) -> Dict[str, Any]:
         if has_price_number:
             reasons.append("Contains price-like number")
 
-    passed = (len(reasons) == 0)
+    passed = (len(reasons) == 0 and not needs_review)
+    status_label = "FAIL" if len(reasons) > 0 else ("NEEDS_REVIEW" if needs_review else "PASS")
     return {
         "passed": passed,
+        "needs_review": needs_review,
+        "review_note": review_note,
+        "status": status_label,
         "reasons": reasons,
         "sentence_count": num_s,
         "question_count": q_count
@@ -404,6 +428,8 @@ async def run_bakeoff(
         stats_by_model: Dict[str, Dict[str, Any]] = {
             m: {
                 "passed": 0,
+                "needs_review": 0,
+                "failed": 0,
                 "total": 0,
                 "total_latency": 0.0,
                 "total_ttft": 0.0,
@@ -425,10 +451,11 @@ async def run_bakeoff(
                     is_private=False,
                     is_api_request=False
                 )
+                clock_ctx = get_system_clock_context()
+                sys_parts = [persona_state.content, clock_ctx]
                 if mem_context:
-                    sys_prompt = f"{persona_state.content}\n\n{mem_context}"
-                else:
-                    sys_prompt = persona_state.content
+                    sys_parts.append(mem_context)
+                sys_prompt = "\n\n".join(sys_parts)
 
                 messages = [
                     {"role": "system", "content": sys_prompt},
@@ -436,6 +463,7 @@ async def run_bakeoff(
                 ]
 
                 is_sens, _ = check_and_redact_sensitive_data(prompt)
+                is_clock = is_clock_query(prompt)
                 is_live = is_live_data_query(prompt, settings.guards_live_data_patterns)
 
                 for model in available_models:
@@ -446,6 +474,10 @@ async def run_bakeoff(
 
                     if is_sens and settings.guards_sensitive_data_enabled:
                         reply_text = settings.guards_sensitive_data_reply
+                        latency_sec = 0.001
+                        ttft_sec = 0.001
+                    elif is_clock:
+                        reply_text = get_clock_reply(prompt) or "Clock query"
                         latency_sec = 0.001
                         ttft_sec = 0.001
                     elif is_live and settings.guards_live_data_enabled:
@@ -502,7 +534,7 @@ async def run_bakeoff(
 
                     # Evaluate automatic checks
                     chk = check_reply(prompt, reply_text)
-                    print(f" done (TTFT: {ttft_sec:.2f}s, Total: {latency_sec:.2f}s, {'PASS' if chk['passed'] else 'FAIL'})", flush=True)
+                    print(f" done (TTFT: {ttft_sec:.2f}s, Total: {latency_sec:.2f}s, {chk['status']})", flush=True)
                     results_by_prompt[prompt][run_idx][model] = {
                         "reply": reply_text,
                         "latency": latency_sec,
@@ -512,8 +544,12 @@ async def run_bakeoff(
 
                     # Update aggregate stats
                     stats_by_model[model]["total"] += 1
-                    if chk["passed"]:
+                    if chk["status"] == "PASS":
                         stats_by_model[model]["passed"] += 1
+                    elif chk["status"] == "NEEDS_REVIEW":
+                        stats_by_model[model]["needs_review"] += 1
+                    else:
+                        stats_by_model[model]["failed"] += 1
                     stats_by_model[model]["total_latency"] += latency_sec
                     stats_by_model[model]["total_ttft"] += ttft_sec
                     stats_by_model[model]["calls"] += 1
@@ -561,26 +597,38 @@ async def run_bakeoff(
             st = stats_by_model[m]
             param_str = dtl.get("formatted_params") or dtl.get("parameter_size", "Unknown")
             quant_str = dtl.get("quantization", "Unknown")
-            passed_str = f"{st['passed']}/{st['total']} ({int(st['passed']/max(st['total'], 1)*100)}%)"
+            passed_pct = int(st['passed'] / max(st['total'], 1) * 100)
+            passed_str = f"{st['passed']}/{st['total']} ({passed_pct}%)"
+            if st.get('needs_review'):
+                passed_str += f" + {st['needs_review']} Needs Review"
             avg_ttft = f"{st['total_ttft'] / max(st['calls'], 1):.2f}s"
             avg_lat = f"{st['total_latency'] / max(st['calls'], 1):.2f}s"
             vram_str = st["vram_snapshot"].get("summary", "Fits <=6GB VRAM")
             notes = dtl.get("flag_note", "") or ("Baseline" if m == "qwen3.5:4b" else "Candidate")
             md_lines.append(f"| **{m}** | {param_str} | {quant_str} | {passed_str} | {avg_ttft} | {avg_lat} | {vram_str} | {notes} |")
 
-        # Collect and list all failed checks
+        # Collect and list all failed checks and reviews
         failed_entries = []
+        review_entries = []
         for prompt in PROMPTS:
             for run_idx in [1, 2]:
                 for model in available_models:
                     run_data = results_by_prompt[prompt][run_idx].get(model, {})
                     chk = run_data.get("check", {})
-                    if not chk.get("passed"):
+                    if chk.get("status") == "FAIL":
                         failed_entries.append({
                             "model": model,
                             "run": run_idx,
                             "prompt": prompt,
                             "reasons": chk.get("reasons", ["Failed check"]),
+                            "reply": run_data.get("reply", "").replace("\n", " ")
+                        })
+                    elif chk.get("status") == "NEEDS_REVIEW":
+                        review_entries.append({
+                            "model": model,
+                            "run": run_idx,
+                            "prompt": prompt,
+                            "note": chk.get("review_note", "Factual claim requiring verification"),
                             "reply": run_data.get("reply", "").replace("\n", " ")
                         })
 
@@ -597,6 +645,15 @@ async def run_bakeoff(
                 md_lines.append(f"| `{f['model']}` | Run {f['run']} | \"{f['prompt']}\" | {reasons_str} | {rep_snippet} |")
             md_lines.append("")
 
+        if review_entries:
+            md_lines.append("\n## Items Needing Human Review\n")
+            md_lines.append("| Model | Run | Prompt | Reason | Actual Reply |")
+            md_lines.append("| :--- | :---: | :--- | :--- | :--- |")
+            for r in review_entries:
+                rep_snippet = r["reply"] if len(r["reply"]) <= 120 else r["reply"][:117] + "..."
+                md_lines.append(f"| `{r['model']}` | Run {r['run']} | \"{r['prompt']}\" | {r['note']} | {rep_snippet} |")
+            md_lines.append("")
+
         md_lines.append("\n---\n")
         md_lines.append("## Side-by-Side Prompt Replies\n")
 
@@ -610,7 +667,13 @@ async def run_bakeoff(
                     lat = f"{run_data.get('latency', 0.0):.2f}s"
                     ttft = f"{run_data.get('ttft', 0.0):.2f}s"
                     chk = run_data.get("check", {})
-                    status = "[PASS]" if chk.get("passed") else f"[FAIL: {', '.join(chk.get('reasons', []))}]"
+                    chk_status = chk.get("status", "PASS" if chk.get("passed") else "FAIL")
+                    if chk_status == "PASS":
+                        status = "[PASS]"
+                    elif chk_status == "NEEDS_REVIEW":
+                        status = f"[NEEDS REVIEW: {chk.get('review_note', '')}]"
+                    else:
+                        status = f"[FAIL: {', '.join(chk.get('reasons', []))}]"
                     md_lines.append(f"- **Run {run_idx}** [TTFT: {ttft} | Total: {lat}] [{status}]: {rep}")
                 md_lines.append("")
 

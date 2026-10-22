@@ -4,7 +4,13 @@ from fastapi.testclient import TestClient
 
 from backend.main import app
 from backend.config import get_settings
-from backend.guards import check_and_redact_sensitive_data, is_live_data_query
+from backend.guards import (
+    check_and_redact_sensitive_data,
+    is_live_data_query,
+    is_clock_query,
+    get_clock_reply,
+    get_system_clock_context
+)
 
 client = TestClient(app)
 
@@ -44,6 +50,7 @@ def test_clean_messages_pass_sensitive_check():
         assert redacted == sample
 
 def test_live_data_query_detection():
+    # Prices, weather, news, scores remain refused by live-data guard
     live_queries = [
         "What was Nvidia's closing price yesterday?",
         "What is bitcoin price right now?",
@@ -52,12 +59,20 @@ def test_live_data_query_detection():
         "Is it raining outside?",
         "What is the latest news?",
         "What was the score of the game yesterday?",
-        "What time is it right now?",
-        "What is today's date?",
         "Give me the latest stock price"
     ]
     for q in live_queries:
         assert is_live_data_query(q) is True, f"Failed to detect live query: {q}"
+
+    # Clock queries are answered by code, not refused as live data
+    clock_queries = [
+        "What time is it right now?",
+        "What is today's date?",
+        "What day is it?"
+    ]
+    for q in clock_queries:
+        assert is_live_data_query(q) is False, f"Clock query should not be refused by live guard: {q}"
+        assert is_clock_query(q) is True, f"Clock query should be detected by clock guard: {q}"
 
 def test_live_data_false_positive_checks():
     # Educational or conceptual questions must NOT be blocked

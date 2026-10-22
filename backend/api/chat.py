@@ -11,7 +11,13 @@ from backend.models.router import ModelRouter
 from backend.persona import PersonaManager
 from backend.history import ChatHistoryManager, trim_history
 from backend.memory import MemoryStorage, MemoryExtractor, MemoryManager
-from backend.guards import check_and_redact_sensitive_data, is_live_data_query
+from backend.guards import (
+    check_and_redact_sensitive_data,
+    is_live_data_query,
+    is_clock_query,
+    get_clock_reply,
+    get_system_clock_context
+)
 
 router = APIRouter()
 settings = get_settings()
@@ -215,7 +221,73 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                 interaction_id=inter_id
             )
 
-    # GUARD 2: Live-Data Guard (real-time prices, weather, news, sports, current date/time)
+    # GUARD 2: Clock Guard (date, day of week, time answered directly from system clock)
+    if is_clock_query(latest_user_text):
+        clock_reply = get_clock_reply(latest_user_text)
+        if clock_reply:
+            if latest_msg.role == "user":
+                history_manager.add_message(conv_id, "user", latest_user_text)
+            ast_msg = history_manager.add_message(conv_id, "assistant", clock_reply, model="clock guard", backend="guard")
+            inter_id = history_manager.log_interaction(
+                conv_id=conv_id,
+                user_prompt=latest_user_text,
+                answer=clock_reply,
+                model="clock guard",
+                backend="guard",
+                message_id=ast_msg["id"]
+            )
+            response.headers["X-Persona-Fallback"] = str(persona_state.is_fallback).lower()
+            response.headers["X-Conversation-Id"] = conv_id
+
+            if req.stream:
+                async def clock_stream():
+                    init_meta = {
+                        "type": "meta",
+                        "conversation_id": conv_id,
+                        "persona_fallback": persona_state.is_fallback,
+                        "notice": None,
+                        "is_private": is_private,
+                        "logged_by_provider": False,
+                        "message_id": ast_msg["id"],
+                        "interaction_id": inter_id
+                    }
+                    yield f"data: {json.dumps(init_meta)}\n\n"
+                    chunk_data = {
+                        "chunk": clock_reply,
+                        "backend": "guard",
+                        "model": "clock guard",
+                        "notice": None,
+                        "message_id": ast_msg["id"],
+                        "interaction_id": inter_id
+                    }
+                    yield f"data: {json.dumps(chunk_data)}\n\n"
+                    yield "data: [DONE]\n\n"
+
+                return StreamingResponse(
+                    clock_stream(),
+                    media_type="text/event-stream",
+                    headers={
+                        "Cache-Control": "no-cache",
+                        "Connection": "keep-alive",
+                        "X-Accel-Buffering": "no",
+                        "X-Persona-Fallback": str(persona_state.is_fallback).lower(),
+                        "X-Conversation-Id": conv_id
+                    }
+                )
+            else:
+                return ChatResponse(
+                    role="assistant",
+                    content=clock_reply,
+                    model="clock guard",
+                    backend="guard",
+                    conversation_id=conv_id,
+                    persona_fallback=persona_state.is_fallback,
+                    notice=None,
+                    message_id=ast_msg["id"],
+                    interaction_id=inter_id
+                )
+
+    # GUARD 3: Live-Data Guard (real-time prices, weather, news, sports)
     is_live = is_live_data_query(latest_user_text, settings.guards_live_data_patterns)
     if is_live and settings.guards_live_data_enabled:
         if latest_msg.role == "user":
@@ -320,10 +392,11 @@ async def chat_endpoint(req: ChatRequest, response: Response):
         send_personal_context=settings.api_send_personal_context
     )
 
+    clock_context = get_system_clock_context()
+    system_parts = [persona_state.content, clock_context]
     if memory_context:
-        system_content = f"{persona_state.content}\n\n{memory_context}"
-    else:
-        system_content = persona_state.content
+        system_parts.append(memory_context)
+    system_content = "\n\n".join(system_parts)
 
     # Prepend persona system prompt (with memory context if applicable) and trim history
     full_messages = [{"role": "system", "content": system_content}] + messages_to_trim

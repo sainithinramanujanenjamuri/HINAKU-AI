@@ -144,7 +144,6 @@ guards:
       - '(?i)\b(?:what\s+is\s+the\s+weather|current\s+weather|weather\s+today|weather\s+forecast|is\s+it\s+raining\s+outside|temperature\s+outside)\b'
       - '(?i)\b(?:today''?s?|current|breaking|latest)\s+(?:news|headlines)\b'
       - '(?i)\b(?:score\s+of|who\s+won)\b.*\b(?:game|match|today|yesterday|super\s*bowl|world\s*cup|nba|ipl)\b'
-      - '(?i)\b(?:what\s+(?:time|day|date)\s+is\s+it|what\s+is\s+today''?s?\s+date|current\s+time)\b'
       - '(?i)\blatest\b\s+(?:news|headlines|score|stock\s+price)\b'
 
 paths:
