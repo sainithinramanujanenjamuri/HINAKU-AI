@@ -42,3 +42,4 @@ def test_valid_chat_only_replies_pass():
     valid_reply = "Rest. Take a break now. Drink some water and step away from the screen for five minutes."
     res = check_reply("I'm exhausted and nothing is working on my project", valid_reply)
     assert res["passed"] is True
+

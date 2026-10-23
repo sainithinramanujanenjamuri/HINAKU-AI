@@ -330,6 +330,18 @@ class Settings:
         return temp_dir
 
     @property
+    def training_temp_dir(self) -> Path:
+        raw = self.training.get("training_temp_dir", r"D:\hinaku-tmp")
+        p = Path(raw)
+        return p if p.is_absolute() else ROOT_DIR / p
+
+    @property
+    def hf_cache_dir(self) -> Path:
+        raw = self.training.get("hf_cache_dir", r"D:\hf-cache")
+        p = Path(raw)
+        return p if p.is_absolute() else ROOT_DIR / p
+
+    @property
     def training_min_vram_gb(self) -> float:
         return float(self.training.get("min_vram_gb", 5.5))
 

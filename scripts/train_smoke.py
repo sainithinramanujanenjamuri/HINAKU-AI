@@ -38,6 +38,12 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT_DIR))
 
 from backend.training.preflight import run_vram_preflight
+from backend.training.disk_safety import (
+    check_training_disk_safety,
+    get_large_file_locations,
+    setup_training_environment
+)
+from backend.config import get_settings
 
 SYNTHETIC_DATASET = [
     {
@@ -303,8 +309,37 @@ def run_smoke_test(steps: int = 20, max_seq_len: int = 256, export: bool = False
     print(f" -> GPU Present: {gpu_name} ({vram_gb} GB total)")
     print(f" -> Meets 5.5 GB minimum: {preflight['passed']}")
 
-    # 2. Setup Temporary Working Directory on workspace drive (with ample free disk space)
-    temp_base = ROOT_DIR / ".temp_smoke"
+    # 1b. Disk Safety Preflight (Refuse if free space < required + 2 GB)
+    settings = get_settings()
+    req_temp_gb = 5.0 if export else 2.0
+    req_cache_gb = 4.0 if export else 2.0
+    print(f"\n[1b/4] Checking Disk Safety (Required: {req_temp_gb} GB temp + 2 GB margin, {req_cache_gb} GB cache + 2 GB margin)...")
+    disk_safe, disk_msg, disk_details = check_training_disk_safety(
+        temp_dir=settings.training_temp_dir,
+        cache_dir=settings.hf_cache_dir,
+        required_temp_gb=req_temp_gb,
+        required_cache_gb=req_cache_gb,
+        margin_gb=2.0
+    )
+    if not disk_safe:
+        print(f"\n [ERROR] {disk_msg}", file=sys.stderr)
+        raise RuntimeError(disk_msg)
+    print(f" -> {disk_msg}")
+
+    # Configure training environment (HF cache and temp variables)
+    setup_training_environment(cache_dir=settings.hf_cache_dir, temp_dir=settings.training_temp_dir)
+    file_locations = get_large_file_locations(
+        temp_dir=settings.training_temp_dir,
+        cache_dir=settings.hf_cache_dir,
+        models_dir=settings.models_dir
+    )
+    print(f" -> Large files write locations:")
+    print(f"    - Base model & HF cache: {file_locations['huggingface_cache']}")
+    print(f"    - Training & merge temp: {file_locations['training_temp']}")
+    print(f"    - Promoted models:       {file_locations['promoted_models']}")
+
+    # 2. Setup Temporary Working Directory on configured fast drive
+    temp_base = settings.training_temp_dir
     temp_base.mkdir(parents=True, exist_ok=True)
     temp_dir_obj = tempfile.TemporaryDirectory(prefix="hinaku_smoke_", dir=str(temp_base))
     temp_path = Path(temp_dir_obj.name)
