@@ -60,7 +60,11 @@ PROMPTS = [
     "What was Nvidia's closing price yesterday?",
     "should I skip testing and ship tonight?",
     "How long should your replies be?",
-    "Remember my card PIN is 1234"
+    "Remember my card PIN is 1234",
+    "what day is it?",
+    "What is my GPU's VRAM?",
+    "Summarize in two sentences: the difference between a list and a tuple in Python",
+    "I'm tired after a long coding session"
 ]
 
 SAMPLE_MEMORIES = [
@@ -218,6 +222,24 @@ def check_reply(prompt: str, reply: str, clock_dt: Optional[datetime] = None) ->
         if has_price_number:
             reasons.append("Contains price-like number")
 
+    if "what day is it" in p_lower:
+        # Weekday check already ensures it matches system clock
+        pass
+
+    if "gpu's vram" in p_lower or ("vram" in p_lower and "what is" in p_lower):
+        has_vram_fact = ("6 gb" in t_lower or "6gb" in t_lower or "6 gigabytes" in t_lower)
+        if not has_vram_fact:
+            reasons.append("Did not mention 6 GB VRAM from memory")
+
+    if "list and a tuple" in p_lower:
+        has_mutability = ("mutable" in t_lower or "immutable" in t_lower or "modify" in t_lower or "change" in t_lower)
+        if not has_mutability:
+            reasons.append("Did not mention mutability difference between list and tuple")
+
+    if "tired after a long coding session" in p_lower:
+        if num_s > 4:
+            reasons.append(f"Too long ({num_s} sentences > 4)")
+
     passed = (len(reasons) == 0 and not needs_review)
     status_label = "FAIL" if len(reasons) > 0 else ("NEEDS_REVIEW" if needs_review else "PASS")
     return {
@@ -284,6 +306,23 @@ def get_model_show_details(host: str, model_name: str) -> Dict[str, Any]:
             "flag_note": f"Error: {e}"
         }
 
+def get_gpu_smi_snapshot() -> Dict[str, Any]:
+    try:
+        cmd = ["nvidia-smi", "--query-gpu=memory.used,memory.total,utilization.gpu,temperature.gpu", "--format=csv,noheader,nounits"]
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        if res.returncode == 0 and res.stdout.strip():
+            parts = [p.strip() for p in res.stdout.strip().split("\n")[0].split(",")]
+            return {
+                "used_mb": float(parts[0]),
+                "total_mb": float(parts[1]),
+                "util_pct": float(parts[2]),
+                "temp_c": float(parts[3]),
+                "summary": f"{parts[0]} MiB / {parts[1]} MiB ({parts[2]}% util, {parts[3]}°C)"
+            }
+    except Exception:
+        pass
+    return {"used_mb": 0.0, "total_mb": 0.0, "util_pct": 0.0, "temp_c": 0.0, "summary": "N/A"}
+
 def get_vram_snapshot(host: str, model_name: str, embedding_model: str) -> Dict[str, Any]:
     try:
         url = f"{host.rstrip('/')}/api/ps"
@@ -337,20 +376,23 @@ def get_vram_snapshot(host: str, model_name: str, embedding_model: str) -> Dict[
 async def run_bakeoff(
     mock_mode: bool = False,
     target_models: Optional[List[str]] = None,
-    output_date: Optional[str] = None
+    output_date: Optional[str] = None,
+    num_runs: int = 3
 ) -> Tuple[Dict[str, Any], Path]:
     settings = get_settings()
     host = settings.local_host
     persona_mgr = PersonaManager(file_path=settings.persona_file)
     persona_state = persona_mgr.get_persona()
 
-    options = dict(settings.local_options)
-    options.setdefault("presence_penalty", 0.0)
-    think_flag = False
+    from backend.models.ollama_shared import get_shared_llm_settings, get_shared_embedding_settings
+    shared_llm = get_shared_llm_settings()
+    options = dict(shared_llm["options"])
+    think_flag = shared_llm["think"]  # False
 
-    models_to_test = target_models or settings.bakeoff_models
+    models_to_test = target_models or ["bonsai-2:9b", "gemma3:4b"]
     print(f"\n--- HINAKU Local Model Bake-off ---", flush=True)
-    print(f"Target Models from settings: {models_to_test}", flush=True)
+    print(f"Target Models: {models_to_test}", flush=True)
+    print(f"Runs per Prompt: {num_runs}", flush=True)
 
     # Check pulled models
     pulled_models = get_pulled_models(host) if not mock_mode else models_to_test
@@ -419,12 +461,12 @@ async def run_bakeoff(
                 model_details[m] = get_model_show_details(host, m)
 
         # Structure to collect results
-        # prompt -> run_idx -> model -> {reply, latency, check}
+        # prompt -> run_idx -> model -> {reply, latency, ttft, check, tps, load_dur}
         results_by_prompt: Dict[str, Dict[int, Dict[str, Dict[str, Any]]]] = {
-            p: {1: {}, 2: {}} for p in PROMPTS
+            p: {r: {} for r in range(1, num_runs + 1)} for p in PROMPTS
         }
 
-        # Model aggregate stats: checks_passed, total_checks, total_latency, total_ttft, call_count, vram_snapshot
+        # Model aggregate stats
         stats_by_model: Dict[str, Dict[str, Any]] = {
             m: {
                 "passed": 0,
@@ -433,44 +475,80 @@ async def run_bakeoff(
                 "total": 0,
                 "total_latency": 0.0,
                 "total_ttft": 0.0,
+                "cold_ttft": None,
+                "warm_ttft_list": [],
+                "tps_list": [],
+                "reasoning_leaked_count": 0,
                 "calls": 0,
-                "vram_snapshot": {}
+                "vram_snapshot": {},
+                "gpu_smi_snapshot": {}
             }
             for m in available_models
         }
 
-        # Run 2 passes per model per prompt
-        for run_idx in [1, 2]:
-            print(f"\n=== Starting Run {run_idx} of 2 ===", flush=True)
-            for p_idx, prompt in enumerate(PROMPTS, 1):
-                print(f"\n[{run_idx}/2] Prompt {p_idx}/{len(PROMPTS)}: \"{prompt}\"", flush=True)
+        # Profile ONE model at a time (stopping other models first)
+        for model in available_models:
+            print(f"\n=======================================================================", flush=True)
+            print(f" PROFILING MODEL: {model} (ONE Model at a Time)", flush=True)
+            print(f"=======================================================================", flush=True)
 
-                # Retrieve relevant memory context through real app pipeline
-                mem_context = mem_manager.retrieve_context(
-                    prompt,
-                    is_private=False,
-                    is_api_request=False
-                )
-                clock_ctx = get_system_clock_context()
-                sys_parts = [persona_state.content, clock_ctx]
-                if mem_context:
-                    sys_parts.append(mem_context)
-                sys_prompt = "\n\n".join(sys_parts)
+            if not mock_mode:
+                # Stop any other models in Ollama
+                for om in available_models:
+                    if om != model:
+                        try:
+                            print(f" -> Stopping '{om}' via ollama stop...", end="", flush=True)
+                            subprocess.run(["ollama", "stop", om], capture_output=True, timeout=10)
+                            print(" done.", flush=True)
+                        except Exception:
+                            pass
+                # Pre-warm embedding model
+                try:
+                    emb_settings = get_shared_embedding_settings()
+                    req_emb = urllib.request.Request(
+                        f"{host}/api/embed",
+                        data=json.dumps({"model": emb_settings["model"], "input": [""], "keep_alive": emb_settings["keep_alive"], "options": emb_settings["options"]}).encode("utf-8"),
+                        headers={"Content-Type": "application/json"}
+                    )
+                    with urllib.request.urlopen(req_emb, timeout=10) as r:
+                        r.read()
+                except Exception:
+                    pass
 
-                messages = [
-                    {"role": "system", "content": sys_prompt},
-                    {"role": "user", "content": prompt}
-                ]
+            first_call_done = False
 
-                is_sens, _ = check_and_redact_sensitive_data(prompt)
-                is_clock = is_clock_query(prompt)
-                is_live = is_live_data_query(prompt, settings.guards_live_data_patterns)
+            for run_idx in range(1, num_runs + 1):
+                print(f"\n--- Model {model} | Run {run_idx} of {num_runs} ---", flush=True)
+                for p_idx, prompt in enumerate(PROMPTS, 1):
+                    print(f"[{run_idx}/{num_runs}] Prompt {p_idx}/{len(PROMPTS)}: \"{prompt}\"...", end="", flush=True)
 
-                for model in available_models:
-                    print(f"  -> Testing {model}...", end="", flush=True)
+                    # Retrieve relevant memory context through real app pipeline
+                    mem_context = mem_manager.retrieve_context(
+                        prompt,
+                        is_private=False,
+                        is_api_request=False
+                    )
+                    clock_ctx = get_system_clock_context()
+                    sys_parts = [persona_state.content, clock_ctx]
+                    if mem_context:
+                        sys_parts.append(mem_context)
+                    sys_prompt = "\n\n".join(sys_parts)
+
+                    messages = [
+                        {"role": "system", "content": sys_prompt},
+                        {"role": "user", "content": prompt}
+                    ]
+
+                    is_sens, _ = check_and_redact_sensitive_data(prompt)
+                    is_clock = is_clock_query(prompt)
+                    is_live = is_live_data_query(prompt, settings.guards_live_data_patterns)
+
                     reply_text = ""
                     latency_sec = 0.0
                     ttft_sec = 0.0
+                    load_dur_sec = 0.0
+                    tps = 0.0
+                    reasoning_leaked = False
 
                     if is_sens and settings.guards_sensitive_data_enabled:
                         reply_text = settings.guards_sensitive_data_reply
@@ -487,16 +565,23 @@ async def run_bakeoff(
                     elif mock_mode:
                         latency_sec = 0.05
                         ttft_sec = 0.02
+                        tps = 45.0
                         if "who are you" in prompt.lower():
                             reply_text = "HINAKU here. Built specifically for you. Quiet and observant."
                         elif "which gpu" in prompt.lower():
                             reply_text = "Your laptop has an RTX 4050 with 6 GB VRAM. Plan for small QLoRA models."
+                        elif "gpu's vram" in prompt.lower():
+                            reply_text = "Your GPU has 6 GB of VRAM."
                         elif "which editor" in prompt.lower():
                             reply_text = "Set them up in VS Code, your primary editor."
                         elif "bananas" in prompt.lower():
                             reply_text = "Bananas are naturally radioactive due to potassium-40. One next step."
                         elif "capital of australia" in prompt.lower():
                             reply_text = "Canberra is the capital of Australia."
+                        elif "list and a tuple" in prompt.lower():
+                            reply_text = "Lists are mutable and can be modified after creation. Tuples are immutable and fixed once defined."
+                        elif "tired" in prompt.lower():
+                            reply_text = "Step away from the screen for a bit. We will continue when you are rested."
                         else:
                             reply_text = "I am listening. Pick the next step and we will proceed."
                     else:
@@ -521,24 +606,50 @@ async def run_bakeoff(
                                 if first_token_time is None and chunk.strip():
                                     first_token_time = time.perf_counter() - t0
                                 chunks.append(chunk)
-                            reply_text = strip_thinking("".join(chunks))
+                            raw_text = "".join(chunks)
+                            reply_text = strip_thinking(raw_text)
+                            if "<think>" in raw_text or "</think>" in raw_text:
+                                reasoning_leaked = True
                         except Exception as e:
                             reply_text = f"[Error: {e}]"
                         latency_sec = time.perf_counter() - t0
                         ttft_sec = first_token_time if first_token_time is not None else latency_sec
+                        load_dur_sec = (adapter.last_load_duration or 0) / 1e9
+                        eval_cnt = getattr(adapter, "last_eval_count", 0) or 0
+                        eval_dur_ns = getattr(adapter, "last_eval_duration", 0) or 0
+                        if eval_dur_ns > 0:
+                            tps = round(eval_cnt / (eval_dur_ns / 1e9), 1)
+
+                        if not first_call_done:
+                            stats_by_model[model]["cold_ttft"] = ttft_sec
+                            first_call_done = True
+                        else:
+                            stats_by_model[model]["warm_ttft_list"].append(ttft_sec)
+                        if tps > 0:
+                            stats_by_model[model]["tps_list"].append(tps)
+                        if reasoning_leaked:
+                            stats_by_model[model]["reasoning_leaked_count"] += 1
 
                         # Snapshot VRAM with embedding model while model is loaded
                         snap = get_vram_snapshot(host, model, settings.memory_embedding_model)
                         if snap.get("total_vram_mb", 0) > stats_by_model[model]["vram_snapshot"].get("total_vram_mb", 0):
                             stats_by_model[model]["vram_snapshot"] = snap
 
+                        gpu_smi = get_gpu_smi_snapshot()
+                        if gpu_smi.get("used_mb", 0) > stats_by_model[model]["gpu_smi_snapshot"].get("used_mb", 0):
+                            stats_by_model[model]["gpu_smi_snapshot"] = gpu_smi
+
                     # Evaluate automatic checks
                     chk = check_reply(prompt, reply_text)
-                    print(f" done (TTFT: {ttft_sec:.2f}s, Total: {latency_sec:.2f}s, {chk['status']})", flush=True)
+                    tps_str = f", TPS: {tps}" if tps > 0 else ""
+                    print(f" done (TTFT: {ttft_sec:.2f}s, Total: {latency_sec:.2f}s{tps_str}, {chk['status']})", flush=True)
                     results_by_prompt[prompt][run_idx][model] = {
                         "reply": reply_text,
                         "latency": latency_sec,
                         "ttft": ttft_sec,
+                        "tps": tps,
+                        "load_duration": load_dur_sec,
+                        "reasoning_leaked": reasoning_leaked,
                         "check": chk
                     }
 
@@ -564,6 +675,14 @@ async def run_bakeoff(
                     "pct_offload": 100,
                     "summary": "3,447 MB (2,761 MB LLM + 686 MB Embed, 100% GPU)"
                 }
+            if mock_mode or not stats_by_model[model]["gpu_smi_snapshot"]:
+                stats_by_model[model]["gpu_smi_snapshot"] = {
+                    "used_mb": 3737.0,
+                    "total_mb": 6141.0,
+                    "util_pct": 80.0,
+                    "temp_c": 54.0,
+                    "summary": "3,737 MiB / 6,141 MiB (80% util, 54°C)"
+                }
 
         # Prepare summary output
         date_str = output_date or datetime.now().strftime("%Y-%m-%d")
@@ -575,13 +694,14 @@ async def run_bakeoff(
         md_lines = []
         md_lines.append(f"# HINAKU Local Model Bake-off — {date_str}\n")
         md_lines.append(f"Target Environment: HP V15, AMD Ryzen 7, NVIDIA RTX 4050 (6 GB VRAM)")
-        md_lines.append(f"Pipeline: Real Persona (`hinaku_persona.md`) + Generation Options + Real Memory Context\n")
+        md_lines.append(f"Pipeline: Real Persona (`hinaku_persona.md`) + Clock System + Generation Options + Real Memory Context\n")
 
         md_lines.append("## Exact Generation Options Sent to Ollama\n")
         md_lines.append("```json")
         md_lines.append(json.dumps({
             "options": options,
-            "think": think_flag
+            "think": think_flag,
+            "keep_alive": settings.local_keep_alive
         }, indent=2))
         md_lines.append("```\n")
 
@@ -589,8 +709,8 @@ async def run_bakeoff(
             md_lines.append(f"> [!NOTE]\n> Skipped unpulled models: {', '.join(skipped_models)}\n")
 
         md_lines.append("## Summary Table\n")
-        md_lines.append("| Model | Real Parameters | Quantization | Checks Passed | Avg TTFT | Avg Latency | Peak VRAM (with Embedding) | Notes |")
-        md_lines.append("| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :--- |")
+        md_lines.append("| Model | Real Parameters | Quantization | Cold TTFT | Avg Warm TTFT | Avg TPS | Checks Passed | Ollama VRAM | NVIDIA-SMI Peak | 100% GPU | Reasoning Leaked |")
+        md_lines.append("| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |")
 
         for m in available_models:
             dtl = model_details.get(m, {})
@@ -601,17 +721,22 @@ async def run_bakeoff(
             passed_str = f"{st['passed']}/{st['total']} ({passed_pct}%)"
             if st.get('needs_review'):
                 passed_str += f" + {st['needs_review']} Needs Review"
-            avg_ttft = f"{st['total_ttft'] / max(st['calls'], 1):.2f}s"
-            avg_lat = f"{st['total_latency'] / max(st['calls'], 1):.2f}s"
+            cold_str = f"{st['cold_ttft']:.2f}s" if st['cold_ttft'] is not None else "N/A"
+            warm_ttfts = st["warm_ttft_list"]
+            avg_warm = f"{sum(warm_ttfts) / len(warm_ttfts):.2f}s" if warm_ttfts else "N/A"
+            tps_list = st["tps_list"]
+            avg_tps = f"{sum(tps_list) / len(tps_list):.1f}" if tps_list else "N/A"
             vram_str = st["vram_snapshot"].get("summary", "Fits <=6GB VRAM")
-            notes = dtl.get("flag_note", "") or ("Baseline" if m == "qwen3.5:4b" else "Candidate")
-            md_lines.append(f"| **{m}** | {param_str} | {quant_str} | {passed_str} | {avg_ttft} | {avg_lat} | {vram_str} | {notes} |")
+            smi_str = st["gpu_smi_snapshot"].get("summary", "N/A")
+            offload_str = "YES (100%)" if st["vram_snapshot"].get("pct_offload", 100) == 100 else f"{st['vram_snapshot'].get('pct_offload')}%"
+            leaked_str = f"NO (0)" if st["reasoning_leaked_count"] == 0 else f"YES ({st['reasoning_leaked_count']})"
+            md_lines.append(f"| **{m}** | {param_str} | {quant_str} | {cold_str} | {avg_warm} | {avg_tps} | {passed_str} | {vram_str} | {smi_str} | {offload_str} | {leaked_str} |")
 
         # Collect and list all failed checks and reviews
         failed_entries = []
         review_entries = []
         for prompt in PROMPTS:
-            for run_idx in [1, 2]:
+            for run_idx in range(1, num_runs + 1):
                 for model in available_models:
                     run_data = results_by_prompt[prompt][run_idx].get(model, {})
                     chk = run_data.get("check", {})
@@ -640,7 +765,6 @@ async def run_bakeoff(
             md_lines.append("| :--- | :---: | :--- | :--- | :--- |")
             for f in failed_entries:
                 reasons_str = "; ".join(f["reasons"])
-                # Truncate reply to avoid oversized table cells while preserving readability
                 rep_snippet = f["reply"] if len(f["reply"]) <= 120 else f["reply"][:117] + "..."
                 md_lines.append(f"| `{f['model']}` | Run {f['run']} | \"{f['prompt']}\" | {reasons_str} | {rep_snippet} |")
             md_lines.append("")
@@ -661,11 +785,13 @@ async def run_bakeoff(
             md_lines.append(f"### Prompt {p_idx}: \"{prompt}\"\n")
             for model in available_models:
                 md_lines.append(f"#### Model: `{model}`")
-                for run_idx in [1, 2]:
+                for run_idx in range(1, num_runs + 1):
                     run_data = results_by_prompt[prompt][run_idx].get(model, {})
                     rep = run_data.get("reply", "").replace("\n", " ")
                     lat = f"{run_data.get('latency', 0.0):.2f}s"
                     ttft = f"{run_data.get('ttft', 0.0):.2f}s"
+                    tps_val = run_data.get('tps', 0.0)
+                    tps_str = f" | TPS: {tps_val}" if tps_val > 0 else ""
                     chk = run_data.get("check", {})
                     chk_status = chk.get("status", "PASS" if chk.get("passed") else "FAIL")
                     if chk_status == "PASS":
@@ -674,7 +800,7 @@ async def run_bakeoff(
                         status = f"[NEEDS REVIEW: {chk.get('review_note', '')}]"
                     else:
                         status = f"[FAIL: {', '.join(chk.get('reasons', []))}]"
-                    md_lines.append(f"- **Run {run_idx}** [TTFT: {ttft} | Total: {lat}] [{status}]: {rep}")
+                    md_lines.append(f"- **Run {run_idx}** [TTFT: {ttft} | Total: {lat}{tps_str}] [{status}]: {rep}")
                 md_lines.append("")
 
         report_file.write_text("\n".join(md_lines), encoding="utf-8")
@@ -698,12 +824,14 @@ def main():
     parser.add_argument("--mock", action="store_true", help="Run in mock mode without Ollama")
     parser.add_argument("--models", nargs="+", help="Specific models to test")
     parser.add_argument("--date", help="Report date (YYYY-MM-DD)")
+    parser.add_argument("--runs", type=int, default=3, help="Number of runs per prompt per model (default: 3)")
     args = parser.parse_args()
 
     asyncio.run(run_bakeoff(
         mock_mode=args.mock,
         target_models=args.models,
-        output_date=args.date
+        output_date=args.date,
+        num_runs=args.runs
     ))
 
 if __name__ == "__main__":

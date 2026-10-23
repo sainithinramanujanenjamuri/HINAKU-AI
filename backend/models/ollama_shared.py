@@ -119,3 +119,4 @@ def log_ollama_call(
         print(line, flush=True)
 
     return line
+

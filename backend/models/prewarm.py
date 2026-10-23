@@ -36,7 +36,7 @@ async def prewarm_local_models():
             }
             body = json.dumps(payload).encode("utf-8")
             req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=120) as resp:
+            with urllib.request.urlopen(req, timeout=5) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
                 load_dur = data.get("load_duration", 0)
                 total_dur = data.get("total_duration", 0)
@@ -65,7 +65,7 @@ async def prewarm_local_models():
             }
             body = json.dumps(payload).encode("utf-8")
             req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=120) as resp:
+            with urllib.request.urlopen(req, timeout=5) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
                 load_dur = data.get("load_duration", 0)
                 total_dur = data.get("total_duration", 0)

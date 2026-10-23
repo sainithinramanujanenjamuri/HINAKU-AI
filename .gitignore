@@ -2,6 +2,8 @@
 .env
 
 # Private data and large artifacts
+tools/
+.temp_smoke/
 data/*
 !data/bakeoff/
 models/

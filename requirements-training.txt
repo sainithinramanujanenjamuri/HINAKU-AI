@@ -6,3 +6,4 @@ trl==0.12.2
 bitsandbytes==0.43.3
 accelerate==1.2.1
 datasets==3.2.0
+sentencepiece==0.2.2

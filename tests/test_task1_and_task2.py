@@ -46,3 +46,4 @@ def test_check_export_tools_detection():
     if not tools_ok:
         names = [m["name"] for m in missing]
         assert any("gguf" in n.lower() for n in names)
+

@@ -1,4 +1,4 @@
-"""
+r"""
 scripts/train_smoke.py: Standalone QLoRA Smoke Test Runner.
 Executes 20 training steps on a tiny synthetic dataset, measures peak VRAM,
 calculates time per step, and checks fit within 6 GB VRAM.
@@ -85,7 +85,18 @@ def check_export_tools() -> Tuple[bool, List[Dict[str, str]]]:
             "command": f"{sys.executable} -m pip install gguf"
         })
 
-    # 2. Check for convert_hf_to_gguf.py
+    # 2. Check for python 'sentencepiece' package (required by convert_hf_to_gguf for tokenizer vocab)
+    try:
+        import sentencepiece  # type: ignore
+    except ImportError:
+        missing.append({
+            "name": "Python 'sentencepiece' package",
+            "purpose": "Required by convert_hf_to_gguf.py to extract and serialize model tokenizer vocabularies.",
+            "download_source": "PyPI (`pip install sentencepiece` or https://pypi.org/project/sentencepiece/)",
+            "command": f"{sys.executable} -m pip install sentencepiece"
+        })
+
+    # 3. Check for convert_hf_to_gguf.py
     candidate_scripts = [
         ROOT_DIR / "tools" / "llama.cpp" / "convert_hf_to_gguf.py",
         ROOT_DIR / "convert_hf_to_gguf.py",
@@ -165,24 +176,34 @@ def run_export_pipeline(
     # Step 1: Merge LoRA Adapter into Base Model
     print("\n[Step 1/5] Merging smoke LoRA adapter into base model on CPU...", flush=True)
     t0 = time.perf_counter()
+    import gc
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
     from peft import PeftModel
 
+    print(" -> [1a] Loading base model on CPU (float16)...", flush=True)
     base_model = AutoModelForCausalLM.from_pretrained(
         base_model_id,
         torch_dtype=torch.float16,
         device_map="cpu",
         low_cpu_mem_usage=True
     )
+    print(" -> [1b] Loading tokenizer...", flush=True)
     tokenizer = AutoTokenizer.from_pretrained(base_model_id)
 
+    print(" -> [1c] Attaching LoRA adapter to base model...", flush=True)
     peft_model = PeftModel.from_pretrained(base_model, str(adapter_path))
+    print(" -> [1d] Merging and unloading adapter weights...", flush=True)
     merged_model = peft_model.merge_and_unload()
 
+    print(" -> [1e] Saving merged model and tokenizer to temp directory...", flush=True)
     merged_dir.mkdir(parents=True, exist_ok=True)
     merged_model.save_pretrained(str(merged_dir))
     tokenizer.save_pretrained(str(merged_dir))
+    del peft_model
+    del merged_model
+    del base_model
+    gc.collect()
     timings["merge_seconds"] = round(time.perf_counter() - t0, 2)
     print(f" -> Merged model saved to temp dir in {timings['merge_seconds']}s.")
 
@@ -200,7 +221,7 @@ def run_export_pipeline(
         "--outfile", str(gguf_f16_path),
         "--outtype", "f16"
     ]
-    res_conv = subprocess.run(cmd_conv, capture_output=True, text=True)
+    res_conv = subprocess.run(cmd_conv, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if res_conv.returncode != 0:
         raise RuntimeError(f"GGUF conversion failed: {res_conv.stderr}")
     timings["convert_seconds"] = round(time.perf_counter() - t0, 2)
@@ -216,7 +237,7 @@ def run_export_pipeline(
         str(gguf_q4_path),
         "Q4_K_M"
     ]
-    res_quant = subprocess.run(cmd_quant, capture_output=True, text=True)
+    res_quant = subprocess.run(cmd_quant, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if res_quant.returncode != 0:
         raise RuntimeError(f"Quantization failed: {res_quant.stderr}")
     timings["quantize_seconds"] = round(time.perf_counter() - t0, 2)
@@ -228,7 +249,7 @@ def run_export_pipeline(
     with open(modelfile_path, "w", encoding="utf-8") as f:
         f.write(f"FROM {str(gguf_q4_path)}\nPARAMETER temperature 0.6\n")
 
-    res_create = subprocess.run(["ollama", "create", "hinaku-smoke", "-f", str(modelfile_path)], capture_output=True, text=True)
+    res_create = subprocess.run(["ollama", "create", "hinaku-smoke", "-f", str(modelfile_path)], capture_output=True, text=True, encoding="utf-8", errors="replace")
     if res_create.returncode != 0:
         raise RuntimeError(f"Ollama registration failed: {res_create.stderr}")
     timings["ollama_register_seconds"] = round(time.perf_counter() - t0, 2)
@@ -282,8 +303,10 @@ def run_smoke_test(steps: int = 20, max_seq_len: int = 256, export: bool = False
     print(f" -> GPU Present: {gpu_name} ({vram_gb} GB total)")
     print(f" -> Meets 5.5 GB minimum: {preflight['passed']}")
 
-    # 2. Setup Temporary Working Directory
-    temp_dir_obj = tempfile.TemporaryDirectory(prefix="hinaku_smoke_")
+    # 2. Setup Temporary Working Directory on workspace drive (with ample free disk space)
+    temp_base = ROOT_DIR / ".temp_smoke"
+    temp_base.mkdir(parents=True, exist_ok=True)
+    temp_dir_obj = tempfile.TemporaryDirectory(prefix="hinaku_smoke_", dir=str(temp_base))
     temp_path = Path(temp_dir_obj.name)
     data_path = temp_path / "smoke_dataset.jsonl"
     out_dir = temp_path / "smoke_adapter"
@@ -433,6 +456,14 @@ def run_smoke_test(steps: int = 20, max_seq_len: int = 256, export: bool = False
         peak_vram_bytes = torch.cuda.max_memory_allocated()
         peak_vram_gb = round(peak_vram_bytes / (1024 ** 3), 3)
 
+        # Release training model and trainer from memory before export/conversion
+        del trainer
+        del model
+        import gc
+        gc.collect()
+        if cuda_available:
+            torch.cuda.empty_cache()
+
     else:
         # Simulation / dry-run mode when CUDA is not present
         print(" -> [SIMULATION] Simulating 20 training steps (CPU / mock environment)...")
@@ -462,21 +493,23 @@ def run_smoke_test(steps: int = 20, max_seq_len: int = 256, export: bool = False
     print(f" Output Location:      {temp_path}")
     print("-" * 70)
 
-    # Export step if requested
     export_result = None
-    if export:
-        export_result = run_export_pipeline(
-            adapter_path=out_dir,
-            base_model_id=base_model_id,
-            temp_dir=temp_path
-        )
-
-    # Clean up temp folder
     try:
-        temp_dir_obj.cleanup()
-        print(" -> Temporary smoke test directory cleaned up successfully.")
-    except Exception:
-        pass
+        if export:
+            export_result = run_export_pipeline(
+                adapter_path=out_dir,
+                base_model_id=base_model_id,
+                temp_dir=temp_path
+            )
+    finally:
+        # Clean up temp folder
+        try:
+            temp_dir_obj.cleanup()
+            if temp_base.is_dir() and not any(temp_base.iterdir()):
+                temp_base.rmdir()
+            print(" -> Temporary smoke test directory cleaned up successfully.")
+        except Exception:
+            pass
 
     return {
         "steps": steps,
@@ -494,4 +527,10 @@ if __name__ == "__main__":
     parser.add_argument("--export", action="store_true", help="Merge, convert to GGUF, quantize, and test inference in Ollama")
     args = parser.parse_args()
 
-    run_smoke_test(steps=args.steps, export=args.export)
+    try:
+        run_smoke_test(steps=args.steps, export=args.export)
+    except Exception as e:
+        import traceback
+        print(f"\n[FATAL ERROR] Smoke test failed: {e}", file=sys.stderr)
+        traceback.print_exc()
+        sys.exit(1)

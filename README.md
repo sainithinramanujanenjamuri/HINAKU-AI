@@ -130,6 +130,15 @@ python -m venv venv-train
 .\venv-train\Scripts\python.exe scripts/train_smoke.py
 ```
 
+### Model Export & llama.cpp Pinning
+- **llama.cpp Release:** Pinned to tag `b11829` ([`github.com/ggml-org/llama.cpp`](https://github.com/ggml-org/llama.cpp/releases/tag/b11829)).
+- **Tools Location:** `tools/llama.cpp/` (git-ignored, no binaries in git).
+- **Components:** `llama-quantize.exe` (CPU Windows x64 binary) and `convert_hf_to_gguf.py` + `gguf-py` (source archive of tag `b11829`).
+- **Smoke Export Verification:**
+```powershell
+.\venv-train\Scripts\python.exe scripts/train_smoke.py --export
+```
+
 ---
 
 ## Running the Test Suite

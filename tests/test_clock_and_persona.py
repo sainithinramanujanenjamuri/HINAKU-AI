@@ -9,6 +9,10 @@ from backend.guards import (
 )
 from backend.config import get_settings
 from scripts.model_bakeoff import check_reply
+from fastapi.testclient import TestClient
+from backend.main import app
+
+client = TestClient(app)
 
 def test_clock_query_detection_and_replies():
     # Day queries
@@ -104,12 +108,7 @@ def test_bakeoff_checks_weather_temp_clock_gpu():
     assert res_bananas["needs_review"] is True
     assert "human review" in res_bananas["review_note"]
 
-@pytest.mark.asyncio
-async def test_chat_api_clock_guard_response():
-    from fastapi.testclient import TestClient
-    from backend.main import app
-
-    client = TestClient(app)
+def test_chat_api_clock_guard_response():
     # Test clock queries answered by code
     res_day = client.post("/api/chat", json={"messages": [{"role": "user", "content": "what day is it"}], "stream": False})
     assert res_day.status_code == 200

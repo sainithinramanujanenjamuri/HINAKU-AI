@@ -23,6 +23,8 @@ class OllamaAdapter:
 
         self.last_load_duration: int = 0
         self.last_total_duration: int = 0
+        self.last_eval_count: int = 0
+        self.last_eval_duration: int = 0
 
     async def check_health(self) -> Dict[str, bool]:
         url = f"{self.host}/api/tags"
@@ -108,6 +110,8 @@ class OllamaAdapter:
                                 total_duration_ns = chunk.get("total_duration", 0)
                                 self.last_load_duration = load_duration_ns
                                 self.last_total_duration = total_duration_ns
+                                self.last_eval_count = chunk.get("eval_count", 0)
+                                self.last_eval_duration = chunk.get("eval_duration", 0)
                                 log_ollama_call(
                                     call_type=call_type,
                                     model=target_model,
