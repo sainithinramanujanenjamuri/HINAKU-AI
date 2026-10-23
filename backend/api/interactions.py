@@ -39,6 +39,12 @@ async def update_interaction_feedback_endpoint(interaction_id: str, req: Feedbac
         "edited_answer": inter.get("edited_answer") if inter else req.edited_answer
     }
 
+@router.get("/interactions/ratings-by-model")
+async def ratings_by_model_endpoint():
+    """Return aggregated feedback and performance metrics per model."""
+    hm = get_history_mgr()
+    return hm.get_ratings_by_model()
+
 @router.get("/interactions/{interaction_id}")
 async def get_interaction_endpoint(interaction_id: str):
     hm = get_history_mgr()

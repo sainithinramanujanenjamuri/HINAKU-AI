@@ -113,6 +113,7 @@
             rows="1"
             autofocus
           ></textarea>
+          <button id="cancel-button" class="cancel-btn hidden" title="Cancel generation">✕ Stop</button>
           <button id="send-button" class="action-btn send-btn" title="Send message (Enter)">
             <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
               <line x1="22" y1="2" x2="11" y2="13"></line>
@@ -121,6 +122,13 @@
           </button>
         </div>
         <div class="footer-meta">
+          <label class="think-harder-toggle" title="Think harder: send extended reasoning tokens to supported models">
+            <input type="checkbox" id="think-harder-checkbox" />
+            <span class="think-label">🧠 Think harder</span>
+          </label>
+          <span id="thinking-indicator" class="thinking-indicator hidden">
+            <span class="pulse-dot"></span> Thinking...
+          </span>
           <span class="hint">HP V15 &bull; RTX 4050 &bull; <span id="footer-backend">Local inference</span></span>
         </div>
       </footer>
@@ -187,6 +195,31 @@
             </div>
           </div>
 
+          <!-- Local Model Selector (Part 2) -->
+          <div class="settings-group">
+            <div class="setting-row">
+              <div>
+                <label class="settings-label" for="setting-local-model">Local Model</label>
+                <p class="setting-desc">Primary local model used for chat, verification, and memory extraction</p>
+              </div>
+              <select id="setting-local-model" class="model-select-dropdown"></select>
+            </div>
+          </div>
+
+          <!-- Quality Mode Toggle (Part 3) -->
+          <div class="settings-group">
+            <div class="setting-row">
+              <div>
+                <label class="settings-label">Quality Mode</label>
+                <p class="setting-desc">Two-pass verification checks clock, memory, and persona limits</p>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="setting-quality-mode" checked />
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+
           <!-- Memory Toggle -->
           <div class="settings-group">
             <div class="setting-row">
@@ -222,6 +255,29 @@
               <button id="btn-export-data" class="secondary-btn">Export All Data</button>
               <button id="btn-clear-memory" class="secondary-btn warning-btn">Clear Memory</button>
               <button id="btn-wipe-all" class="secondary-btn danger-btn">Wipe All Data</button>
+            </div>
+          </div>
+
+          <!-- Ratings by Model (Part 2) -->
+          <div class="settings-group">
+            <label class="settings-label">Ratings by Model</label>
+            <p class="setting-desc">Feedback ratings and average latency from past interactions</p>
+            <div class="ratings-table-wrapper">
+              <table class="ratings-table">
+                <thead>
+                  <tr>
+                    <th>Model</th>
+                    <th>Total</th>
+                    <th>👍</th>
+                    <th>👎</th>
+                    <th>Edits</th>
+                    <th>Avg Latency</th>
+                  </tr>
+                </thead>
+                <tbody id="ratings-by-model-body">
+                  <tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 12px;">Loading ratings...</td></tr>
+                </tbody>
+              </table>
             </div>
           </div>
 

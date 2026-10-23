@@ -106,6 +106,12 @@ class ChatHistoryManager:
                     backend TEXT,
                     feedback TEXT,
                     edited_answer TEXT,
+                    draft_reply TEXT,
+                    verified INTEGER DEFAULT 0,
+                    latency_ms INTEGER DEFAULT 0,
+                    verify_ms INTEGER DEFAULT 0,
+                    think_ms INTEGER DEFAULT 0,
+                    memory_ms INTEGER DEFAULT 0,
                     created_at TEXT
                 );
 
@@ -126,6 +132,16 @@ class ChatHistoryManager:
             int_cols = [c["name"] for c in conn.execute("PRAGMA table_info(interactions)").fetchall()]
             if "message_id" not in int_cols:
                 conn.execute("ALTER TABLE interactions ADD COLUMN message_id TEXT")
+            for col, col_type in [
+                ("draft_reply", "TEXT"),
+                ("verified", "INTEGER DEFAULT 0"),
+                ("latency_ms", "INTEGER DEFAULT 0"),
+                ("verify_ms", "INTEGER DEFAULT 0"),
+                ("think_ms", "INTEGER DEFAULT 0"),
+                ("memory_ms", "INTEGER DEFAULT 0"),
+            ]:
+                if col not in int_cols:
+                    conn.execute(f"ALTER TABLE interactions ADD COLUMN {col} {col_type}")
 
             conn.execute("CREATE INDEX IF NOT EXISTS idx_interactions_msg ON interactions (message_id)")
             conn.execute("""
@@ -304,7 +320,13 @@ class ChatHistoryManager:
         backend: str,
         feedback: Optional[str] = None,
         edited_answer: Optional[str] = None,
-        message_id: Optional[str] = None
+        message_id: Optional[str] = None,
+        draft_reply: Optional[str] = None,
+        verified: bool = False,
+        latency_ms: int = 0,
+        verify_ms: int = 0,
+        think_ms: int = 0,
+        memory_ms: int = 0
     ) -> str:
         interaction_id = str(uuid.uuid4())
         now = datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -312,13 +334,49 @@ class ChatHistoryManager:
             conn.execute(
                 """
                 INSERT INTO interactions (
-                    id, conversation_id, message_id, user_prompt, answer, model, backend, feedback, edited_answer, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    id, conversation_id, message_id, user_prompt, answer, model, backend,
+                    feedback, edited_answer, draft_reply, verified, latency_ms, verify_ms,
+                    think_ms, memory_ms, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (interaction_id, conv_id, message_id, user_prompt, answer, model, backend, feedback, edited_answer, now)
+                (
+                    interaction_id, conv_id, message_id, user_prompt, answer, model, backend,
+                    feedback, edited_answer, draft_reply, int(verified), latency_ms, verify_ms,
+                    think_ms, memory_ms, now
+                )
             )
             conn.commit()
         return interaction_id
+
+    def get_ratings_by_model(self) -> Dict[str, Any]:
+        """Aggregate ratings and latency statistics per model."""
+        with self._get_connection() as conn:
+            rows = conn.execute("""
+                SELECT
+                    COALESCE(model, 'unknown') as model,
+                    COUNT(*) as total_interactions,
+                    SUM(CASE WHEN feedback = 'thumbs_up' THEN 1 ELSE 0 END) as thumbs_up,
+                    SUM(CASE WHEN feedback = 'thumbs_down' THEN 1 ELSE 0 END) as thumbs_down,
+                    SUM(CASE WHEN edited_answer IS NOT NULL AND edited_answer != '' THEN 1 ELSE 0 END) as edits,
+                    ROUND(AVG(CASE WHEN latency_ms > 0 THEN latency_ms ELSE NULL END), 1) as avg_latency_ms
+                FROM interactions
+                WHERE model IS NOT NULL AND model != '' AND backend != 'guard'
+                GROUP BY model
+                ORDER BY total_interactions DESC
+            """).fetchall()
+            return {
+                "ratings": [
+                    {
+                        "model": r["model"],
+                        "total": r["total_interactions"],
+                        "thumbs_up": r["thumbs_up"] or 0,
+                        "thumbs_down": r["thumbs_down"] or 0,
+                        "edits": r["edits"] or 0,
+                        "avg_latency_ms": r["avg_latency_ms"] if r["avg_latency_ms"] is not None else 0.0
+                    }
+                    for r in rows
+                ]
+            }
 
     def get_message(self, message_id: str) -> Optional[Dict[str, Any]]:
         with self._get_connection() as conn:

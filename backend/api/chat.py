@@ -1,6 +1,7 @@
 import json
+import time
 import uuid
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -11,6 +12,7 @@ from backend.models.router import ModelRouter
 from backend.persona import PersonaManager
 from backend.history import ChatHistoryManager, trim_history
 from backend.memory import MemoryStorage, MemoryExtractor, MemoryManager
+from backend.quality import verify_reply
 from backend.guards import (
     check_and_redact_sensitive_data,
     is_live_data_query,
@@ -90,6 +92,7 @@ class ChatRequest(BaseModel):
     model: Optional[str] = None
     stream: Optional[bool] = True
     is_private: Optional[bool] = None
+    think_harder: Optional[bool] = False
 
 class ChatResponse(BaseModel):
     role: str
@@ -101,6 +104,9 @@ class ChatResponse(BaseModel):
     notice: Optional[str] = None
     message_id: Optional[str] = None
     interaction_id: Optional[str] = None
+    verified: bool = False
+    think_harder_used: bool = False
+    latency_breakdown: Optional[Dict[str, int]] = None
 
 @router.get("/info")
 async def get_info():
@@ -416,12 +422,14 @@ async def chat_endpoint(req: ChatRequest, response: Response):
     is_api = (router_decision.target_backend == "api")
 
     # Retrieve memory context (only for local model requests per privacy rules)
+    t_mem_start = time.perf_counter()
     memory_context = memory_manager.retrieve_context(
         latest_user_text,
         is_private=is_private,
         is_api_request=is_api,
         send_personal_context=settings.api_send_personal_context
     )
+    memory_ms = int((time.perf_counter() - t_mem_start) * 1000)
 
     clock_context = get_system_clock_context()
     system_parts = [persona_state.content, clock_context]
@@ -436,6 +444,16 @@ async def chat_endpoint(req: ChatRequest, response: Response):
     # Re-read fresh API key if changed in environment
     api_adapter.api_key = settings.get_api_key()
 
+    target_model = req.model if (req.model and req.model in settings.allowed_local_models) else settings.default_local_model
+    target_opts = dict(settings.get_model_options(target_model))
+    think_harder_used = False
+    use_think = False
+
+    if req.think_harder and target_model in settings.supports_think_models:
+        use_think = True
+        think_harder_used = True
+        target_opts["num_predict"] = settings.think_harder_num_predict
+
     response.headers["X-Persona-Fallback"] = str(persona_state.is_fallback).lower()
     response.headers["X-Conversation-Id"] = conv_id
     if persona_state.notice:
@@ -445,7 +463,7 @@ async def chat_endpoint(req: ChatRequest, response: Response):
         async def event_generator():
             accumulated_chunks = []
             used_backend = "local"
-            used_model = settings.default_local_model
+            used_model = target_model
             stream_notice = persona_state.notice
 
             # Initial metadata payload
@@ -455,15 +473,20 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                 "persona_fallback": persona_state.is_fallback,
                 "notice": persona_state.notice,
                 "is_private": is_private,
-                "logged_by_provider": settings.api_logged_by_provider
+                "logged_by_provider": settings.api_logged_by_provider,
+                "think_harder_used": think_harder_used
             }
             yield f"data: {json.dumps(init_meta)}\n\n"
 
+            t_gen_start = time.perf_counter()
             async for event in model_router.stream_chat(
                 trimmed_messages,
                 user_prompt=latest_user_text,
                 is_private=is_private,
-                last_backend=last_backend
+                last_backend=last_backend,
+                override_model=target_model,
+                think=use_think,
+                options=target_opts
             ):
                 used_backend = event["backend"]
                 used_model = event["model"]
@@ -483,13 +506,44 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                 accumulated_chunks.append(event["chunk"])
                 yield f"data: {json.dumps(chunk_payload)}\n\n"
 
-            full_response = "".join(accumulated_chunks)
-            if full_response.strip():
+            gen_ms = int((time.perf_counter() - t_gen_start) * 1000)
+            draft_reply = "".join(accumulated_chunks)
+            final_reply = draft_reply
+            was_verified = False
+            verify_ms = 0
+
+            if draft_reply.strip() and used_backend == "local" and settings.quality_mode:
+                final_reply, was_verified, verify_ms = await verify_reply(
+                    draft=draft_reply,
+                    persona_rules=persona_state.content,
+                    clock_ctx=clock_context,
+                    memory_ctx=memory_context or "",
+                    local_adapter=local_adapter,
+                    model=used_model,
+                    options=target_opts,
+                    keep_alive=settings.local_keep_alive
+                )
+                if final_reply != draft_reply and was_verified:
+                    corr_payload = {
+                        "type": "correction",
+                        "final_content": final_reply,
+                        "conversation_id": conv_id
+                    }
+                    yield f"data: {json.dumps(corr_payload)}\n\n"
+
+            latency_breakdown = {
+                "generation_ms": gen_ms,
+                "verify_ms": verify_ms,
+                "think_ms": 0,
+                "memory_ms": memory_ms
+            }
+
+            if final_reply.strip():
                 # Persist message with model & backend
                 ast_msg = history_manager.add_message(
                     conv_id,
                     "assistant",
-                    full_response,
+                    final_reply,
                     model=used_model,
                     backend=used_backend
                 )
@@ -497,10 +551,16 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                 inter_id = history_manager.log_interaction(
                     conv_id=conv_id,
                     user_prompt=latest_user_text,
-                    answer=full_response,
+                    answer=final_reply,
                     model=used_model,
                     backend=used_backend,
-                    message_id=ast_msg["id"]
+                    message_id=ast_msg["id"],
+                    draft_reply=draft_reply,
+                    verified=was_verified,
+                    latency_ms=gen_ms + verify_ms,
+                    verify_ms=verify_ms,
+                    think_ms=0,
+                    memory_ms=memory_ms
                 )
                 # Background memory extraction using LOCAL model (never API)
                 if not is_private and settings.memory_enabled and settings.memory_extract_after_each_turn:
@@ -509,7 +569,7 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                         memory_manager.extract_and_store(
                             conversation_id=conv_id,
                             user_message=latest_user_text,
-                            assistant_message=full_response,
+                            assistant_message=final_reply,
                             is_private=is_private
                         )
                     )
@@ -520,7 +580,11 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                     "message_id": ast_msg["id"],
                     "interaction_id": inter_id,
                     "backend": used_backend,
-                    "model": used_model
+                    "model": used_model,
+                    "verified": was_verified,
+                    "think_harder_used": think_harder_used,
+                    "latency_breakdown": latency_breakdown,
+                    "final_reply": final_reply
                 }
                 yield f"data: {json.dumps(done_payload)}\n\n"
 
@@ -541,14 +605,18 @@ async def chat_endpoint(req: ChatRequest, response: Response):
     else:
         accumulated_chunks = []
         used_backend = "local"
-        used_model = settings.default_local_model
+        used_model = target_model
         used_notice = persona_state.notice
 
+        t_gen_start = time.perf_counter()
         async for event in model_router.stream_chat(
             trimmed_messages,
             user_prompt=latest_user_text,
             is_private=is_private,
-            last_backend=last_backend
+            last_backend=last_backend,
+            override_model=target_model,
+            think=use_think,
+            options=target_opts
         ):
             accumulated_chunks.append(event["chunk"])
             used_backend = event["backend"]
@@ -556,41 +624,74 @@ async def chat_endpoint(req: ChatRequest, response: Response):
             if event.get("notice"):
                 used_notice = event["notice"]
 
-        content = "".join(accumulated_chunks)
+        gen_ms = int((time.perf_counter() - t_gen_start) * 1000)
+        draft_reply = "".join(accumulated_chunks)
+        final_reply = draft_reply
+        was_verified = False
+        verify_ms = 0
+
+        if draft_reply.strip() and used_backend == "local" and settings.quality_mode:
+            final_reply, was_verified, verify_ms = await verify_reply(
+                draft=draft_reply,
+                persona_rules=persona_state.content,
+                clock_ctx=clock_context,
+                memory_ctx=memory_context or "",
+                local_adapter=local_adapter,
+                model=used_model,
+                options=target_opts,
+                keep_alive=settings.local_keep_alive
+            )
+
+        latency_breakdown = {
+            "generation_ms": gen_ms,
+            "verify_ms": verify_ms,
+            "think_ms": 0,
+            "memory_ms": memory_ms
+        }
+
         ast_msg = history_manager.add_message(
             conv_id,
             "assistant",
-            content,
+            final_reply,
             model=used_model,
             backend=used_backend
         )
         inter_id = history_manager.log_interaction(
             conv_id=conv_id,
             user_prompt=latest_user_text,
-            answer=content,
+            answer=final_reply,
             model=used_model,
             backend=used_backend,
-            message_id=ast_msg["id"]
+            message_id=ast_msg["id"],
+            draft_reply=draft_reply,
+            verified=was_verified,
+            latency_ms=gen_ms + verify_ms,
+            verify_ms=verify_ms,
+            think_ms=0,
+            memory_ms=memory_ms
         )
-        if content.strip():
+        if final_reply.strip():
             if not is_private and settings.memory_enabled and settings.memory_extract_after_each_turn:
                 import asyncio
                 asyncio.create_task(
                     memory_manager.extract_and_store(
                         conversation_id=conv_id,
                         user_message=latest_user_text,
-                        assistant_message=content,
+                        assistant_message=final_reply,
                         is_private=is_private
                     )
                 )
         return ChatResponse(
             role="assistant",
-            content=content,
+            content=final_reply,
             model=used_model,
             backend=used_backend,
             conversation_id=conv_id,
             persona_fallback=persona_state.is_fallback,
             notice=used_notice,
             message_id=ast_msg["id"],
-            interaction_id=inter_id
+            interaction_id=inter_id,
+            verified=was_verified,
+            think_harder_used=think_harder_used,
+            latency_breakdown=latency_breakdown
         )

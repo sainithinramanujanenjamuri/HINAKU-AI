@@ -13,6 +13,7 @@ class UpdateSettingsRequest(BaseModel):
     memory_enabled: Optional[bool] = None
     reduced_motion: Optional[bool] = None
     default_local_model: Optional[str] = None
+    quality_mode: Optional[bool] = None
 
 class WipeAllRequest(BaseModel):
     confirm: str
@@ -43,10 +44,21 @@ async def get_settings_endpoint():
         "reduced_motion": bool(settings.app.get("reduced_motion", False)),
         "default_local_model": settings.default_local_model,
         "allowed_local_models": settings.allowed_local_models,
+        "model_options": settings.model_options,
+        "quality_mode": settings.quality_mode,
         "api_provider": settings.api_provider,
         "api_model": settings.api_model,
         "api_ready": api_ready,
         "api_logged_by_provider": settings.api_logged_by_provider
+    }
+
+@router.get("/model-options")
+async def get_model_options_endpoint():
+    settings = get_settings()
+    return {
+        "default_local_model": settings.default_local_model,
+        "allowed_local_models": settings.allowed_local_models,
+        "model_options": settings.model_options
     }
 
 @router.post("")
@@ -70,9 +82,13 @@ async def update_settings_endpoint(req: UpdateSettingsRequest):
     if req.reduced_motion is not None:
         settings.app["reduced_motion"] = req.reduced_motion
 
+    if req.quality_mode is not None:
+        settings.local["quality_mode"] = req.quality_mode
+
     if req.default_local_model is not None:
-        if req.default_local_model in settings.allowed_local_models:
-            settings.local["default_model"] = req.default_local_model
+        if req.default_local_model not in settings.allowed_local_models:
+            raise HTTPException(status_code=400, detail=f"Model '{req.default_local_model}' is not in allowed_local_models")
+        settings.local["default_model"] = req.default_local_model
 
     return await get_settings_endpoint()
 

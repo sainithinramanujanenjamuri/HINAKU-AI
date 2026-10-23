@@ -437,6 +437,15 @@ document.addEventListener("DOMContentLoaded", () => {
     sendMessage();
   });
 
+  const cancelBtn = document.getElementById("cancel-button");
+  if (cancelBtn) {
+    cancelBtn.addEventListener("click", () => {
+      if (activeAbortController) {
+        activeAbortController.abort();
+      }
+    });
+  }
+
   function renderMessage(
     role,
     content,
@@ -696,9 +705,18 @@ document.addEventListener("DOMContentLoaded", () => {
     let assistantText = "";
     let lastMessageId = null;
     let lastBackend = "local";
+    let isVerified = false;
     const { msgDiv, metaDiv, bodyDiv } = renderMessage("assistant", "", true, "routing...", "local");
 
     activeAbortController = new AbortController();
+
+    const thinkHarderCheckbox = document.getElementById("think-harder-checkbox");
+    const cancelButton = document.getElementById("cancel-button");
+    const thinkingIndicator = document.getElementById("thinking-indicator");
+
+    const thinkHarderVal = thinkHarderCheckbox ? thinkHarderCheckbox.checked : false;
+    if (cancelButton) cancelButton.classList.remove("hidden");
+    if (thinkHarderVal && thinkingIndicator) thinkingIndicator.classList.remove("hidden");
 
     try {
       const response = await fetch("/api/chat", {
@@ -708,7 +726,8 @@ document.addEventListener("DOMContentLoaded", () => {
           messages: [{ role: "user", content: text }],
           conversation_id: currentConversationId,
           is_private: isCurrentChatPrivate,
-          stream: true
+          stream: true,
+          think_harder: thinkHarderVal
         }),
         signal: activeAbortController.signal
       });
@@ -763,7 +782,16 @@ document.addEventListener("DOMContentLoaded", () => {
                 bTag.textContent = getBackendBadgeText(parsed.backend, parsed.model);
               }
             }
+            if (parsed.verified !== undefined) {
+              isVerified = Boolean(parsed.verified);
+            }
+            if (parsed.type === "correction" && parsed.final_content) {
+              assistantText = parsed.final_content;
+              bodyDiv.innerHTML = formatMarkdown(assistantText);
+              attachCopyButtons(bodyDiv);
+            }
             if (parsed.chunk) {
+              if (thinkingIndicator) thinkingIndicator.classList.add("hidden");
               assistantText += parsed.chunk;
               bodyDiv.innerHTML = formatMarkdown(assistantText);
               const cursor = document.createElement("span");
@@ -782,6 +810,17 @@ document.addEventListener("DOMContentLoaded", () => {
       if (cursor) cursor.remove();
       attachCopyButtons(bodyDiv);
 
+      if (isVerified) {
+        let vTag = metaDiv.querySelector(".verified-mark");
+        if (!vTag) {
+          vTag = document.createElement("span");
+          vTag.className = "verified-mark";
+          vTag.title = "Verified by HINAKU Quality Guard";
+          vTag.textContent = "✓ verified";
+          metaDiv.appendChild(vTag);
+        }
+      }
+
       if (lastMessageId) {
         attachAssistantActions(msgDiv, bodyDiv, metaDiv, lastMessageId, lastBackend, null, null, assistantText);
       }
@@ -795,6 +834,8 @@ document.addEventListener("DOMContentLoaded", () => {
     } finally {
       isGenerating = false;
       sendButton.disabled = false;
+      if (cancelButton) cancelButton.classList.add("hidden");
+      if (thinkingIndicator) thinkingIndicator.classList.add("hidden");
       promptInput.focus();
     }
   }
@@ -990,6 +1031,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const settingsCloseBtn = document.getElementById("settings-close-btn");
   const settingMemoryEnabled = document.getElementById("setting-memory-enabled");
   const settingReducedMotion = document.getElementById("setting-reduced-motion");
+  const settingLocalModel = document.getElementById("setting-local-model");
+  const settingQualityMode = document.getElementById("setting-quality-mode");
+  const ratingsTableBody = document.getElementById("ratings-by-model-body");
   const btnExportData = document.getElementById("btn-export-data");
   const btnClearMemory = document.getElementById("btn-clear-memory");
   const btnWipeAll = document.getElementById("btn-wipe-all");
@@ -1008,13 +1052,54 @@ document.addEventListener("DOMContentLoaded", () => {
           r.checked = (r.value === s.router_mode);
         });
         if (settingMemoryEnabled) settingMemoryEnabled.checked = s.memory_enabled;
+        if (settingQualityMode && s.quality_mode !== undefined) {
+          settingQualityMode.checked = s.quality_mode;
+        }
         if (settingReducedMotion) {
           settingReducedMotion.checked = s.reduced_motion;
           applyReducedMotion(s.reduced_motion);
         }
+        if (settingLocalModel && s.allowed_local_models) {
+          settingLocalModel.innerHTML = "";
+          s.allowed_local_models.forEach(m => {
+            const opt = document.createElement("option");
+            opt.value = m;
+            opt.textContent = m;
+            if (m === s.default_local_model) opt.selected = true;
+            settingLocalModel.appendChild(opt);
+          });
+        }
+        loadRatingsByModel();
       }
     } catch (e) {
       console.error("Failed to load settings:", e);
+    }
+  }
+
+  async function loadRatingsByModel() {
+    if (!ratingsTableBody) return;
+    try {
+      const res = await fetch("/api/interactions/ratings-by-model");
+      if (res.ok) {
+        const data = await res.json();
+        const ratings = data.ratings || [];
+        if (ratings.length === 0) {
+          ratingsTableBody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 12px;">No interactions recorded yet.</td></tr>';
+          return;
+        }
+        ratingsTableBody.innerHTML = ratings.map(r => `
+          <tr>
+            <td><strong>${escapeHtml(r.model)}</strong></td>
+            <td>${r.total}</td>
+            <td style="color: #34d399;">${r.thumbs_up}</td>
+            <td style="color: #f87171;">${r.thumbs_down}</td>
+            <td style="color: #fde047;">${r.edits}</td>
+            <td>${r.avg_latency_ms > 0 ? r.avg_latency_ms + 'ms' : 'N/A'}</td>
+          </tr>
+        `).join("");
+      }
+    } catch (e) {
+      ratingsTableBody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #f87171; padding: 12px;">Failed to load ratings: ${e.message}</td></tr>`;
     }
   }
 
@@ -1024,6 +1109,27 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (settingsToggleBtn) settingsToggleBtn.addEventListener("click", openSettings);
   if (settingsCloseBtn) settingsCloseBtn.addEventListener("click", closeSettings);
+
+  if (settingLocalModel) {
+    settingLocalModel.addEventListener("change", async (e) => {
+      await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ default_local_model: e.target.value })
+      });
+      checkInfo();
+    });
+  }
+
+  if (settingQualityMode) {
+    settingQualityMode.addEventListener("change", async (e) => {
+      await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ quality_mode: e.target.checked })
+      });
+    });
+  }
 
   routerRadios.forEach(radio => {
     radio.addEventListener("change", async (e) => {

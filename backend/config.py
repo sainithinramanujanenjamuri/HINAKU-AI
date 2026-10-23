@@ -77,6 +77,39 @@ class Settings:
         return self.local.get("think", False)
 
     @property
+    def quality_mode(self) -> bool:
+        return bool(self.local.get("quality_mode", True))
+
+    @property
+    def think_harder_num_predict(self) -> int:
+        return int(self.local.get("think_harder_num_predict", 1200))
+
+    @property
+    def think_harder_timeout_seconds(self) -> float:
+        return float(self.local.get("think_harder_timeout_seconds", 60.0))
+
+    @property
+    def supports_think_models(self) -> list:
+        return self.local.get("supports_think", [
+            "qwen3.5:4b",
+            "qwen3:4b",
+            "bonsai-2:9b",
+            "bonsai-2:27b",
+            "qwen3.5:9b"
+        ])
+
+    @property
+    def model_options(self) -> Dict[str, Dict[str, Any]]:
+        return self.local.get("model_options", {})
+
+    def get_model_options(self, model_name: str) -> Dict[str, Any]:
+        """Return merged generation options for a specific model."""
+        base = dict(self.local_options)
+        if model_name in self.model_options:
+            base.update(self.model_options[model_name])
+        return base
+
+    @property
     def max_context_tokens(self) -> int:
         return int(self.local.get("max_context_tokens", 2500))
 

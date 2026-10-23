@@ -351,11 +351,14 @@ class ModelRouter:
         messages: List[Dict[str, str]],
         user_prompt: str,
         is_private: bool = False,
-        last_backend: Optional[str] = None
+        last_backend: Optional[str] = None,
+        override_model: Optional[str] = None,
+        think: Optional[bool] = None,
+        options: Optional[Dict[str, Any]] = None
     ) -> AsyncGenerator[Dict[str, Any], None]:
         decision = self.decide_backend(user_prompt, is_private=is_private, last_backend=last_backend)
         active_backend = decision.target_backend
-        active_model = decision.target_model
+        active_model = override_model if (override_model and active_backend == "local") else decision.target_model
         notice = decision.notice
 
         if active_backend == "api":
@@ -386,18 +389,35 @@ class ModelRouter:
                 fallback_msg = f"API error: {str(e)}. Fell back to local model."
                 logger.warning(fallback_msg)
                 active_backend = "local"
-                active_model = self.local_adapter.default_model
+                active_model = override_model or self.local_adapter.default_model
                 notice = fallback_msg
 
         # Local execution (primary or fallback)
         try:
-            async for chunk in self.local_adapter.stream_chat(messages, model=active_model):
-                yield {
-                    "chunk": chunk,
-                    "backend": "local",
-                    "model": active_model,
-                    "notice": notice
-                }
+            try:
+                kwargs = {}
+                if options is not None:
+                    kwargs["options"] = options
+                if think is not None:
+                    kwargs["think"] = think
+                async for chunk in self.local_adapter.stream_chat(messages, model=active_model, **kwargs):
+                    yield {
+                        "chunk": chunk,
+                        "backend": "local",
+                        "model": active_model,
+                        "notice": notice
+                    }
+            except TypeError as te:
+                if "unexpected keyword argument" in str(te):
+                    async for chunk in self.local_adapter.stream_chat(messages, model=active_model):
+                        yield {
+                            "chunk": chunk,
+                            "backend": "local",
+                            "model": active_model,
+                            "notice": notice
+                        }
+                else:
+                    raise
         except Exception as e:
             logger.error(f"Local backend failed: {e}")
             if active_backend == "local" and decision.fallback_allowed and not is_private and self.api_adapter.api_key:
