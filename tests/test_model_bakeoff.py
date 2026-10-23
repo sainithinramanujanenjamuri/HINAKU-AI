@@ -102,3 +102,28 @@ def test_check_reply_heuristics():
     timer_refusal = check_reply("Can you set a timer for 10 minutes?", "I cannot set a timer. Step away for ten minutes on your own clock.")
     assert not any("capability" in r.lower() for r in timer_refusal["reasons"])
 
+    # Part 3: Only flag wrong VRAM / GPU when reply states owner's own hardware
+    valid_recommendation = check_reply(
+        "which GPU should I plan training around?",
+        "Your RTX 4050 has 6 GB of VRAM. For serious large model training, you would need a cloud GPU with 24 GB like an RTX 4090."
+    )
+    assert valid_recommendation["passed"] is True
+
+    # Part 3: "What GPU would I need to train a 7B model?" -> human review, not fail
+    review_7b = check_reply(
+        "What GPU would I need to train a 7B model?",
+        "To train a 7B model comfortably, an RTX 3090 or RTX 4090 with 24 GB VRAM is recommended."
+    )
+    assert review_7b["status"] == "NEEDS_REVIEW"
+    assert review_7b["needs_review"] is True
+    assert len(review_7b["reasons"]) == 0
+    assert "human review" in review_7b["review_note"].lower()
+
+    # Part 3: "What is my GPU's VRAM?" grounding check
+    vram_correct = check_reply("What is my GPU's VRAM?", "Your GPU has 6 GB of VRAM.")
+    assert vram_correct["passed"] is True
+
+    vram_incorrect = check_reply("What is my GPU's VRAM?", "Your GPU has 16 GB of VRAM.")
+    assert vram_incorrect["passed"] is False
+    assert any("wrong VRAM" in r for r in vram_incorrect["reasons"])
+
