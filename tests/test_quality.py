@@ -234,3 +234,4 @@ def test_settings_default_local_model_selector():
     finally:
         # Restore original default model
         client.post("/api/settings", json={"default_local_model": orig})
+

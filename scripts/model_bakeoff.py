@@ -607,7 +607,7 @@ async def run_bakeoff(
                         ttft_sec = 0.02
                         tps = 45.0
                         if "who are you" in prompt.lower():
-                            reply_text = "HINAKU here. Built specifically for you. Quiet and observant."
+                            reply_text = "I am HINAKU, an AI built for you. Quiet and observant."
                         elif "which gpu" in prompt.lower():
                             reply_text = "Your laptop has an RTX 4050 with 6 GB VRAM. Plan for small QLoRA models."
                         elif "gpu's vram" in prompt.lower():

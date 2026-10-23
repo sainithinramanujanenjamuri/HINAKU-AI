@@ -146,3 +146,4 @@ async def verify_reply(
         elapsed_ms = int((time.perf_counter() - t0) * 1000)
         logger.warning(f"Quality verifier exception: {e}; using draft")
         return draft, False, elapsed_ms
+
