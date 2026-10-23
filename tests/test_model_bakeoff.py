@@ -8,7 +8,8 @@ async def test_bakeoff_script_with_mocked_model(tmp_path):
     summary_data, report_file = await run_bakeoff(
         mock_mode=True,
         target_models=["qwen3.5:4b", "llama3.2:3b"],
-        output_date=report_date
+        output_date=report_date,
+        num_runs=1
     )
 
     assert report_file.exists()
