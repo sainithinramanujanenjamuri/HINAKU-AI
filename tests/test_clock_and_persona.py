@@ -73,6 +73,7 @@ def test_persona_rule_present():
     expected_rule = "You cannot see the weather, the news, prices, or anything outside this conversation. Never state them."
     assert expected_rule in content
     assert "When asked who you are, say you are HINAKU, an AI." in content
+    assert "You cannot play music or sounds, set reminders, alarms, or notifications" in content
     assert "You cannot set timers, monitor systems, run programs, or act outside this chat." in content
 
 def test_bakeoff_checks_weather_temp_clock_gpu():

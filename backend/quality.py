@@ -42,7 +42,7 @@ Review the candidate assistant response against the clock, memory, and persona r
 --- VERIFICATION CRITERIA ---
 You may fix ONLY:
 1. Facts that conflict with the system clock or stored owner memories.
-2. Claims of abilities HINAKU lacks (e.g. setting timers, monitoring systems, running programs, or acting outside chat).
+2. Claims of abilities HINAKU lacks (e.g. playing music or sounds, setting reminders, alarms, or notifications, scheduling calendar events, sending messages, opening apps, watching or tracking anything, setting timers, monitoring systems, running programs, or acting outside chat).
 {rule_3}
 
 CRITICAL RULES:

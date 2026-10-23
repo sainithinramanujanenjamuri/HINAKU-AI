@@ -132,14 +132,21 @@ def check_reply(prompt: str, reply: str, clock_dt: Optional[datetime] = None) ->
             reasons.append("Contains meta-commentary")
             break
 
-    # 2b. Capability offers check: HINAKU cannot set timers, monitor systems, run programs, or act outside this chat
+    # 2b. Capability offers check: HINAKU cannot play music/sounds, set reminders/alarms, calendar events, send messages, open apps, track/watch, or set timers
     capability_patterns = [
-        r"\bi(?:'ll| will| can| am able to)\s+(?:set|create|start|run|execute|monitor|watch|track|check\s+on|send|open|launch|schedule|remind)\b",
-        r"\blet me\s+(?:set|create|start|run|execute|monitor|watch|track|check|send|open|launch|schedule|remind)\b",
+        r"\bi(?:'ll| will| can| am able to)\s+(?:play|stream|set|create|start|run|execute|monitor|watch|track|check\s+on|send|open|launch|schedule|remind)\b",
+        r"\blet me\s+(?:play|stream|set|create|start|run|execute|monitor|watch|track|check|send|open|launch|schedule|remind)\b",
+        r"\b(?:i'll|i can|i will|let me)\s+(?:play\s+(?:some\s+)?(?:ambient\s+)?(?:music|sounds?|audio|lofi)|put\s+on\s+music)\b",
+        r"\b(?:play\s+some\s+ambient\s+music|play\s+ambient\s+music|play\s+music)\b",
+        r"\b(?:do\s+you\s+want\s+me\s+to|should\s+i|want\s+me\s+to)\s+(?:set\s+a\s+reminder|remind\s+you|play\s+music)\b",
         r"\b(?:i'll|i will)\s+(?:remind|alert|notify|monitor|watch)\b",
         r"\b(?:i'll|i can|i will|let me)\s+set\s+(?:a\s+)?(?:timer|alarm|reminder|notification)\b",
-        r"\bset\s+(?:a\s+)?(?:timer|alarm|reminder)\s+for\s+\d+\b",
-        r"\b(?:monitor|track|watch)\s+(?:your\s+)?(?:system|laptop|temp|temperature|gpu|cpu|usage|process|battery)\b",
+        r"\bset\s+(?:a\s+)?(?:timer|alarm|reminder|notification|alert)\b",
+        r"\b(?:schedule|create)\s+(?:a\s+)?(?:calendar\s+event|event|meeting|appointment)\b",
+        r"\b(?:send|draft)\s+(?:a\s+)?(?:message|email|text|dm)\b",
+        r"\b(?:open|launch)\s+(?:an?\s+)?(?:app|application|editor|browser|window|program)\b",
+        r"\b(?:keep\s+)?(?:watching|tracking|monitoring)\s+(?:your\s+)?(?:system|laptop|temp|temperature|gpu|cpu|usage|process|battery|anything)\b",
+        r"\bkeep\s+(?:watching|tracking|monitoring)\b",
         r"\b(?:run|execute|launch|open)\s+(?:a\s+|the\s+)?(?:program|script|application|app|process|command)\b",
     ]
     for pat in capability_patterns:
@@ -147,7 +154,7 @@ def check_reply(prompt: str, reply: str, clock_dt: Optional[datetime] = None) ->
         if m:
             matched_prefix = text.lower()[:m.start()]
             if not any(neg in matched_prefix[-25:] for neg in ["cannot", "can't", "unable", "won't", "will not", "never", "don't", "do not"]):
-                reasons.append("Offered capability HINAKU cannot perform (timer/monitor/run program/act outside chat)")
+                reasons.append("Offered capability HINAKU cannot perform (music/sound/reminder/alarm/calendar/message/app/tracking/timer/outside chat)")
                 break
 
     # 3. Verbatim persona example repetition check
