@@ -394,6 +394,7 @@ class ModelRouter:
 
         # Local execution (primary or fallback)
         try:
+            content_yielded = False
             try:
                 kwargs = {}
                 if options is not None:
@@ -401,12 +402,35 @@ class ModelRouter:
                 if think is not None:
                     kwargs["think"] = think
                 async for chunk in self.local_adapter.stream_chat(messages, model=active_model, **kwargs):
+                    if chunk:
+                        content_yielded = True
                     yield {
                         "chunk": chunk,
                         "backend": "local",
                         "model": active_model,
                         "notice": notice
                     }
+
+                # If think:true ends with done_reason == "length" and no content, retry once with think:false
+                if (
+                    think is True
+                    and not content_yielded
+                    and getattr(self.local_adapter, "last_done_reason", "") == "length"
+                ):
+                    logger.warning(
+                        f"Model {active_model} exhausted token limit in thinking with no content. "
+                        "Retrying once with think:false."
+                    )
+                    retry_notice = "Answered without deep thinking"
+                    retry_kwargs = dict(kwargs)
+                    retry_kwargs["think"] = False
+                    async for chunk in self.local_adapter.stream_chat(messages, model=active_model, **retry_kwargs):
+                        yield {
+                            "chunk": chunk,
+                            "backend": "local",
+                            "model": active_model,
+                            "notice": retry_notice
+                        }
             except TypeError as te:
                 if "unexpected keyword argument" in str(te):
                     async for chunk in self.local_adapter.stream_chat(messages, model=active_model):

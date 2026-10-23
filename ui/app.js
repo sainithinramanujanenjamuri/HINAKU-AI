@@ -158,6 +158,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const res = await fetch("/api/info");
       if (res.ok) {
         const data = await res.json();
+        window.HINAKU_SETTINGS = data;
         const mode = data.router?.mode || "auto";
         const localModel = data.default_model || "qwen3.5:4b";
         modelBadge.textContent = `${mode} • ${localModel}`;
@@ -718,6 +719,14 @@ document.addEventListener("DOMContentLoaded", () => {
     if (cancelButton) cancelButton.classList.remove("hidden");
     if (thinkHarderVal && thinkingIndicator) thinkingIndicator.classList.remove("hidden");
 
+    const hardTimeoutSeconds = window.HINAKU_SETTINGS?.hard_timeout_seconds || 120;
+    const timeoutId = setTimeout(() => {
+      if (isGenerating && activeAbortController) {
+        console.warn(`Request exceeded ${hardTimeoutSeconds}s hard timeout. Aborting.`);
+        activeAbortController.abort();
+      }
+    }, hardTimeoutSeconds * 1000);
+
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
@@ -739,6 +748,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let streamDone = false;
 
       while (true) {
         const { value, done } = await reader.read();
@@ -754,6 +764,7 @@ document.addEventListener("DOMContentLoaded", () => {
           const dataStr = trimmed.slice(5).trim();
 
           if (dataStr === "[DONE]") {
+            streamDone = true;
             break;
           }
 
@@ -804,11 +815,20 @@ document.addEventListener("DOMContentLoaded", () => {
             console.error("Failed to parse SSE line:", line, e);
           }
         }
+
+        if (streamDone) {
+          break;
+        }
       }
 
       const cursor = bodyDiv.querySelector(".streaming-cursor");
       if (cursor) cursor.remove();
       attachCopyButtons(bodyDiv);
+
+      if (!assistantText.trim()) {
+        assistantText = "I am here. The thought did not resolve into words. Ask again or take the next step.";
+        bodyDiv.innerHTML = formatMarkdown(assistantText);
+      }
 
       if (isVerified) {
         let vTag = metaDiv.querySelector(".verified-mark");
@@ -828,10 +848,16 @@ document.addEventListener("DOMContentLoaded", () => {
       loadConversations();
 
     } catch (err) {
-      if (err.name !== "AbortError") {
+      if (err.name === "AbortError") {
+        if (!assistantText.trim()) {
+          assistantText = "Response was stopped or timed out. I am here when you are ready.";
+          bodyDiv.innerHTML = formatMarkdown(assistantText);
+        }
+      } else {
         bodyDiv.innerHTML = `<span style="color: #ef4444;">[Error: ${err.message}]</span>`;
       }
     } finally {
+      clearTimeout(timeoutId);
       isGenerating = false;
       sendButton.disabled = false;
       if (cancelButton) cancelButton.classList.add("hidden");

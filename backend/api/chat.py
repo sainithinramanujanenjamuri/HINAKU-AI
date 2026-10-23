@@ -118,6 +118,7 @@ async def get_info():
         "app_name": settings.app_name,
         "default_model": settings.default_local_model,
         "allowed_models": settings.allowed_local_models,
+        "hard_timeout_seconds": settings.hard_timeout_seconds,
         "provider": "ollama (local)",
         "ollama_status": health,
         "router": {
@@ -452,7 +453,7 @@ async def chat_endpoint(req: ChatRequest, response: Response):
     if req.think_harder and target_model in settings.supports_think_models:
         use_think = True
         think_harder_used = True
-        target_opts["num_predict"] = settings.think_harder_num_predict
+        target_opts["num_predict"] = settings.think_num_predict
 
     response.headers["X-Persona-Fallback"] = str(persona_state.is_fallback).lower()
     response.headers["X-Conversation-Id"] = conv_id
@@ -512,7 +513,22 @@ async def chat_endpoint(req: ChatRequest, response: Response):
             was_verified = False
             verify_ms = 0
 
-            if draft_reply.strip() and used_backend == "local" and settings.quality_mode:
+            # Fallback for empty reply: every stream must end cleanly with visible in-persona text
+            if not final_reply.strip():
+                final_reply = "I am here. The thought did not resolve into words. Ask again or take the next step."
+                draft_reply = final_reply
+                fallback_chunk = {
+                    "type": "chunk",
+                    "chunk": final_reply,
+                    "backend": used_backend,
+                    "model": used_model,
+                    "conversation_id": conv_id,
+                    "persona_fallback": persona_state.is_fallback,
+                    "notice": stream_notice,
+                    "logged_by_provider": settings.api_logged_by_provider
+                }
+                yield f"data: {json.dumps(fallback_chunk)}\n\n"
+            elif used_backend == "local" and settings.quality_mode:
                 final_reply, was_verified, verify_ms = await verify_reply(
                     draft=draft_reply,
                     persona_rules=persona_state.content,
@@ -630,7 +646,10 @@ async def chat_endpoint(req: ChatRequest, response: Response):
         was_verified = False
         verify_ms = 0
 
-        if draft_reply.strip() and used_backend == "local" and settings.quality_mode:
+        if not final_reply.strip():
+            final_reply = "I am here. The thought did not resolve into words. Ask again or take the next step."
+            draft_reply = final_reply
+        elif used_backend == "local" and settings.quality_mode:
             final_reply, was_verified, verify_ms = await verify_reply(
                 draft=draft_reply,
                 persona_rules=persona_state.content,

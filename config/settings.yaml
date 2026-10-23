@@ -52,8 +52,10 @@ local:
   max_context_tokens: 2500
   think: false
   quality_mode: true
-  think_harder_num_predict: 1200
+  think_harder_num_predict: 5000
+  think_num_predict: 5000
   think_harder_timeout_seconds: 60
+  hard_timeout_seconds: 120
   supports_think:
     - qwen3.5:4b
     - qwen3:4b

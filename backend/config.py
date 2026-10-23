@@ -82,11 +82,19 @@ class Settings:
 
     @property
     def think_harder_num_predict(self) -> int:
-        return int(self.local.get("think_harder_num_predict", 1200))
+        return int(self.local.get("think_harder_num_predict", 3000))
+
+    @property
+    def think_num_predict(self) -> int:
+        return int(self.local.get("think_num_predict", self.local.get("think_harder_num_predict", 3000)))
 
     @property
     def think_harder_timeout_seconds(self) -> float:
         return float(self.local.get("think_harder_timeout_seconds", 60.0))
+
+    @property
+    def hard_timeout_seconds(self) -> float:
+        return float(self.local.get("hard_timeout_seconds", 120.0))
 
     @property
     def supports_think_models(self) -> list:

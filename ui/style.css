@@ -1611,3 +1611,11 @@ body.reduced-motion * {
   vertical-align: middle;
 }
 
+.hidden,
+.thinking-indicator.hidden,
+.cancel-btn.hidden,
+#thinking-indicator.hidden,
+#cancel-button.hidden {
+  display: none !important;
+}
+

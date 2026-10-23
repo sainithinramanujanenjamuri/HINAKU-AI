@@ -25,6 +25,7 @@ class OllamaAdapter:
         self.last_total_duration: int = 0
         self.last_eval_count: int = 0
         self.last_eval_duration: int = 0
+        self.last_done_reason: str = ""
 
     async def check_health(self) -> Dict[str, bool]:
         url = f"{self.host}/api/tags"
@@ -106,6 +107,7 @@ class OllamaAdapter:
                                 if filtered:
                                     yield filtered
                             if chunk.get("done", False):
+                                self.last_done_reason = chunk.get("done_reason", "")
                                 load_duration_ns = chunk.get("load_duration", 0)
                                 total_duration_ns = chunk.get("total_duration", 0)
                                 self.last_load_duration = load_duration_ns
