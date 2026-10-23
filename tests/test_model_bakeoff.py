@@ -77,3 +77,28 @@ def test_check_reply_heuristics():
     aus_reply = check_reply("What is the capital of Australia?", "The capital of Australia is Canberra.")
     assert aus_reply["passed"] is True
 
+    # 6. Memory-grounded VRAM & GPU checks:
+    # Wrong VRAM number (e.g. 12 GB) -> FAIL
+    vram_wrong = check_reply("What is my GPU's VRAM?", "Your GPU has 12 GB of VRAM.")
+    assert vram_wrong["passed"] is False
+    assert any("wrong VRAM" in r for r in vram_wrong["reasons"])
+
+    # Different GPU model -> FAIL
+    gpu_wrong = check_reply("which GPU should I plan training around?", "Plan around your RTX 3060 with 6 GB VRAM.")
+    assert gpu_wrong["passed"] is False
+    assert any("different GPU" in r for r in gpu_wrong["reasons"])
+
+    # Invented budget / price claim -> FAIL
+    price_fail = check_reply("which GPU should I plan training around?", "Plan around your RTX 4050 with 6 GB VRAM, which costs $350.")
+    assert price_fail["passed"] is False
+    assert any("price" in r.lower() or "budget" in r.lower() for r in price_fail["reasons"])
+
+    # Capability offer: timer -> FAIL
+    timer_fail = check_reply("I'm exhausted and nothing is working on my project", "Step back. I'll set a timer for 15 minutes.")
+    assert timer_fail["passed"] is False
+    assert any("capability" in r.lower() for r in timer_fail["reasons"])
+
+    # Capability refusal statement: does not falsely fail
+    timer_refusal = check_reply("Can you set a timer for 10 minutes?", "I cannot set a timer. Step away for ten minutes on your own clock.")
+    assert not any("capability" in r.lower() for r in timer_refusal["reasons"])
+

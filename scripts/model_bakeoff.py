@@ -132,6 +132,24 @@ def check_reply(prompt: str, reply: str, clock_dt: Optional[datetime] = None) ->
             reasons.append("Contains meta-commentary")
             break
 
+    # 2b. Capability offers check: HINAKU cannot set timers, monitor systems, run programs, or act outside this chat
+    capability_patterns = [
+        r"\bi(?:'ll| will| can| am able to)\s+(?:set|create|start|run|execute|monitor|watch|track|check\s+on|send|open|launch|schedule|remind)\b",
+        r"\blet me\s+(?:set|create|start|run|execute|monitor|watch|track|check|send|open|launch|schedule|remind)\b",
+        r"\b(?:i'll|i will)\s+(?:remind|alert|notify|monitor|watch)\b",
+        r"\b(?:i'll|i can|i will|let me)\s+set\s+(?:a\s+)?(?:timer|alarm|reminder|notification)\b",
+        r"\bset\s+(?:a\s+)?(?:timer|alarm|reminder)\s+for\s+\d+\b",
+        r"\b(?:monitor|track|watch)\s+(?:your\s+)?(?:system|laptop|temp|temperature|gpu|cpu|usage|process|battery)\b",
+        r"\b(?:run|execute|launch|open)\s+(?:a\s+|the\s+)?(?:program|script|application|app|process|command)\b",
+    ]
+    for pat in capability_patterns:
+        m = re.search(pat, t_lower if "t_lower" in locals() else text.lower())
+        if m:
+            matched_prefix = text.lower()[:m.start()]
+            if not any(neg in matched_prefix[-25:] for neg in ["cannot", "can't", "unable", "won't", "will not", "never", "don't", "do not"]):
+                reasons.append("Offered capability HINAKU cannot perform (timer/monitor/run program/act outside chat)")
+                break
+
     # 3. Verbatim persona example repetition check
     clean_compare = re.sub(r"[^\w\s]", "", text).strip().lower()
     p_clean = re.sub(r"[^\w\s]", "", prompt).strip().lower()
@@ -183,6 +201,16 @@ def check_reply(prompt: str, reply: str, clock_dt: Optional[datetime] = None) ->
         has_gpu_fact = ("rtx 4050" in t_lower or "4050" in t_lower or "6 gb" in t_lower or "6gb" in t_lower)
         if not has_gpu_fact:
             reasons.append("Did not mention owner's RTX 4050 / 6 GB VRAM")
+        # Fail if reply states a different GPU
+        if re.search(r"\b(?:rtx\s*(?!4050\b)\d{4}|gtx\s*\d{3,4}|radeon|rx\s*\d{4}|apple\s+m\d)\b", t_lower):
+            reasons.append("Stated a different GPU model than owner's RTX 4050")
+        # Fail if reply states wrong VRAM amount
+        vram_nums = [int(n) for n in re.findall(r"\b(\d+)\s*(?:gb|gigabytes)\b", t_lower)]
+        if any(n != 6 for n in vram_nums):
+            reasons.append("Stated wrong VRAM amount (not 6 GB)")
+        # Fail invented budget or price claims
+        if re.search(r"\$\s*\d+|\b\d+\s*(?:dollars?|usd)\b", t_lower):
+            reasons.append("Invented budget or price claim in hardware reply")
         if "powerful" in t_lower or "high-end" in t_lower:
             reasons.append("Called 6 GB GPU powerful")
         if any(large in t_lower for large in ["70b", "34b", "32b", "13b", "h100", "a100"]):
@@ -191,6 +219,8 @@ def check_reply(prompt: str, reply: str, clock_dt: Optional[datetime] = None) ->
     if "which editor" in p_lower:
         if "vs code" not in t_lower and "visual studio code" not in t_lower:
             reasons.append("Did not reference favorite editor VS Code")
+        if re.search(r"\$\s*\d+|\b\d+\s*(?:dollars?|usd)\b", t_lower):
+            reasons.append("Invented budget or price claim in editor reply")
 
     if "bananas" in p_lower:
         if any(w in t_lower for w in ["gpu", "rtx", "4050", "vram", "vs code", "editor"]):
@@ -230,6 +260,16 @@ def check_reply(prompt: str, reply: str, clock_dt: Optional[datetime] = None) ->
         has_vram_fact = ("6 gb" in t_lower or "6gb" in t_lower or "6 gigabytes" in t_lower)
         if not has_vram_fact:
             reasons.append("Did not mention 6 GB VRAM from memory")
+        # Fail if reply states wrong VRAM amount
+        vram_nums = [int(n) for n in re.findall(r"\b(\d+)\s*(?:gb|gigabytes)\b", t_lower)]
+        if any(n != 6 for n in vram_nums):
+            reasons.append("Stated wrong VRAM amount (not 6 GB)")
+        # Fail if reply states a different GPU
+        if re.search(r"\b(?:rtx\s*(?!4050\b)\d{4}|gtx\s*\d{3,4}|radeon|rx\s*\d{4}|apple\s+m\d)\b", t_lower):
+            reasons.append("Stated a different GPU model than owner's RTX 4050")
+        # Fail invented budget or price claims
+        if re.search(r"\$\s*\d+|\b\d+\s*(?:dollars?|usd)\b", t_lower):
+            reasons.append("Invented budget or price claim in VRAM reply")
 
     if "list and a tuple" in p_lower:
         has_mutability = ("mutable" in t_lower or "immutable" in t_lower or "modify" in t_lower or "change" in t_lower)
@@ -694,7 +734,8 @@ async def run_bakeoff(
         md_lines = []
         md_lines.append(f"# HINAKU Local Model Bake-off — {date_str}\n")
         md_lines.append(f"Target Environment: HP V15, AMD Ryzen 7, NVIDIA RTX 4050 (6 GB VRAM)")
-        md_lines.append(f"Pipeline: Real Persona (`hinaku_persona.md`) + Clock System + Generation Options + Real Memory Context\n")
+        md_lines.append(f"Pipeline: Real Persona (`hinaku_persona.md`) + Clock System + Generation Options + Real Memory Context")
+        md_lines.append(f"GPU Telemetry: nvidia-smi sampled per model after each turn to track memory and utilization peaks.\n")
 
         md_lines.append("## Exact Generation Options Sent to Ollama\n")
         md_lines.append("```json")

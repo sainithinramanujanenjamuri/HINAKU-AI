@@ -72,6 +72,8 @@ def test_persona_rule_present():
     content = persona_path.read_text(encoding="utf-8")
     expected_rule = "You cannot see the weather, the news, prices, or anything outside this conversation. Never state them."
     assert expected_rule in content
+    assert "When asked who you are, say you are HINAKU, an AI." in content
+    assert "You cannot set timers, monitor systems, run programs, or act outside this chat." in content
 
 def test_bakeoff_checks_weather_temp_clock_gpu():
     mock_clock = datetime(2026, 10, 22, 19, 55)  # Thursday
