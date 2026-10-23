@@ -93,6 +93,7 @@ class ChatRequest(BaseModel):
     stream: Optional[bool] = True
     is_private: Optional[bool] = None
     think_harder: Optional[bool] = False
+    detailed: Optional[bool] = False
 
 class ChatResponse(BaseModel):
     role: str
@@ -106,6 +107,8 @@ class ChatResponse(BaseModel):
     interaction_id: Optional[str] = None
     verified: bool = False
     think_harder_used: bool = False
+    detailed_used: bool = False
+    hit_token_limit: bool = False
     latency_breakdown: Optional[Dict[str, int]] = None
 
 @router.get("/info")
@@ -450,6 +453,12 @@ async def chat_endpoint(req: ChatRequest, response: Response):
     think_harder_used = False
     use_think = False
 
+    from backend.guards import is_detail_request, trim_to_last_complete_sentence
+
+    is_detail = bool(req.detailed) or is_detail_request(latest_user_text)
+    if is_detail:
+        target_opts["num_predict"] = max(target_opts.get("num_predict", 300), settings.detail_num_predict)
+
     if req.think_harder and target_model in settings.supports_think_models:
         use_think = True
         think_harder_used = True
@@ -475,7 +484,8 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                 "notice": persona_state.notice,
                 "is_private": is_private,
                 "logged_by_provider": settings.api_logged_by_provider,
-                "think_harder_used": think_harder_used
+                "think_harder_used": think_harder_used,
+                "detailed_used": is_detail
             }
             yield f"data: {json.dumps(init_meta)}\n\n"
 
@@ -509,6 +519,13 @@ async def chat_endpoint(req: ChatRequest, response: Response):
 
             gen_ms = int((time.perf_counter() - t_gen_start) * 1000)
             draft_reply = "".join(accumulated_chunks)
+
+            # If reply hit token limit (ends mid-sentence), cut back to last complete sentence
+            trimmed_draft, was_cut = trim_to_last_complete_sentence(draft_reply)
+            if was_cut:
+                draft_reply = trimmed_draft
+                yield f"data: {json.dumps({'type': 'correction', 'final_content': draft_reply, 'conversation_id': conv_id, 'hit_token_limit': True})}\n\n"
+
             final_reply = draft_reply
             was_verified = False
             verify_ms = 0
@@ -537,7 +554,8 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                     local_adapter=local_adapter,
                     model=used_model,
                     options=target_opts,
-                    keep_alive=settings.local_keep_alive
+                    keep_alive=settings.local_keep_alive,
+                    is_detail=is_detail
                 )
                 if final_reply != draft_reply and was_verified:
                     corr_payload = {
@@ -599,6 +617,8 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                     "model": used_model,
                     "verified": was_verified,
                     "think_harder_used": think_harder_used,
+                    "detailed_used": is_detail,
+                    "hit_token_limit": was_cut,
                     "latency_breakdown": latency_breakdown,
                     "final_reply": final_reply
                 }
@@ -642,6 +662,11 @@ async def chat_endpoint(req: ChatRequest, response: Response):
 
         gen_ms = int((time.perf_counter() - t_gen_start) * 1000)
         draft_reply = "".join(accumulated_chunks)
+
+        trimmed_draft, was_cut = trim_to_last_complete_sentence(draft_reply)
+        if was_cut:
+            draft_reply = trimmed_draft
+
         final_reply = draft_reply
         was_verified = False
         verify_ms = 0
@@ -658,7 +683,8 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                 local_adapter=local_adapter,
                 model=used_model,
                 options=target_opts,
-                keep_alive=settings.local_keep_alive
+                keep_alive=settings.local_keep_alive,
+                is_detail=is_detail
             )
 
         latency_breakdown = {
@@ -712,5 +738,7 @@ async def chat_endpoint(req: ChatRequest, response: Response):
             interaction_id=inter_id,
             verified=was_verified,
             think_harder_used=think_harder_used,
+            detailed_used=is_detail,
+            hit_token_limit=was_cut,
             latency_breakdown=latency_breakdown
         )

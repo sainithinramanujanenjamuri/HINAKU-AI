@@ -164,3 +164,46 @@ def is_live_data_query(text: str, custom_patterns: Optional[List[str]] = None) -
             return True
 
     return False
+
+
+DETAIL_PATTERNS = [
+    r"(?i)\b(?:in\s+more\s+detail|in\s+detail|in-depth|in\s+depth|longer\s+explanation|longer|more\s+detail|elaborate|explain\s+more|step\s+by\s+step|step-by-step|deep\s+dive|detailed|break\s+it\s+down\s+more)\b",
+]
+
+SHORT_FOLLOWUP_DETAIL_WORDS = {
+    "more", "go on", "continue", "keep going", "elaborate", "expand", "longer"
+}
+
+def is_detail_request(text: str) -> bool:
+    """
+    Checks if a user query asks for more detail, a longer explanation,
+    an in-depth answer, or is a short follow-up like 'more' or 'go on'.
+    """
+    if not text:
+        return False
+    clean = text.strip().lower()
+    clean_stripped = re.sub(r"[^\w\s]", "", clean).strip()
+    if clean_stripped in SHORT_FOLLOWUP_DETAIL_WORDS:
+        return True
+    return any(re.search(pat, clean) for pat in DETAIL_PATTERNS)
+
+def trim_to_last_complete_sentence(text: str) -> Tuple[str, bool]:
+    """
+    If a text ends mid-sentence (e.g. cut off by token limit),
+    trims it back to the last complete sentence boundary.
+    Returns (trimmed_text, was_cut).
+    """
+    if not text or not text.strip():
+        return text, False
+    stripped = text.rstrip()
+    # Sentence ending punctuation followed optionally by quotes or parens
+    if re.search(r'[.!?]["\')\]]?$', stripped):
+        return stripped, False
+
+    matches = list(re.finditer(r'[.!?]["\')\]]?(?:\s+|$)', stripped))
+    if not matches:
+        return stripped, False
+
+    last_match = matches[-1]
+    trimmed = stripped[:last_match.end()].rstrip()
+    return trimmed, True

@@ -89,6 +89,10 @@ class Settings:
         return int(self.local.get("think_num_predict", self.local.get("think_harder_num_predict", 3000)))
 
     @property
+    def detail_num_predict(self) -> int:
+        return int(self.local.get("detail_num_predict", 900))
+
+    @property
     def think_harder_timeout_seconds(self) -> float:
         return float(self.local.get("think_harder_timeout_seconds", 60.0))
 

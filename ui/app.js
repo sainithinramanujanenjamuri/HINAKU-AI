@@ -712,10 +712,13 @@ document.addEventListener("DOMContentLoaded", () => {
     activeAbortController = new AbortController();
 
     const thinkHarderCheckbox = document.getElementById("think-harder-checkbox");
+    const detailCheckbox = document.getElementById("detail-checkbox");
     const cancelButton = document.getElementById("cancel-button");
     const thinkingIndicator = document.getElementById("thinking-indicator");
 
     const thinkHarderVal = thinkHarderCheckbox ? thinkHarderCheckbox.checked : false;
+    const detailedVal = detailCheckbox ? detailCheckbox.checked : false;
+    let hitTokenLimit = false;
     if (cancelButton) cancelButton.classList.remove("hidden");
     if (thinkHarderVal && thinkingIndicator) thinkingIndicator.classList.remove("hidden");
 
@@ -736,7 +739,8 @@ document.addEventListener("DOMContentLoaded", () => {
           conversation_id: currentConversationId,
           is_private: isCurrentChatPrivate,
           stream: true,
-          think_harder: thinkHarderVal
+          think_harder: thinkHarderVal,
+          detailed: detailedVal
         }),
         signal: activeAbortController.signal
       });
@@ -796,6 +800,9 @@ document.addEventListener("DOMContentLoaded", () => {
             if (parsed.verified !== undefined) {
               isVerified = Boolean(parsed.verified);
             }
+            if (parsed.hit_token_limit !== undefined) {
+              hitTokenLimit = Boolean(parsed.hit_token_limit);
+            }
             if (parsed.type === "correction" && parsed.final_content) {
               assistantText = parsed.final_content;
               bodyDiv.innerHTML = formatMarkdown(assistantText);
@@ -824,6 +831,21 @@ document.addEventListener("DOMContentLoaded", () => {
       const cursor = bodyDiv.querySelector(".streaming-cursor");
       if (cursor) cursor.remove();
       attachCopyButtons(bodyDiv);
+
+      if (hitTokenLimit) {
+        let contBtn = msgDiv.querySelector(".continue-btn");
+        if (!contBtn) {
+          contBtn = document.createElement("button");
+          contBtn.className = "continue-btn";
+          contBtn.textContent = "Continue";
+          contBtn.title = "Ask HINAKU to continue the explanation";
+          contBtn.addEventListener("click", () => {
+            promptInput.value = "Continue";
+            sendMessage();
+          });
+          bodyDiv.appendChild(contBtn);
+        }
+      }
 
       if (!assistantText.trim()) {
         assistantText = "I am here. The thought did not resolve into words. Ask again or take the next step.";

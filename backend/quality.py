@@ -43,7 +43,7 @@ Review the candidate assistant response against the clock, memory, and persona r
 You may fix ONLY:
 1. Facts that conflict with the system clock or stored owner memories.
 2. Claims of abilities HINAKU lacks (e.g. setting timers, monitoring systems, running programs, or acting outside chat).
-3. Rule violations: more than 4 sentences, or more than 1 question mark.
+{rule_3}
 
 CRITICAL RULES:
 - You must NOT add new facts or extra information.
@@ -53,7 +53,7 @@ OK
 - Never output prefixes like 'Corrected reply:' or meta-commentary.
 """
 
-def is_malformed_verification(raw_output: str) -> bool:
+def is_malformed_verification(raw_output: str, is_detail: bool = False) -> bool:
     """Strictly validate whether verifier response is usable or malformed."""
     text = raw_output.strip()
     if not text:
@@ -67,12 +67,13 @@ def is_malformed_verification(raw_output: str) -> bool:
         "here is the corrected", "as a verification guard", "draft reply:"
     ]):
         return True
-    # If output contains more than 4 sentences or more than 1 question mark
-    clean_text = text.replace("vs.", "").replace("e.g.", "").replace("i.e.", "")
-    import re
-    sentences = [p.strip() for p in re.split(r"[.!?]+", clean_text) if p.strip()]
-    if len(sentences) > 4:
-        return True
+    # If output contains more than 4 sentences (unless in detail mode) or more than 1 question mark
+    if not is_detail:
+        clean_text = text.replace("vs.", "").replace("e.g.", "").replace("i.e.", "")
+        import re
+        sentences = [p.strip() for p in re.split(r"[.!?]+", clean_text) if p.strip()]
+        if len(sentences) > 4:
+            return True
     if text.count("?") > 1:
         return True
     return False
@@ -86,7 +87,8 @@ async def verify_reply(
     model: str,
     options: Dict[str, Any],
     keep_alive: str,
-    timeout_seconds: float = 30.0
+    timeout_seconds: float = 30.0,
+    is_detail: bool = False
 ) -> Tuple[str, bool, int]:
     """
     Runs one verification pass.
@@ -96,10 +98,18 @@ async def verify_reply(
     if not clean_draft:
         return draft, False, 0
 
+    rule_3 = (
+        "3. Rule violations: more than 1 question mark. "
+        "(Detail mode is active: do NOT enforce any sentence limit, but ensure it stays under about 350 words)."
+        if is_detail else
+        "3. Rule violations: more than 4 sentences, or more than 1 question mark."
+    )
+
     system_prompt = QUALITY_VERIFIER_SYSTEM_PROMPT.format(
         persona_rules=persona_rules,
         clock_ctx=clock_ctx,
-        memory_ctx=memory_ctx if memory_ctx else "(no memory stored)"
+        memory_ctx=memory_ctx if memory_ctx else "(no memory stored)",
+        rule_3=rule_3
     )
 
     verify_messages = [
@@ -135,7 +145,7 @@ async def verify_reply(
             # Draft passed verification without changes
             return draft, True, elapsed_ms
 
-        if is_malformed_verification(raw_output):
+        if is_malformed_verification(raw_output, is_detail=is_detail):
             logger.warning(f"Quality verifier output malformed ('{raw_output[:60]}...'); using draft")
             return draft, False, elapsed_ms
 
