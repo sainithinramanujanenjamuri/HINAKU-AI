@@ -1,7 +1,7 @@
 import logging
 import re
 from typing import Any, Dict, List, Optional
-from .safety import filter_safe_facts, is_safe_to_store
+from .safety import filter_safe_facts, is_safe_to_store, validate_memory_quality
 from .storage import MemoryStorage
 
 logger = logging.getLogger("hinaku.memory.extractor")
@@ -12,12 +12,15 @@ Your sole job is to extract durable facts and preferences that the OWNER explici
 Strict Rules:
 1. Look ONLY at what the OWNER said. Completely ignore the assistant's message.
 2. NEVER extract anything from the assistant's reply.
-3. Extract ONLY durable, long-term facts about the owner (e.g., hardware specs, favorite tools, skills, location, pets, habits).
-4. Do NOT infer or guess anything about mood, health, emotions, or personality.
-5. Do NOT extract conversational filler, temporary thoughts, or questions.
-6. Format: One short fact per line, phrased simply (e.g., "Uses a laptop with an RTX 4050 and 6 GB VRAM", "Favorite code editor is VS Code").
-7. If the owner did not state any durable facts or preferences about themselves, output exactly: NONE.
-8. Multiple values for an attribute from one statement (e.g. multiple colors, hobbies, tools, languages) MUST be stored as ONE memory with plural wording (e.g., "Favorite colors are black, red, and blue", NOT "Favorite color is black" + "Favorite color is red"). Never split multiple values into one memory per value."""
+3. Extract ONLY durable, long-term facts and stable preferences about the owner (e.g., hardware specs, favorite tools, skills, location, pets, habits).
+4. NEVER store mood, mental-state, or health statements (e.g., "feels low and lost", "has anxiety", "takes medication", "is depressed").
+5. NEVER store temporary states or fleeting moods (e.g., "tired after a long coding session", "hungry", "busy today", "sleepy").
+6. Anything with a time reference ("today", "this week", "tomorrow", "yesterday", "now", "currently") is NOT a memory.
+7. Write every memory in third person with plain wording, beginning with a verb or attribute (e.g., "Wants to build an LLM", "Cooks for himself", "Uses a laptop with an RTX 4050", "Favorite code editor is VS Code"). Never use first-person pronouns ("I", "my", "me", "myself").
+8. Resolve pronouns from the conversation ("it" becomes the named thing, e.g. "Wants to open source the LLM model", NOT "Wants to open source it"). If an entity cannot be resolved, do not output that memory.
+9. Do NOT store the owner's message word for word.
+10. If the owner did not state any durable facts or preferences about themselves, output exactly: NONE.
+11. Multiple values for an attribute from one statement (e.g. multiple colors, hobbies, tools, languages) MUST be stored as ONE memory with plural wording (e.g., "Favorite colors are black, red, and blue", NOT "Favorite color is black" + "Favorite color is red"). Never split multiple values into one memory per value."""
 
 def extract_attribute_key(text: str) -> Optional[str]:
     """
@@ -121,11 +124,21 @@ class MemoryExtractor:
             logger.error(f"Local memory extraction model call failed: {e}")
             return []
 
-        return self.parse_extracted_text(response_text)
+        return self.parse_extracted_text(
+            response_text,
+            user_message=clean_user,
+            context=assistant_message.strip()
+        )
 
-    def parse_extracted_text(self, text: str) -> List[str]:
+    def parse_extracted_text(
+        self,
+        text: str,
+        user_message: str = "",
+        context: str = ""
+    ) -> List[str]:
         """
-        Parse raw model output into clean, safe fact strings, consolidating multi-value facts.
+        Parse raw model output into clean, safe fact strings, applying quality validation
+        and consolidating multi-value facts.
         """
         facts = []
         for line in text.splitlines():
@@ -137,16 +150,26 @@ class MemoryExtractor:
                 continue
             if cleaned.upper() == "NONE":
                 continue
-            if len(cleaned) < 5:
+            if len(cleaned) < 4:
                 continue
 
-            # Safety check
+            # Safety check (confidential numbers, keys, passwords)
             is_safe, reason = is_safe_to_store(cleaned, self.never_store_categories)
             if not is_safe:
                 logger.info(f"Dropped unsafe memory candidate: {reason}")
                 continue
 
-            facts.append(cleaned)
+            # Quality validation (mood, health, temporary state, time ref, third-person, pronouns)
+            is_valid, processed_fact, rej_reason = validate_memory_quality(
+                cleaned,
+                user_message=user_message,
+                context=context
+            )
+            if not is_valid:
+                logger.info(f"Dropped invalid memory candidate '{cleaned}': {rej_reason}")
+                continue
+
+            facts.append(processed_fact)
 
         # Consolidate multiple values into one memory with plural wording
         return consolidate_multi_value_facts(facts)

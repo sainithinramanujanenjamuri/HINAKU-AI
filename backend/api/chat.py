@@ -109,9 +109,12 @@ class ChatResponse(BaseModel):
     message_id: Optional[str] = None
     interaction_id: Optional[str] = None
     verified: bool = False
+    verify_status: Optional[str] = None
+    verify_reason: Optional[str] = None
     think_harder_used: bool = False
     detailed_used: bool = False
     hit_token_limit: bool = False
+    is_private: bool = False
     latency_breakdown: Optional[Dict[str, int]] = None
 
 @router.get("/info")
@@ -173,6 +176,18 @@ async def chat_endpoint(req: ChatRequest, response: Response):
     # Identify latest user message
     latest_msg = req.messages[-1]
     latest_user_text = latest_msg.content if latest_msg.role == "user" else ""
+
+    # Sensitive Topic Detection (mental health, mood, health, money trouble, personal relationships)
+    from backend.guards import is_sensitive_topic
+    is_sensitive_topic_found, sensitive_topic_category = is_sensitive_topic(latest_user_text)
+    auto_private_triggered = False
+    auto_private_notice_text = None
+    if is_sensitive_topic_found and not is_private:
+        is_private = True
+        auto_private_triggered = True
+        history_manager.set_conversation_privacy(conv_id, True)
+        topic_label = sensitive_topic_category.replace("_", " ")
+        auto_private_notice_text = f"Sensitive topic detected ({topic_label}). Marked conversation as Private to keep your data local, skip memory extraction, and exclude it from training."
 
     # GUARD 1: Sensitive-Data Guard (PIN, password, card number, bank account, government ID)
     is_sensitive, sanitized_user_text = check_and_redact_sensitive_data(latest_user_text)
@@ -492,12 +507,17 @@ async def chat_endpoint(req: ChatRequest, response: Response):
             stream_notice = persona_state.notice
 
             # Initial metadata payload
+            if auto_private_triggered:
+                auto_priv_payload = {"type": "auto_private_notice", "notice": auto_private_notice_text, "auto_private": True, "undo_available": True, "conversation_id": conv_id}
+                yield f"data: {json.dumps(auto_priv_payload)}\n\n"
+
             init_meta = {
                 "type": "meta",
                 "conversation_id": conv_id,
                 "persona_fallback": persona_state.is_fallback,
-                "notice": persona_state.notice,
+                "notice": auto_private_notice_text or persona_state.notice,
                 "is_private": is_private,
+                "auto_private": auto_private_triggered,
                 "logged_by_provider": settings.api_logged_by_provider,
                 "think_harder_used": think_harder_used,
                 "detailed_used": is_detail
@@ -790,12 +810,15 @@ async def chat_endpoint(req: ChatRequest, response: Response):
             backend=used_backend,
             conversation_id=conv_id,
             persona_fallback=persona_state.is_fallback,
-            notice=used_notice,
+            notice=auto_private_notice_text or used_notice,
             message_id=ast_msg["id"],
             interaction_id=inter_id,
             verified=was_verified,
+            verify_status=verify_status,
+            verify_reason=verify_reason,
             think_harder_used=think_harder_used,
             detailed_used=is_detail,
             hit_token_limit=was_cut,
+            is_private=is_private,
             latency_breakdown=latency_breakdown
         )

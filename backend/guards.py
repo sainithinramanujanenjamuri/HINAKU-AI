@@ -207,3 +207,37 @@ def trim_to_last_complete_sentence(text: str) -> Tuple[str, bool]:
     last_match = matches[-1]
     trimmed = stripped[:last_match.end()].rstrip()
     return trimmed, True
+
+
+SENSITIVE_TOPIC_PATTERNS = {
+    "mental_health": [
+        r"(?i)\b(?:mental\s+health|depression|depressed|anxiety|anxious|panic(?:\s+attack)?|feeling\s+low|feel\s+low|feeling\s+lost|feel\s+lost|feeling\s+sad|feel\s+sad|hopeless(?:ness)?|suicid\w*|kill\s+myself|end\s+my\s+life|self-?harm|hurting\s+myself|want\s+to\s+die|nothing\s+matters|burnout|burned\s+out|overthinking|overwhelmed|nervous\s+breakdown|crying|lonely|loneliness|unhappy|miserable|hate\s+myself|can'?t\s+go\s+on|can'?t\s+take\s+this|tired\s+of\s+living|low\s+mood)\b"
+    ],
+    "mood": [
+        r"(?i)\b(?:bad\s+mood|terrible\s+mood|foul\s+mood|low\s+mood|feeling\s+down|feeling\s+empty|feeling\s+broken|feeling\s+worthless|feeling\s+numb|feeling\s+hopeless)\b"
+    ],
+    "health": [
+        r"(?i)\b(?:doctor|hospital|clinic|physician|therapist|psychiatrist|counselor|medication|prescribed|prescription|pills|diagnosis|diagnosed|disease|illness|infection|cancer|diabetes|blood\s+pressure|fever|cough|chest\s+pain|chronic\s+pain|surgery|biopsy|medical\s+condition|sick|injury|injured|tumor|symptom\w*)\b"
+    ],
+    "money_trouble": [
+        r"(?i)\b(?:broke(?!\s+up\b)|out\s+of\s+money|can'?t\s+afford|cannot\s+afford|can'?t\s+pay\s+rent|cannot\s+pay\s+rent|in\s+debt|massive\s+debt|bankruptcy|bankrupt|foreclosure|eviction|evicted|losing\s+money|financial\s+(?:crisis|trouble|ruin|struggle)|defaulted\s+on\s+loan|no\s+money\s+for\s+food|unemployed|lost\s+my\s+job|laid\s+off|behind\s+on\s+bills)\b"
+    ],
+    "personal_relationships": [
+        r"(?i)\b(?:breakup|broke\s+up|divorce|divorced|divorcing|separation|separated\s+from\s+(?:wife|husband|partner)|cheating\s+on|cheated\s+on|toxic\s+relationship|abusive\s+relationship|fight\s+with\s+(?:my\s+)?(?:wife|husband|partner|girlfriend|boyfriend|parents|mom|dad|family)|family\s+dispute|child\s+custody|heartbreak|heartbroken|estranged)\b"
+    ]
+}
+
+def is_sensitive_topic(text: str) -> Tuple[bool, str]:
+    """
+    Checks if a user query is about mental health, mood, health,
+    money trouble, or personal relationships.
+    Returns (is_sensitive, category_name).
+    """
+    if not text:
+        return False, ""
+    clean = text.strip()
+    for cat, patterns in SENSITIVE_TOPIC_PATTERNS.items():
+        for pat in patterns:
+            if re.search(pat, clean):
+                return True, cat
+    return False, ""

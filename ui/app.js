@@ -96,10 +96,16 @@ document.addEventListener("DOMContentLoaded", () => {
     return `${mName} · local`;
   }
 
-  function updateNoticeBanner(visible, message) {
+  function updateNoticeBanner(visible, message, undoCallback) {
     if (!noticeBanner || !noticeText) return;
     if (visible && message) {
-      noticeText.textContent = message;
+      if (undoCallback) {
+        noticeText.innerHTML = `${message} <button id="notice-undo-btn" class="notice-undo-btn" style="margin-left: 8px; text-decoration: underline; background: none; border: none; color: #a5b4fc; cursor: pointer; font-weight: 500;">Undo</button>`;
+        const btn = document.getElementById("notice-undo-btn");
+        if (btn) btn.onclick = undoCallback;
+      } else {
+        noticeText.textContent = message;
+      }
       noticeBanner.classList.remove("hidden");
     } else {
       noticeBanner.classList.add("hidden");
@@ -872,7 +878,25 @@ document.addEventListener("DOMContentLoaded", () => {
               lastMessageId = parsed.message_id;
               msgDiv.dataset.messageId = parsed.message_id;
             }
-            if (parsed.notice) {
+            if (parsed.auto_private || parsed.type === "auto_private_notice") {
+              updatePrivacyUI(true);
+              const targetConv = parsed.conversation_id || currentConversationId;
+              updateNoticeBanner(true, parsed.notice || "Sensitive personal topic detected. Conversation set to Private.", async () => {
+                try {
+                  if (targetConv) {
+                    await fetch(`/api/conversations/${targetConv}`, {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ is_private: false })
+                    });
+                  }
+                  updatePrivacyUI(false);
+                  updateNoticeBanner(false);
+                } catch (e) {
+                  console.error("Failed to undo auto-private:", e);
+                }
+              });
+            } else if (parsed.notice) {
               updateNoticeBanner(true, parsed.notice);
             }
             if (parsed.logged_by_provider !== undefined) {

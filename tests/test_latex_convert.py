@@ -50,3 +50,4 @@ def test_api_system_prompt_includes_no_latex_instruction():
     persona_text = persona + "\n\nDo not use LaTeX or mathematical dollar signs ($...$ or $$...$$). Use standard Unicode characters (e.g. →, ×, ≤, ≥, ≠, ·, etc.) for symbols and equations."
     assert "Do not use LaTeX" in persona_text
     assert "→" in persona_text
+

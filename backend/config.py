@@ -363,6 +363,11 @@ class Settings:
     def eval_min_improvement(self) -> float:
         return float(self.evaluation.get("min_improvement", 0.02))
 
+
+    @property
+    def helpline_numbers(self) -> List[Dict[str, str]]:
+        return self.raw.get("safety", {}).get("helpline_numbers", [])
+
     @property
     def training_keep_versions(self) -> int:
         return int(self.training.get("keep_versions", 3))

@@ -106,3 +106,4 @@
     global.convertLatexSymbols = convertLatexSymbols;
   }
 })(typeof window !== "undefined" ? window : globalThis);
+
