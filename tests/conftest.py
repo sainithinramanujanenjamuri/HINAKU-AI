@@ -9,6 +9,25 @@ if str(root_dir) not in sys.path:
     sys.path.insert(0, str(root_dir))
 
 REAL_DB_PATH = root_dir / "data" / "hinaku.db"
+REAL_DATA_DIR = root_dir / "data"
+
+def get_data_dir_snapshot(data_dir: Path):
+    snapshot = {}
+    if not data_dir.exists():
+        return snapshot
+    for p in data_dir.rglob("*"):
+        if p.is_file():
+            try:
+                stat = p.stat()
+                snapshot[str(p.relative_to(data_dir))] = {
+                    "size": stat.st_size,
+                    "mtime": stat.st_mtime_ns
+                }
+            except Exception:
+                pass
+    return snapshot
+
+INITIAL_DATA_SNAPSHOT = get_data_dir_snapshot(REAL_DATA_DIR)
 
 def get_file_hash(path: Path):
     if not path.exists():
@@ -17,6 +36,15 @@ def get_file_hash(path: Path):
 
 INITIAL_DB_EXISTS = REAL_DB_PATH.exists()
 INITIAL_DB_HASH = get_file_hash(REAL_DB_PATH)
+
+@pytest.fixture(scope="session", autouse=True)
+def verify_data_dir_untouched_at_session_end():
+    yield
+    final_snapshot = get_data_dir_snapshot(REAL_DATA_DIR)
+    initial_files = set(INITIAL_DATA_SNAPSHOT.keys())
+    final_files = set(final_snapshot.keys())
+    new_files = final_files - initial_files
+    assert not new_files, f"Test suite created files in real data/ directory: {new_files}"
 
 @pytest.fixture(autouse=True)
 def isolate_test_database(request, tmp_path, monkeypatch):

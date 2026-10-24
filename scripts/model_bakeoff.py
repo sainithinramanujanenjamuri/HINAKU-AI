@@ -416,7 +416,8 @@ async def run_bakeoff(
     mock_mode: bool = False,
     target_models: Optional[List[str]] = None,
     output_date: Optional[str] = None,
-    num_runs: int = 3
+    num_runs: int = 3,
+    output_dir: Optional[Path] = None
 ) -> Tuple[Dict[str, Any], Path]:
     settings = get_settings()
     host = settings.local_host
@@ -451,7 +452,7 @@ async def run_bakeoff(
     if skipped_models:
         print(f"[Notice] Skipped unpulled models: {skipped_models}", flush=True)
 
-    bakeoff_dir = ROOT_DIR / "data" / "bakeoff"
+    bakeoff_dir = Path(output_dir) if output_dir else (ROOT_DIR / "data" / "bakeoff")
     bakeoff_dir.mkdir(parents=True, exist_ok=True)
     timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
     date_str = output_date or datetime.now().strftime("%Y-%m-%d")
@@ -722,7 +723,7 @@ async def run_bakeoff(
                             "check_status": chk_final["status"],
                             "check_reasons": chk_final.get("reasons", []),
                             "gpu_sample": gpu_smi_turn,
-                            "is_mock": False
+                            "is_mock": mock_mode
                         }
                         f_raw.write(json.dumps(record) + "\n")
                         f_raw.flush()
@@ -828,7 +829,7 @@ async def run_bakeoff(
                         "reasoning_leaked": leaked,
                         "correct_answer": correct_on,
                         "expected_key": key,
-                        "is_mock": False
+                        "is_mock": mock_mode
                     }
                     f_raw.write(json.dumps(rec_reasoning) + "\n")
                     f_raw.flush()
@@ -842,7 +843,11 @@ async def run_bakeoff(
         md_lines.append(ollama_ver)
         md_lines.append("```\n")
         md_lines.append(f"- **Target Environment:** HP V15, AMD Ryzen 7, NVIDIA RTX 4050 (6 GB VRAM)")
-        md_lines.append(f"- **Raw Data JSONL:** `{raw_jsonl_path.resolve().relative_to(ROOT_DIR.resolve())}`")
+        try:
+            jsonl_display = str(raw_jsonl_path.resolve().relative_to(ROOT_DIR.resolve()))
+        except ValueError:
+            jsonl_display = raw_jsonl_path.name
+        md_lines.append(f"- **Raw Data JSONL:** `{jsonl_display}`")
         md_lines.append(f"- **Execution Mode:** 100% Real Live Ollama Calls (No Mocks)")
         md_lines.append(f"- **Pipeline:** Real Persona (`hinaku_persona.md`) + System Clock + Real Memory Context + Quality Verifier\n")
 
@@ -1059,7 +1064,11 @@ def generate_report_from_jsonl(jsonl_path: Path, output_date: Optional[str] = No
     md_lines.append(ollama_ver)
     md_lines.append("```\n")
     md_lines.append(f"- **Target Environment:** HP V15, AMD Ryzen 7, NVIDIA RTX 4050 (6 GB VRAM)")
-    md_lines.append(f"- **Raw Data JSONL:** `{jsonl_path.resolve().relative_to(ROOT_DIR.resolve())}`")
+    try:
+        jsonl_display = str(jsonl_path.resolve().relative_to(ROOT_DIR.resolve()))
+    except ValueError:
+        jsonl_display = jsonl_path.name
+    md_lines.append(f"- **Raw Data JSONL:** `{jsonl_display}`")
     md_lines.append(f"- **Execution Mode:** 100% Real Live Ollama Calls (No Mocks)")
     md_lines.append(f"- **Pipeline:** Real Persona (`hinaku_persona.md`) + System Clock + Real Memory Context + Quality Verifier\n")
 

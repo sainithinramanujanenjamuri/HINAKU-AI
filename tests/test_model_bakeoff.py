@@ -2,6 +2,8 @@ import pytest
 from pathlib import Path
 from scripts.model_bakeoff import run_bakeoff, check_reply, count_sentences
 
+import json
+
 @pytest.mark.asyncio
 async def test_bakeoff_script_with_mocked_model(tmp_path):
     report_date = "2026-10-20-test"
@@ -9,10 +11,12 @@ async def test_bakeoff_script_with_mocked_model(tmp_path):
         mock_mode=True,
         target_models=["qwen3.5:4b", "llama3.2:3b"],
         output_date=report_date,
-        num_runs=1
+        num_runs=1,
+        output_dir=tmp_path
     )
 
     assert report_file.exists()
+    assert report_file.parent == tmp_path
     content = report_file.read_text(encoding="utf-8")
     assert "HINAKU Local Model Bake-off" in content
     assert "Summary Table" in content
@@ -21,9 +25,13 @@ async def test_bakeoff_script_with_mocked_model(tmp_path):
     assert "Exact Generation Options Sent to Ollama" in content
     assert "presence_penalty" in content
 
-    # Clean up test report file
-    if report_file.exists():
-        report_file.unlink()
+    # Verify that raw JSONL is written only to tmp_path and rows are labeled is_mock: True
+    raw_jsonl_path = Path(summary_data["raw_jsonl_path"])
+    assert raw_jsonl_path.exists()
+    assert raw_jsonl_path.parent == tmp_path
+    raw_lines = [json.loads(l) for l in raw_jsonl_path.read_text(encoding="utf-8").splitlines() if l.strip()]
+    assert len(raw_lines) > 0
+    assert all(r.get("is_mock") is True for r in raw_lines), "All fixture rows must be labeled is_mock: True" 
 
 def test_check_reply_heuristics():
     # Bananas reply that leaks GPU memory
