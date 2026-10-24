@@ -448,6 +448,28 @@ document.addEventListener("DOMContentLoaded", () => {
     scrollToBottom();
   }
 
+  function updateMessageBadge(metaDiv, status, reason) {
+    let vTag = metaDiv.querySelector(".verified-mark");
+    if (!vTag) {
+      vTag = document.createElement("span");
+      metaDiv.appendChild(vTag);
+    }
+    vTag.className = "verified-mark";
+    if (status === "verified") {
+      vTag.textContent = "✓ verified";
+      vTag.title = "Checked, fine";
+    } else if (status === "corrected") {
+      vTag.classList.add("corrected");
+      vTag.textContent = "✎ corrected";
+      vTag.title = reason ? `Corrected: ${reason}` : "Corrected by Quality Guard";
+    } else {
+      vTag.classList.add("not-verified");
+      const rText = reason || "skipped";
+      vTag.textContent = `○ not verified (${rText})`;
+      vTag.title = `Not verified: ${rText}`;
+    }
+  }
+
   function renderIntroMessage() {
     messagesContainer.innerHTML = `
       <div class="message assistant intro-message">
@@ -762,6 +784,8 @@ document.addEventListener("DOMContentLoaded", () => {
     let lastMessageId = null;
     let lastBackend = "local";
     let isVerified = false;
+    let verifyStatus = "not_verified";
+    let verifyReason = "in_progress";
     const { msgDiv, metaDiv, bodyDiv } = renderMessage("assistant", "", true, "routing...", "local");
 
     activeAbortController = new AbortController();
@@ -865,6 +889,12 @@ document.addEventListener("DOMContentLoaded", () => {
             if (parsed.verified !== undefined) {
               isVerified = Boolean(parsed.verified);
             }
+            if (parsed.verify_status !== undefined) {
+              verifyStatus = parsed.verify_status;
+            }
+            if (parsed.verify_reason !== undefined) {
+              verifyReason = parsed.verify_reason;
+            }
             if (parsed.hit_token_limit !== undefined) {
               hitTokenLimit = Boolean(parsed.hit_token_limit);
             }
@@ -921,16 +951,7 @@ document.addEventListener("DOMContentLoaded", () => {
         bodyDiv.innerHTML = formatMarkdown(assistantText);
       }
 
-      if (isVerified) {
-        let vTag = metaDiv.querySelector(".verified-mark");
-        if (!vTag) {
-          vTag = document.createElement("span");
-          vTag.className = "verified-mark";
-          vTag.title = "Verified by HINAKU Quality Guard";
-          vTag.textContent = "✓ verified";
-          metaDiv.appendChild(vTag);
-        }
-      }
+      updateMessageBadge(metaDiv, verifyStatus, verifyReason);
 
       if (lastMessageId) {
         attachAssistantActions(msgDiv, bodyDiv, metaDiv, lastMessageId, lastBackend, null, null, assistantText);

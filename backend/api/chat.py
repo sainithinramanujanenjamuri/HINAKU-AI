@@ -554,11 +554,15 @@ async def chat_endpoint(req: ChatRequest, response: Response):
             final_reply = draft_reply
             was_verified = False
             verify_ms = 0
+            verify_status = "not_verified"
+            verify_reason = None
 
             # Fallback for empty reply: every stream must end cleanly with visible in-persona text
             if not final_reply.strip():
                 final_reply = "I couldn't put an answer together that time. Ask again, or turn off Think harder."
                 draft_reply = final_reply
+                verify_status = "not_verified"
+                verify_reason = "empty_reply"
                 fallback_chunk = {
                     "type": "chunk",
                     "chunk": final_reply,
@@ -571,7 +575,7 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                 }
                 yield f"data: {json.dumps(fallback_chunk)}\n\n"
             elif used_backend == "local" and settings.quality_mode:
-                final_reply, was_verified, verify_ms = await verify_reply(
+                final_reply, was_verified, verify_ms, verify_status, verify_reason = await verify_reply(
                     draft=draft_reply,
                     persona_rules=persona_state.content,
                     clock_ctx=clock_context,
@@ -582,13 +586,19 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                     keep_alive=settings.local_keep_alive,
                     is_detail=is_detail
                 )
-                if final_reply != draft_reply and was_verified:
+                if final_reply != draft_reply:
                     corr_payload = {
                         "type": "correction",
                         "final_content": final_reply,
                         "conversation_id": conv_id
                     }
                     yield f"data: {json.dumps(corr_payload)}\n\n"
+            elif used_backend != "local":
+                verify_status = "not_verified"
+                verify_reason = "api_backend"
+            else:
+                verify_status = "not_verified"
+                verify_reason = "quality_mode_off"
 
             latency_breakdown = {
                 "generation_ms": gen_ms,
@@ -641,6 +651,8 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                     "backend": used_backend,
                     "model": used_model,
                     "verified": was_verified,
+                    "verify_status": verify_status,
+                    "verify_reason": verify_reason,
                     "think_harder_used": think_harder_used,
                     "detailed_used": is_detail,
                     "hit_token_limit": was_cut,
@@ -703,12 +715,16 @@ async def chat_endpoint(req: ChatRequest, response: Response):
         final_reply = draft_reply
         was_verified = False
         verify_ms = 0
+        verify_status = "not_verified"
+        verify_reason = None
 
         if not final_reply.strip():
             final_reply = "I couldn't put an answer together that time. Ask again, or turn off Think harder."
             draft_reply = final_reply
+            verify_status = "not_verified"
+            verify_reason = "empty_reply"
         elif used_backend == "local" and settings.quality_mode:
-            final_reply, was_verified, verify_ms = await verify_reply(
+            final_reply, was_verified, verify_ms, verify_status, verify_reason = await verify_reply(
                 draft=draft_reply,
                 persona_rules=persona_state.content,
                 clock_ctx=clock_context,
@@ -719,6 +735,12 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                 keep_alive=settings.local_keep_alive,
                 is_detail=is_detail
             )
+        elif used_backend != "local":
+            verify_status = "not_verified"
+            verify_reason = "api_backend"
+        else:
+            verify_status = "not_verified"
+            verify_reason = "quality_mode_off"
 
         latency_breakdown = {
             "generation_ms": gen_ms,

@@ -22,7 +22,7 @@ async def test_verifier_returns_ok_uses_draft():
 
     mock_adapter.stream_chat = mock_stream
 
-    final, verified, latency = await verify_reply(
+    final, verified, latency, *_ = await verify_reply(
         draft="Python is a high-level interpreted programming language.",
         persona_rules="Keep replies to 4 sentences or fewer.",
         clock_ctx="Today is Thursday, October 23, 2026.",
@@ -46,7 +46,7 @@ async def test_verifier_corrects_12gb_vram_case():
 
     mock_adapter.stream_chat = mock_stream
 
-    final, verified, latency = await verify_reply(
+    final, verified, latency, *_ = await verify_reply(
         draft="Your laptop GPU has 12 GB of VRAM, perfect for large models.",
         persona_rules="Be precise. Never invent facts.",
         clock_ctx="Today is Thursday.",
@@ -70,7 +70,7 @@ async def test_verifier_corrects_timer_offer():
 
     mock_adapter.stream_chat = mock_stream
 
-    final, verified, latency = await verify_reply(
+    final, verified, latency, *_ = await verify_reply(
         draft="You look tired. I'll set a timer for 15 minutes while you rest.",
         persona_rules="You cannot set timers, monitor systems, or act outside this chat.",
         clock_ctx="Today is Thursday.",
@@ -94,7 +94,7 @@ async def test_verifier_malformed_fallback_to_draft():
     mock_adapter.stream_chat = mock_stream
 
     draft = "Original draft message."
-    final, verified, latency = await verify_reply(
+    final, verified, latency, *_ = await verify_reply(
         draft=draft,
         persona_rules="",
         clock_ctx="",
