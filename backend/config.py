@@ -78,7 +78,7 @@ class Settings:
 
     @property
     def quality_mode(self) -> bool:
-        return bool(self.local.get("quality_mode", True))
+        return bool(self.local.get("quality_mode", False))
 
     @property
     def think_harder_num_predict(self) -> int:

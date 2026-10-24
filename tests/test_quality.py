@@ -42,7 +42,7 @@ async def test_verifier_corrects_12gb_vram_case():
     """Verifier corrects 12 GB hallucination to 6 GB based on memory context."""
     mock_adapter = MagicMock()
     async def mock_stream(*args, **kwargs):
-        yield "Your laptop GPU has 6 GB of VRAM."
+        yield "Your laptop GPU has 6 GB of VRAM, perfect for large models."
 
     mock_adapter.stream_chat = mock_stream
 

@@ -52,7 +52,7 @@ local:
     - qwen2.5:7b
   max_context_tokens: 2500
   think: false
-  quality_mode: true
+  quality_mode: false
   think_harder_num_predict: 3000
   think_num_predict: 3000
   detail_num_predict: 900
