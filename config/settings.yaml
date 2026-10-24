@@ -189,13 +189,7 @@ bakeoff:
 
 safety:
   helpline_numbers:
-    - name: "Tele-MANAS (India)"
-      number: "14416 / 1800-891-4416"
-    - name: "KIRAN (India)"
-      number: "1800-599-0019"
-    - name: "iCall (India)"
-      number: "9152987821"
-    - name: "Vandrevala Foundation (India)"
-      number: "9999 666 555"
-    - name: "988 Suicide and Crisis Lifeline (US)"
-      number: "988"
+    - name: "Tele-MANAS"
+      number: "14416 (also 1800-891-4416), free, 24x7"
+    - name: "Emergency Services"
+      number: "112"

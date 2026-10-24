@@ -19,7 +19,7 @@ INITIAL_DB_EXISTS = REAL_DB_PATH.exists()
 INITIAL_DB_HASH = get_file_hash(REAL_DB_PATH)
 
 @pytest.fixture(autouse=True)
-def isolate_test_database(tmp_path, monkeypatch):
+def isolate_test_database(request, tmp_path, monkeypatch):
     """
     Guarantees every test runs against a temporary SQLite database
     and never modifies data/hinaku.db.
@@ -79,6 +79,12 @@ def isolate_test_database(tmp_path, monkeypatch):
     monkeypatch.setattr(chat_module, "memory_storage", test_memory_storage)
     monkeypatch.setattr(chat_module, "memory_extractor", test_memory_extractor)
     monkeypatch.setattr(chat_module, "memory_manager", test_memory_manager)
+
+    if "prewarm" not in request.node.name:
+        import backend.models.prewarm as prewarm_mod
+        async def _mock_prewarm():
+            return
+        monkeypatch.setattr(prewarm_mod, "prewarm_local_models", _mock_prewarm)
 
     yield test_manager
     try:

@@ -117,10 +117,42 @@ def test_helpline_numbers_configured():
     settings = get_settings()
     helplines = settings.helpline_numbers
     assert isinstance(helplines, list)
-    assert len(helplines) >= 2
-    # Ensure real numbers exist
+    assert len(helplines) == 2
     names = [h.get("name", "") for h in helplines]
-    assert any("Tele-MANAS" in n or "988" in n for n in names)
+    assert "Tele-MANAS" in names
+    assert "Emergency Services" in names
+    # Verify no foreign 988 or merged KIRAN
+    assert not any("988" in n or "KIRAN" in n for n in names)
+    numbers = [h.get("number", "") for h in helplines]
+    assert any("14416" in num for num in numbers)
+    assert any("112" in num for num in numbers)
+
+
+def test_hopelessness_detection():
+    from backend.guards import is_hopelessness_or_self_harm, is_sensitive_topic
+    despair_cases = [
+        "I feel hopeless about everything",
+        "nothing matters anymore",
+        "I want to kill myself",
+        "I feel like ending my life",
+        "I can't go on like this",
+        "thinking about self-harm"
+    ]
+    for text in despair_cases:
+        assert is_hopelessness_or_self_harm(text), f"Failed for '{text}'"
+        sens, _ = is_sensitive_topic(text)
+        assert sens, f"Failed sensitive check for '{text}'"
+
+    non_despair_sensitive = [
+        "I broke up with my girlfriend yesterday",
+        "I am stressed about my exam tomorrow",
+        "I have a fever and cough",
+        "I lost my job and I am broke"
+    ]
+    for text in non_despair_sensitive:
+        assert not is_hopelessness_or_self_harm(text), f"Unexpected despair match for '{text}'"
+        sens, _ = is_sensitive_topic(text)
+        assert sens, f"Expected sensitive topic for '{text}'" 
 
 
 def test_eval_golden_contains_emotional_support():
@@ -133,3 +165,4 @@ def test_eval_golden_contains_emotional_support():
     assert "emotional-support-01" in ids
     assert "emotional-support-04" in ids
     assert "emotional-support-06" in ids
+

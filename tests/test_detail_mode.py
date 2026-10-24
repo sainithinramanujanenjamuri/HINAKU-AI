@@ -90,7 +90,7 @@ async def test_verify_reply_with_detail_mode_mock():
             # Verifier returns OK
             yield "OK"
 
-    final_reply, was_verified, elapsed = await verify_reply(
+    final_reply, was_verified, elapsed, status, reason = await verify_reply(
         draft=long_compliant_draft,
         persona_rules="Default to four sentences or fewer unless detail is requested.",
         clock_ctx="Thursday",

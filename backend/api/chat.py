@@ -178,16 +178,21 @@ async def chat_endpoint(req: ChatRequest, response: Response):
     latest_user_text = latest_msg.content if latest_msg.role == "user" else ""
 
     # Sensitive Topic Detection (mental health, mood, health, money trouble, personal relationships)
-    from backend.guards import is_sensitive_topic
+    from backend.guards import is_sensitive_topic, is_hopelessness_or_self_harm
     is_sensitive_topic_found, sensitive_topic_category = is_sensitive_topic(latest_user_text)
     auto_private_triggered = False
     auto_private_notice_text = None
+    is_despair = is_hopelessness_or_self_harm(latest_user_text)
     if is_sensitive_topic_found and not is_private:
         is_private = True
         auto_private_triggered = True
         history_manager.set_conversation_privacy(conv_id, True)
         topic_label = sensitive_topic_category.replace("_", " ")
         auto_private_notice_text = f"Sensitive topic detected ({topic_label}). Marked conversation as Private to keep your data local, skip memory extraction, and exclude it from training."
+        if is_despair and settings.helpline_numbers:
+            lines = [f"{h.get('name')}: {h.get('number')}" for h in settings.helpline_numbers if h.get('name') and h.get('number')]
+            if lines:
+                auto_private_notice_text += " Support is available: " + "; ".join(lines)
 
     # GUARD 1: Sensitive-Data Guard (PIN, password, card number, bank account, government ID)
     is_sensitive, sanitized_user_text = check_and_redact_sensitive_data(latest_user_text)
@@ -472,6 +477,15 @@ async def chat_endpoint(req: ChatRequest, response: Response):
     system_parts = [persona_text, clock_context]
     if memory_context:
         system_parts.append(memory_context)
+    if is_despair:
+        helpline_lines = [f"{h.get('name')}: {h.get('number')}" for h in settings.helpline_numbers if h.get('name') and h.get('number')]
+        hl_info = f" Available helplines: {'; '.join(helpline_lines)}." if helpline_lines else " No external helplines are configured."
+        system_parts.append(
+            f"Guidance: The user's message suggests feelings of hopelessness or self-harm. "
+            f"Respond with warmth and brevity. Do not sound clinical, do not diagnose, and do not provide long lists of techniques. "
+            f"Ask gently about their safety and encourage contacting a trusted person or a local helpline.{hl_info} "
+            f"Never invent or guess phone numbers or helpline names."
+        )
     system_content = "\n\n".join(system_parts)
 
     # Prepend persona system prompt (with memory context if applicable) and trim history

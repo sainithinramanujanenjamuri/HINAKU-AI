@@ -211,7 +211,7 @@ def trim_to_last_complete_sentence(text: str) -> Tuple[str, bool]:
 
 SENSITIVE_TOPIC_PATTERNS = {
     "mental_health": [
-        r"(?i)\b(?:mental\s+health|depression|depressed|anxiety|anxious|panic(?:\s+attack)?|feeling\s+low|feel\s+low|feeling\s+lost|feel\s+lost|feeling\s+sad|feel\s+sad|hopeless(?:ness)?|suicid\w*|kill\s+myself|end\s+my\s+life|self-?harm|hurting\s+myself|want\s+to\s+die|nothing\s+matters|burnout|burned\s+out|overthinking|overwhelmed|nervous\s+breakdown|crying|lonely|loneliness|unhappy|miserable|hate\s+myself|can'?t\s+go\s+on|can'?t\s+take\s+this|tired\s+of\s+living|low\s+mood)\b"
+        r"(?i)\b(?:mental\s+health|depression|depressed|anxiety|anxious|panic(?:\s+attack)?|feeling\s+low|feel\s+low|feeling\s+lost|feel\s+lost|feeling\s+sad|feel\s+sad|hopeless(?:ness)?|suicid\w*|kill\s+myself|end(?:ing)?\s+my\s+life|self-?harm|hurting\s+myself|want\s+to\s+die|nothing\s+matters|burnout|burned\s+out|overthinking|overwhelmed|nervous\s+breakdown|crying|lonely|loneliness|unhappy|miserable|hate\s+myself|can'?t\s+go\s+on|can'?t\s+take\s+this|tired\s+of\s+living|low\s+mood|stress(?:ed|ful)?|discouraged)\b"
     ],
     "mood": [
         r"(?i)\b(?:bad\s+mood|terrible\s+mood|foul\s+mood|low\s+mood|feeling\s+down|feeling\s+empty|feeling\s+broken|feeling\s+worthless|feeling\s+numb|feeling\s+hopeless)\b"
@@ -241,3 +241,17 @@ def is_sensitive_topic(text: str) -> Tuple[bool, str]:
             if re.search(pat, clean):
                 return True, cat
     return False, ""
+
+HOPELESSNESS_OR_SELF_HARM_PATTERNS = [
+    r"(?i)\b(?:hopeless(?:ness)?|nothing\s+matters|kill\s+myself|end(?:ing)?\s+my\s+life|suicid\w*|self-?harm\w*|hurt(?:ing)?\s+myself|want\s+to\s+die|wish\s+i\s+(?:were|was)\s+dead|better\s+off\s+dead|tired\s+of\s+living|no\s+reason\s+to\s+live|can'?t\s+go\s+on|cannot\s+go\s+on|can'?t\s+take\s+this\s+anymore)\b"
+]
+
+def is_hopelessness_or_self_harm(text: str) -> bool:
+    """
+    Checks if a user query explicitly suggests hopelessness or self-harm/suicide.
+    """
+    if not text:
+        return False
+    clean = text.strip()
+    return any(re.search(pat, clean) for pat in HOPELESSNESS_OR_SELF_HARM_PATTERNS)
+

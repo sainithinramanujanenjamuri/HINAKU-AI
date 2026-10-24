@@ -87,7 +87,8 @@ async def test_local_only_error_never_falls_back_to_api(mock_adapters):
     # Must yield a local error message, NOT fallback to API
     assert len(events) == 1
     assert events[0]["backend"] == "local"
-    assert "[Error: Local model failed" in events[0]["chunk"]
+    assert events[0].get("type") == "error"
+    assert "Local model failed" in events[0].get("error", "")
     assert api.chat.call_count == 0
 
 
