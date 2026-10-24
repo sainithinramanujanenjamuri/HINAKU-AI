@@ -209,6 +209,45 @@ def trim_to_last_complete_sentence(text: str) -> Tuple[str, bool]:
     return trimmed, True
 
 
+def trim_to_word_cap(text: str, max_words: int = 350) -> Tuple[str, bool]:
+    """
+    Trims a text to approximately max_words at a clean sentence boundary.
+    If the text has <= max_words, returns (text, False).
+    If it exceeds max_words, finds the last sentence boundary that keeps the
+    total words <= max_words.
+    Returns (trimmed_text, was_cut).
+    """
+    if not text or not text.strip():
+        return text, False
+
+    words = re.findall(r"\b\w+\b", text)
+    if len(words) <= max_words:
+        return text, False
+
+    matches = list(re.finditer(r'[.!?]["\')\]]?(?:\s+|$)', text))
+    if not matches:
+        word_spans = list(re.finditer(r"\b\w+\b", text))
+        if len(word_spans) > max_words:
+            cut_idx = word_spans[max_words - 1].end()
+            return text[:cut_idx].rstrip() + ".", True
+        return text, False
+
+    best_cut_idx = None
+    for m in matches:
+        sub = text[:m.end()].rstrip()
+        sub_words = len(re.findall(r"\b\w+\b", sub))
+        if sub_words <= max_words:
+            best_cut_idx = m.end()
+        else:
+            break
+
+    if best_cut_idx is None:
+        best_cut_idx = matches[0].end()
+
+    trimmed = text[:best_cut_idx].rstrip()
+    return trimmed, True
+
+
 SENSITIVE_TOPIC_PATTERNS = {
     "mental_health": [
         r"(?i)\b(?:mental\s+health|depression|depressed|anxiety|anxious|panic(?:\s+attack)?|feeling\s+low|feel\s+low|feeling\s+lost|feel\s+lost|feeling\s+sad|feel\s+sad|hopeless(?:ness)?|suicid\w*|kill\s+myself|end(?:ing)?\s+my\s+life|self-?harm|hurting\s+myself|want\s+to\s+die|nothing\s+matters|burnout|burned\s+out|overthinking|overwhelmed|nervous\s+breakdown|crying|lonely|loneliness|unhappy|miserable|hate\s+myself|can'?t\s+go\s+on|can'?t\s+take\s+this|tired\s+of\s+living|low\s+mood|stress(?:ed|ful)?|discouraged)\b"

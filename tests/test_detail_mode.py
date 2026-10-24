@@ -105,3 +105,25 @@ async def test_verify_reply_with_detail_mode_mock():
     assert was_verified is True
     assert final_reply == long_compliant_draft
 
+
+def test_trim_to_word_cap_enforces_hard_cap_at_sentence_boundary():
+    from backend.guards import trim_to_word_cap
+
+    # Generate 50 sentences with 10 words each (500 words total)
+    sentences = [f"Sentence number {i} contains exactly ten words to test proper length." for i in range(1, 51)]
+    long_text = " ".join(sentences)
+    words = re.findall(r"\b\w+\b", long_text)
+    assert len(words) == 550
+
+    capped_text, was_capped = trim_to_word_cap(long_text, max_words=350)
+    assert was_capped is True
+    capped_words = re.findall(r"\b\w+\b", capped_text)
+    assert len(capped_words) <= 350
+    # Must end at a clean sentence boundary
+    assert capped_text.endswith(".")
+    # Shorter text within cap should not be modified
+    short_text = "Short text with only seven words in it."
+    unchanged, was_cut = trim_to_word_cap(short_text, max_words=350)
+    assert was_cut is False
+    assert unchanged == short_text
+

@@ -216,6 +216,12 @@ async def perform_reply_verification(
         if num_s > 4:
             curr_text = trim_to_four_sentences(curr_text)
             correction_reasons.append("Trimmed to four sentences outside detail mode")
+    else:
+        from backend.guards import trim_to_word_cap
+        capped_detail, was_capped = trim_to_word_cap(curr_text, max_words=350)
+        if was_capped:
+            curr_text = capped_detail
+            correction_reasons.append("Trimmed to sentence boundary at about 350 words")
 
     # 5. Optional LLM verifier (off by default)
     if settings.quality_mode:
@@ -710,6 +716,12 @@ async def chat_endpoint(req: ChatRequest, response: Response):
             if was_cut:
                 draft_reply = trimmed_draft
                 yield f"data: {json.dumps({'type': 'correction', 'final_content': draft_reply, 'conversation_id': conv_id, 'hit_token_limit': True})}\n\n"
+            if is_detail:
+                from backend.guards import trim_to_word_cap
+                capped_draft, was_capped = trim_to_word_cap(draft_reply, max_words=350)
+                if was_capped:
+                    draft_reply = capped_draft
+                    yield f"data: {json.dumps({'type': 'correction', 'final_content': draft_reply, 'conversation_id': conv_id, 'detail_capped': True})}\n\n"
 
             final_reply = draft_reply
             was_verified = False
@@ -862,6 +874,12 @@ async def chat_endpoint(req: ChatRequest, response: Response):
         trimmed_draft, was_cut = trim_to_last_complete_sentence(draft_reply)
         if was_cut:
             draft_reply = trimmed_draft
+
+        if is_detail:
+            from backend.guards import trim_to_word_cap
+            capped_draft, was_capped = trim_to_word_cap(draft_reply, max_words=350)
+            if was_capped:
+                draft_reply = capped_draft
 
         final_reply = draft_reply
         was_verified = False
