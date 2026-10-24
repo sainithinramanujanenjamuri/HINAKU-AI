@@ -378,7 +378,10 @@ class ModelRouter:
                 logger.error(f"API backend failed: {e}")
                 if not decision.fallback_allowed or is_private:
                     yield {
-                        "chunk": f"[Error: API failed - {str(e)}]",
+                        "type": "error",
+                        "error_type": "api_error",
+                        "chunk": "",
+                        "error": f"API failed: {str(e)}",
                         "backend": "api",
                         "model": active_model,
                         "notice": f"API error: {str(e)}"
@@ -459,14 +462,20 @@ class ModelRouter:
                     return
                 except Exception as api_err:
                     yield {
-                        "chunk": f"[Error: Both backends failed - Local: {str(e)} | API: {str(api_err)}]",
+                        "type": "error",
+                        "error_type": "all_backends_failed",
+                        "chunk": "",
+                        "error": f"Both backends failed - Local: {str(e)} | API: {str(api_err)}",
                         "backend": "local",
                         "model": active_model,
                         "notice": "Both local and API backends failed."
                     }
             else:
                 yield {
-                    "chunk": f"[Error: Local model failed - {str(e)}]",
+                    "type": "error",
+                    "error_type": "local_error",
+                    "chunk": "",
+                    "error": f"Local model failed: {str(e)}",
                     "backend": "local",
                     "model": active_model,
                     "notice": f"Local model error: {str(e)}"

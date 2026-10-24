@@ -446,6 +446,93 @@ body {
   display: none;
 }
 
+/* Ollama down banner */
+.ollama-down-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(239, 68, 68, 0.15);
+  border-bottom: 1px solid rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+  padding: 9px 24px;
+  font-size: 13px;
+  font-weight: 500;
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+.ollama-down-banner.hidden {
+  display: none;
+}
+
+.ollama-down-banner .banner-icon {
+  font-size: 14px;
+}
+
+.ollama-down-banner .banner-text {
+  flex: 1;
+}
+
+.ollama-down-banner .banner-retry-btn {
+  background: rgba(239, 68, 68, 0.25);
+  border: 1px solid rgba(239, 68, 68, 0.6);
+  color: #fef2f2;
+  border-radius: 4px;
+  padding: 3px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ollama-down-banner .banner-retry-btn:hover {
+  background: rgba(239, 68, 68, 0.45);
+  border-color: rgba(239, 68, 68, 0.9);
+}
+
+/* Temporary error toast/notice */
+.chat-error-toast {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin: 10px 20px;
+  color: #fca5a5;
+  font-size: 13px;
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+.chat-error-toast .toast-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.chat-error-toast .toast-retry-btn {
+  background: rgba(239, 68, 68, 0.25);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  color: #fef2f2;
+  border-radius: 4px;
+  padding: 3px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.chat-error-toast .toast-retry-btn:hover {
+  background: rgba(239, 68, 68, 0.45);
+}
+
+.chat-error-toast .toast-dismiss-btn {
+  background: transparent;
+  border: none;
+  color: #fca5a5;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 4px;
+}
+
 /* Chat container */
 .chat-container {
   flex: 1;

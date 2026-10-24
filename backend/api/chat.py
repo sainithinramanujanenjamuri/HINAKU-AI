@@ -1,6 +1,7 @@
 import json
 import time
 import uuid
+import logging
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, Response
 from fastapi.responses import StreamingResponse
@@ -21,6 +22,8 @@ from backend.guards import (
     get_system_clock_context
 )
 from backend.models.ollama_shared import log_ollama_call
+
+logger = logging.getLogger("hinaku.chat")
 
 router = APIRouter()
 settings = get_settings()
@@ -141,6 +144,11 @@ async def get_info():
             "file": str(settings.persona_file)
         }
     }
+
+@router.get("/health/ollama")
+async def get_ollama_health():
+    health = await local_adapter.check_health()
+    return health
 
 @router.post("/chat")
 async def chat_endpoint(req: ChatRequest, response: Response):
@@ -490,6 +498,7 @@ async def chat_endpoint(req: ChatRequest, response: Response):
             yield f"data: {json.dumps(init_meta)}\n\n"
 
             t_gen_start = time.perf_counter()
+            encountered_error = None
             async for event in model_router.stream_chat(
                 trimmed_messages,
                 user_prompt=latest_user_text,
@@ -499,6 +508,11 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                 think=use_think,
                 options=target_opts
             ):
+                if event.get("type") == "error":
+                    encountered_error = event
+                    yield f"data: {json.dumps(event)}\n\n"
+                    break
+
                 used_backend = event["backend"]
                 used_model = event["model"]
                 if event.get("notice"):
@@ -517,6 +531,11 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                 accumulated_chunks.append(event["chunk"])
                 yield f"data: {json.dumps(chunk_payload)}\n\n"
 
+            if encountered_error:
+                # Do NOT save error to DB, do NOT log to interactions or datasets
+                yield "data: [DONE]\n\n"
+                return
+
             gen_ms = int((time.perf_counter() - t_gen_start) * 1000)
             draft_reply = "".join(accumulated_chunks)
 
@@ -532,7 +551,7 @@ async def chat_endpoint(req: ChatRequest, response: Response):
 
             # Fallback for empty reply: every stream must end cleanly with visible in-persona text
             if not final_reply.strip():
-                final_reply = "I am here. The thought did not resolve into words. Ask again or take the next step."
+                final_reply = "I couldn't put an answer together that time. Ask again, or turn off Think harder."
                 draft_reply = final_reply
                 fallback_chunk = {
                     "type": "chunk",
@@ -645,6 +664,7 @@ async def chat_endpoint(req: ChatRequest, response: Response):
         used_notice = persona_state.notice
 
         t_gen_start = time.perf_counter()
+        encountered_error = None
         async for event in model_router.stream_chat(
             trimmed_messages,
             user_prompt=latest_user_text,
@@ -654,11 +674,17 @@ async def chat_endpoint(req: ChatRequest, response: Response):
             think=use_think,
             options=target_opts
         ):
+            if event.get("type") == "error":
+                encountered_error = event
+                break
             accumulated_chunks.append(event["chunk"])
             used_backend = event["backend"]
             used_model = event["model"]
             if event.get("notice"):
                 used_notice = event["notice"]
+
+        if encountered_error:
+            raise HTTPException(status_code=502, detail=encountered_error.get("error", "Model error"))
 
         gen_ms = int((time.perf_counter() - t_gen_start) * 1000)
         draft_reply = "".join(accumulated_chunks)
@@ -672,7 +698,7 @@ async def chat_endpoint(req: ChatRequest, response: Response):
         verify_ms = 0
 
         if not final_reply.strip():
-            final_reply = "I am here. The thought did not resolve into words. Ask again or take the next step."
+            final_reply = "I couldn't put an answer together that time. Ask again, or turn off Think harder."
             draft_reply = final_reply
         elif used_backend == "local" and settings.quality_mode:
             final_reply, was_verified, verify_ms = await verify_reply(

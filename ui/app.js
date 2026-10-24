@@ -153,6 +153,14 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Fetch status info
+  const ollamaDownBanner = document.getElementById("ollama-down-banner");
+  const ollamaRetryBtn = document.getElementById("ollama-retry-btn");
+  if (ollamaRetryBtn) {
+    ollamaRetryBtn.addEventListener("click", () => {
+      checkInfo();
+    });
+  }
+
   async function checkInfo() {
     try {
       const res = await fetch("/api/info");
@@ -170,9 +178,11 @@ document.addEventListener("DOMContentLoaded", () => {
         if (data.ollama_status && data.ollama_status.online) {
           statusIndicator.classList.remove("offline");
           statusIndicator.title = "Ollama online";
+          if (ollamaDownBanner) ollamaDownBanner.classList.add("hidden");
         } else {
           statusIndicator.classList.add("offline");
           statusIndicator.title = "Ollama offline or model not found";
+          if (ollamaDownBanner) ollamaDownBanner.classList.remove("hidden");
         }
 
         if (data.persona && data.persona.is_fallback) {
@@ -182,8 +192,12 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (e) {
       statusIndicator.classList.add("offline");
       statusIndicator.title = "Backend unreachable";
+      if (ollamaDownBanner) ollamaDownBanner.classList.remove("hidden");
     }
   }
+
+  // Periodic health check every 10 seconds to auto-reconnect
+  setInterval(checkInfo, 10000);
 
   checkInfo();
 
@@ -391,6 +405,47 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (e) {
       console.error("Error deleting conversation:", e);
     }
+  }
+
+  function showChatErrorNotice(errorMessage, originalPrompt) {
+    const existing = document.querySelector(".chat-error-toast");
+    if (existing) existing.remove();
+
+    const toast = document.createElement("div");
+    toast.className = "chat-error-toast";
+
+    const msgSpan = document.createElement("span");
+    msgSpan.className = "toast-message";
+    msgSpan.textContent = `⚠️ Connection error: ${errorMessage}`;
+
+    const actions = document.createElement("div");
+    actions.className = "toast-actions";
+
+    const retryBtn = document.createElement("button");
+    retryBtn.className = "toast-retry-btn";
+    retryBtn.textContent = "Retry";
+    retryBtn.addEventListener("click", () => {
+      toast.remove();
+      if (originalPrompt) {
+        promptInput.value = originalPrompt;
+        sendMessage();
+      }
+    });
+
+    const dismissBtn = document.createElement("button");
+    dismissBtn.className = "toast-dismiss-btn";
+    dismissBtn.innerHTML = "&times;";
+    dismissBtn.title = "Dismiss";
+    dismissBtn.addEventListener("click", () => toast.remove());
+
+    actions.appendChild(retryBtn);
+    actions.appendChild(dismissBtn);
+
+    toast.appendChild(msgSpan);
+    toast.appendChild(actions);
+
+    messagesContainer.appendChild(toast);
+    scrollToBottom();
   }
 
   function renderIntroMessage() {
@@ -754,6 +809,8 @@ document.addEventListener("DOMContentLoaded", () => {
       let buffer = "";
       let streamDone = false;
 
+      let hasErrorEvent = false;
+
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
@@ -774,6 +831,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
           try {
             const parsed = JSON.parse(dataStr);
+            if (parsed.type === "error") {
+              hasErrorEvent = true;
+              showChatErrorNotice(parsed.error || parsed.message || "Model error", text);
+              if (msgDiv && msgDiv.parentElement) {
+                msgDiv.remove();
+              }
+              break;
+            }
             if (parsed.conversation_id) {
               currentConversationId = parsed.conversation_id;
             }
@@ -823,9 +888,13 @@ document.addEventListener("DOMContentLoaded", () => {
           }
         }
 
-        if (streamDone) {
+        if (streamDone || hasErrorEvent) {
           break;
         }
+      }
+
+      if (hasErrorEvent) {
+        return;
       }
 
       const cursor = bodyDiv.querySelector(".streaming-cursor");
@@ -848,7 +917,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       if (!assistantText.trim()) {
-        assistantText = "I am here. The thought did not resolve into words. Ask again or take the next step.";
+        assistantText = "I couldn't put an answer together that time. Ask again, or turn off Think harder.";
         bodyDiv.innerHTML = formatMarkdown(assistantText);
       }
 
@@ -876,7 +945,11 @@ document.addEventListener("DOMContentLoaded", () => {
           bodyDiv.innerHTML = formatMarkdown(assistantText);
         }
       } else {
-        bodyDiv.innerHTML = `<span style="color: #ef4444;">[Error: ${err.message}]</span>`;
+        // Model/connection errors are not replies: remove empty assistant bubble and show toast
+        if (msgDiv && msgDiv.parentElement) {
+          msgDiv.remove();
+        }
+        showChatErrorNotice(err.message, text);
       }
     } finally {
       clearTimeout(timeoutId);
