@@ -391,7 +391,9 @@ class GPUSMISampler:
             t_now = datetime.now().strftime("%H:%M:%S.%f")[:-3]
             try:
                 cmd = ["nvidia-smi", "--query-gpu=memory.used,memory.total,utilization.gpu,temperature.gpu", "--format=csv,noheader,nounits"]
-                res = subprocess.run(cmd, capture_output=True, text=True, timeout=2)
+                def _run_smi():
+                    return subprocess.run(cmd, capture_output=True, text=True, timeout=2)
+                res = await asyncio.to_thread(_run_smi)
                 if res.returncode == 0 and res.stdout.strip():
                     parts = [p.strip() for p in res.stdout.strip().split("\n")[0].split(",")]
                     self.samples.append({
@@ -861,18 +863,18 @@ async def run_bakeoff(
                     "pct_offload": 100,
                     "summary": "3,447 MB (2,761 MB LLM + 686 MB Embed, 100% GPU)"
                 }
-            if mock_mode or not stats_by_model[model]["gpu_smi_snapshot"]:
-                v_used = 3376.0 if "bonsai" in model else (3681.0 if "qwen" in model else 3435.0)
-                u_pct = 78.0 if "bonsai" in model else (85.0 if "qwen" in model else 74.0)
-                t_c = 53.0 if "bonsai" in model else (57.0 if "qwen" in model else 51.0)
-                t_str = f"12:0{len(model)}:15.204"
-                stats_by_model[model]["gpu_smi_snapshot"] = {
-                    "used_mb": v_used,
-                    "total_mb": 6141.0,
-                    "util_pct": u_pct,
-                    "temp_c": t_c,
-                    "summary": f"{int(v_used)} MiB / 6,141 MiB ({u_pct}% util, {t_c}°C at {t_str})"
-                }
+            if not stats_by_model[model]["gpu_smi_snapshot"]:
+                live_snapshot = get_gpu_smi_snapshot()
+                if live_snapshot:
+                    stats_by_model[model]["gpu_smi_snapshot"] = live_snapshot
+                else:
+                    stats_by_model[model]["gpu_smi_snapshot"] = {
+                        "used_mb": 0.0,
+                        "total_mb": 6141.0,
+                        "util_pct": 0.0,
+                        "temp_c": 0.0,
+                        "summary": "N/A (nvidia-smi not available)"
+                    }
 
         # Prepare summary output
         date_str = output_date or datetime.now().strftime("%Y-%m-%d")
