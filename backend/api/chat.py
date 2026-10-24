@@ -450,8 +450,10 @@ async def chat_endpoint(req: ChatRequest, response: Response):
 
     clock_context = get_system_clock_context()
     persona_text = persona_state.content
-    if is_api and is_detail:
-        persona_text += "\n\nKeep the explanation clear and well-organized, up to about 350 words maximum."
+    if is_api:
+        persona_text += "\n\nDo not use LaTeX or mathematical dollar signs ($...$ or $$...$$). Use standard Unicode characters (e.g. →, ×, ≤, ≥, ≠, ·, etc.) for symbols and equations."
+        if is_detail:
+            persona_text += "\nKeep the explanation clear and well-organized, up to about 350 words maximum."
     system_parts = [persona_text, clock_context]
     if memory_context:
         system_parts.append(memory_context)

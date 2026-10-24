@@ -53,8 +53,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function formatMarkdown(text) {
     if (!text) return "";
-    // Preprocess: ensure bold heading directly after a list item renders as its own paragraph
-    const normalized = text.replace(/((?:^|\n)[ \t]*(?:[-*+]|\d+\.)[^\n]+)\n([ \t]*\*\*[^*]+?\*\*.*)/g, "$1\n\n$2");
+    // Preprocess 1: Convert LaTeX math notation to plain Unicode symbols
+    let processed = (typeof convertLatexSymbols === "function") ? convertLatexSymbols(text) : text;
+    // Preprocess 2: ensure bold heading directly after a list item renders as its own paragraph
+    const normalized = processed.replace(/((?:^|\n)[ \t]*(?:[-*+]|\d+\.)[^\n]+)\n([ \t]*\*\*[^*]+?\*\*.*)/g, "$1\n\n$2");
     return window.marked ? marked.parse(normalized) : normalized;
   }
 
