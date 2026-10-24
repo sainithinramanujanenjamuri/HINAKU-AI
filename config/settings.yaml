@@ -9,6 +9,7 @@ app:
 router:
   mode: auto                    # auto | local_only | api_only
   fallback_on_failure: true     # use the other backend if one is down (ignored in forced modes)
+  detail_route_to_api: true     # in auto mode: detail requests (non-private, non-personal) route to API
   # In auto mode: short/simple/private -> local, hard reasoning -> api
   local_max_prompt_tokens: 1500
   show_backend_indicator: true  # show "local" or "API" on every reply

@@ -153,6 +153,10 @@ class Settings:
         return self.router.get("fallback_on_failure", True)
 
     @property
+    def detail_route_to_api(self) -> bool:
+        return bool(self.router.get("detail_route_to_api", True))
+
+    @property
     def local_max_prompt_tokens(self) -> int:
         return self.router.get("local_max_prompt_tokens", 1500)
 

@@ -425,11 +425,16 @@ async def chat_endpoint(req: ChatRequest, response: Response):
             if m.role != "system"
         ]
 
+    from backend.guards import is_detail_request, trim_to_last_complete_sentence
+
+    is_detail = bool(req.detailed) or is_detail_request(latest_user_text)
+
     # Identify target backend for memory retrieval privacy rule
     router_decision = model_router.decide_backend(
         latest_user_text,
         is_private=is_private,
-        last_backend=last_backend
+        last_backend=last_backend,
+        is_detail=is_detail
     )
     is_api = (router_decision.target_backend == "api")
 
@@ -444,7 +449,10 @@ async def chat_endpoint(req: ChatRequest, response: Response):
     memory_ms = int((time.perf_counter() - t_mem_start) * 1000)
 
     clock_context = get_system_clock_context()
-    system_parts = [persona_state.content, clock_context]
+    persona_text = persona_state.content
+    if is_api and is_detail:
+        persona_text += "\n\nKeep the explanation clear and well-organized, up to about 350 words maximum."
+    system_parts = [persona_text, clock_context]
     if memory_context:
         system_parts.append(memory_context)
     system_content = "\n\n".join(system_parts)
@@ -461,9 +469,6 @@ async def chat_endpoint(req: ChatRequest, response: Response):
     think_harder_used = False
     use_think = False
 
-    from backend.guards import is_detail_request, trim_to_last_complete_sentence
-
-    is_detail = bool(req.detailed) or is_detail_request(latest_user_text)
     if is_detail:
         target_opts["num_predict"] = max(target_opts.get("num_predict", 300), settings.detail_num_predict)
 
@@ -506,7 +511,8 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                 last_backend=last_backend,
                 override_model=target_model,
                 think=use_think,
-                options=target_opts
+                options=target_opts,
+                is_detail=is_detail
             ):
                 if event.get("type") == "error":
                     encountered_error = event
@@ -672,7 +678,8 @@ async def chat_endpoint(req: ChatRequest, response: Response):
             last_backend=last_backend,
             override_model=target_model,
             think=use_think,
-            options=target_opts
+            options=target_opts,
+            is_detail=is_detail
         ):
             if event.get("type") == "error":
                 encountered_error = event

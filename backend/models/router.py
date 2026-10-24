@@ -231,7 +231,8 @@ class ModelRouter:
         self,
         user_prompt: str,
         is_private: bool = False,
-        last_backend: Optional[str] = None
+        last_backend: Optional[str] = None,
+        is_detail: bool = False
     ) -> RouterDecision:
         # Private chats NEVER use API
         if is_private:
@@ -303,11 +304,17 @@ class ModelRouter:
                 )
 
         # Mode is 'auto'
-        classified = classify_prompt(
-            user_prompt,
-            is_private=is_private,
-            max_local_tokens=self.max_prompt_tokens
-        )
+        from backend.config import get_settings
+        current_settings = get_settings()
+
+        if is_detail and current_settings.detail_route_to_api and not is_private and not is_personal_statement(user_prompt):
+            classified = "api"
+        else:
+            classified = classify_prompt(
+                user_prompt,
+                is_private=is_private,
+                max_local_tokens=self.max_prompt_tokens
+            )
 
         if classified == "api":
             # Check safety limit for daily requests
@@ -354,9 +361,10 @@ class ModelRouter:
         last_backend: Optional[str] = None,
         override_model: Optional[str] = None,
         think: Optional[bool] = None,
-        options: Optional[Dict[str, Any]] = None
+        options: Optional[Dict[str, Any]] = None,
+        is_detail: bool = False
     ) -> AsyncGenerator[Dict[str, Any], None]:
-        decision = self.decide_backend(user_prompt, is_private=is_private, last_backend=last_backend)
+        decision = self.decide_backend(user_prompt, is_private=is_private, last_backend=last_backend, is_detail=is_detail)
         active_backend = decision.target_backend
         active_model = override_model if (override_model and active_backend == "local") else decision.target_model
         notice = decision.notice
