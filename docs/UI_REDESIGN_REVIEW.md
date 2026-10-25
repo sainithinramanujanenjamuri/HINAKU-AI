@@ -89,3 +89,4 @@ Visual artifacts are generated in demo mode (`HINAKU_UI_DEMO=1`) and stored in `
 | `Esc` | **Stop Generation** | Aborts active streaming generation from the model router. |
 | `Enter` | **Send Message** | Submits prompt to HINAKU. |
 | `Shift + Enter` | **Newline** | Inserts a line break into the prompt composer without sending. |
+

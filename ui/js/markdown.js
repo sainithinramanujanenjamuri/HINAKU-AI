@@ -13,10 +13,82 @@ export function formatMarkdown(text) {
   // Ensure bold headings directly following list items render cleanly
   const normalized = processed.replace(/((?:^|\n)[ \t]*(?:[-*+]|\d+\.)[^\n]+)\n([ \t]*\*\*[^*]+?\*\*.*)/g, "$1\n\n$2");
 
-  let html = window.marked ? window.marked.parse(normalized) : normalized;
+  let html = window.marked ? window.marked.parse(normalized) : parseOfflineMarkdown(normalized);
 
   // Post-process to decorate pre blocks with code headers and copy buttons
   return wrapCodeBlocks(html);
+}
+
+function parseOfflineMarkdown(text) {
+  // Simple, offline-safe markdown parser for dark desktop assistant
+  let out = "";
+  const lines = text.split("\n");
+  let inCode = false;
+  let codeLang = "";
+  let codeBuffer = [];
+  let inList = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const codeMatch = line.match(/^```([a-zA-Z0-9_-]*)/);
+
+    if (codeMatch && !inCode) {
+      if (inList) { out += "</ul>"; inList = false; }
+      inCode = true;
+      codeLang = codeMatch[1] || "text";
+      codeBuffer = [];
+      continue;
+    } else if (line.startsWith("```") && inCode) {
+      inCode = false;
+      const escaped = codeBuffer.join("\n").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      out += `<pre><code class="language-${codeLang}">${escaped}</code></pre>`;
+      continue;
+    }
+
+    if (inCode) {
+      codeBuffer.push(line);
+      continue;
+    }
+
+    // List item
+    const listMatch = line.match(/^[-*+]\s+(.*)/);
+    if (listMatch) {
+      if (!inList) { out += "<ul>"; inList = true; }
+      out += `<li>${formatInline(listMatch[1])}</li>`;
+      continue;
+    } else if (inList) {
+      out += "</ul>";
+      inList = false;
+    }
+
+    // Empty line -> paragraph break
+    if (!line.trim()) {
+      out += "<br>";
+      continue;
+    }
+
+    out += `<p>${formatInline(line)}</p>`;
+  }
+
+  if (inCode) {
+    const escaped = codeBuffer.join("\n").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    out += `<pre><code class="language-${codeLang}">${escaped}</code></pre>`;
+  }
+  if (inList) {
+    out += "</ul>";
+  }
+
+  return out;
+}
+
+function formatInline(str) {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*([^*]+)\*/g, "<em>$1</em>");
 }
 
 function wrapCodeBlocks(html) {
