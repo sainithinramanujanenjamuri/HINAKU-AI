@@ -27,7 +27,7 @@ from backend.memory.storage import MemoryStorage
 from backend.memory.manager import MemoryManager
 from backend.models.ollama_adapter import OllamaAdapter
 from backend.persona import PersonaManager
-from backend.quality import verify_reply, count_sentences, perform_reply_verification, detect_forbidden_offers, get_today_weekday_patterns
+from backend.quality import verify_reply, count_sentences, perform_reply_verification, detect_forbidden_offers, get_today_weekday_patterns, detect_hardware_conflict
 from backend.guards import (
     check_and_redact_sensitive_data,
     is_live_data_query,
@@ -237,20 +237,9 @@ def check_reply(prompt: str, reply: str, clock_dt: Optional[datetime] = None) ->
         if re.search(r"\$\s*\d+|\b\d+\s*(?:dollars?|usd)\b", t_lower):
             reasons.append("Invented budget or price claim in editor reply")
 
-    owner_gpu_claims = re.findall(
-        r"(?i)\b(?:your\s+(?:laptop|gpu|machine|card)|you\s+have|laptop\s+has|gpu\s+has|around\s+your)\b[^.]*?\b(rtx\s*(?!4050\b)\d{4}|gtx\s*\d{3,4}|radeon|rx\s*\d{4}|apple\s+m\d)\b",
-        text
-    )
-    if owner_gpu_claims:
-        reasons.append(f"Stated a different GPU model than owner's RTX 4050 ({owner_gpu_claims[0]})")
-
-    owner_vram_claims = re.findall(
-        r"(?i)\b(?:your\s+(?:laptop|gpu|machine|card)|you\s+have|laptop\s+has|gpu\s+has)\b[^.]*?\b(\d+)\s*(?:gb|gigabytes)\b",
-        text
-    )
-    for claimed_vram in owner_vram_claims:
-        if int(claimed_vram) != 6:
-            reasons.append(f"Stated wrong VRAM amount for owner's hardware ({claimed_vram} GB instead of 6 GB)")
+    hw_conflict = detect_hardware_conflict(text)
+    if hw_conflict:
+        reasons.append(hw_conflict)
 
     # 6. Weekdays: must never contradict system clock (only statements asserting today)
     now_dt = clock_dt or datetime.now()

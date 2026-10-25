@@ -195,23 +195,60 @@ def fix_clock_error_in_code(text: str, clock_dt: Optional[datetime] = None) -> T
 
 def detect_hardware_conflict(text: str) -> Optional[str]:
     """
-    Detects if the reply makes a hardware claim about the owner's laptop
-    that contradicts stored memory (HP V15 with RTX 4050, 6 GB VRAM).
+    Detects if the reply attributes:
+      - a VRAM size other than 6 GB to the RTX 4050 or owner's laptop
+      - a second card or multiple cards to the RTX 4050 or owner's laptop
+      - NVLink to the RTX 4050 or owner's laptop
+      - a different GPU model to the owner's laptop
+    Does NOT flag general advice about other GPUs (e.g. A100, RTX 3090, 4090).
     """
+    # 1. Stated different GPU model for owner's machine
     owner_gpu_claims = re.findall(
-        r"(?i)\b(?:your\s+(?:laptop|gpu|machine|card)|you\s+have|laptop\s+has|gpu\s+has|around\s+your)\b[^.]*?\b(rtx\s*(?!4050\b)\d{4}|gtx\s*\d{3,4}|radeon|rx\s*\d{4}|apple\s+m\d)\b",
+        r"(?i)\b(?:your\s+(?:laptop|gpu|machine|card)|you\s+have|laptop\s+has|gpu\s+has|around\s+your)\b[^.!?\n]*?\b(rtx\s*(?!4050\b)\d{4}|gtx\s*\d{3,4}|radeon|rx\s*\d{4}|apple\s+m\d)\b",
         text
     )
     if owner_gpu_claims:
         return f"Stated different GPU model than owner's RTX 4050 ({owner_gpu_claims[0]})"
 
-    owner_vram_claims = re.findall(
-        r"(?i)\b(?:your\s+(?:laptop|gpu|machine|card)|you\s+have|laptop\s+has|gpu\s+has)\b[^.]*?\b(\d+)\s*(?:gb|gigabytes)\b",
+    # 2. VRAM size other than 6 GB attributed to RTX 4050 or owner's laptop/GPU/machine
+    matches_after = re.findall(
+        r"(?i)\b(?:rtx\s*4050|your\s+(?:laptop|gpu|machine|card)|laptop\s+has|gpu\s+has)\b[^.!?\n]*?\b(\d+)\s*(?:gb|gigabytes)\b",
         text
     )
-    for claimed_vram in owner_vram_claims:
-        if int(claimed_vram) != 6:
-            return f"Stated wrong VRAM amount ({claimed_vram} GB instead of 6 GB)"
+    for claimed in matches_after:
+        if int(claimed) != 6:
+            return f"Stated wrong VRAM amount for owner's hardware ({claimed} GB instead of 6 GB)"
+
+    matches_before = re.findall(
+        r"(?i)\b(\d+)\s*(?:gb|gigabytes)\b[^.!?\n]*?\b(?:rtx\s*4050|your\s+(?:laptop|gpu|machine|card))\b",
+        text
+    )
+    for claimed in matches_before:
+        if int(claimed) != 6:
+            return f"Stated wrong VRAM amount for owner's hardware ({claimed} GB instead of 6 GB)"
+
+    # 3. Second card or multiple cards attributed to RTX 4050 / owner's laptop
+    if re.search(r"(?i)\bper\s+card\b", text):
+        return "Attributed multiple cards ('per card') to owner's hardware"
+
+    multi_card_patterns = [
+        r"(?i)\b(?:two|multiple|second|dual|another)\s+(?:or\s+more\s+)?(?:such\s+)?cards?\b",
+        r"(?i)\b(?:two|multiple|second|dual)\s+rtx\s*4050\b",
+        r"(?i)\brtx\s*4050\b[^.!?\n]*?\b(?:two|multiple|second|dual)\s+cards?\b",
+        r"(?i)\b(?:your\s+laptop|the\s+laptop)\b[^.!?\n]*?\b(?:second|two|multiple)\s+cards?\b",
+    ]
+    for pat in multi_card_patterns:
+        if re.search(pat, text):
+            return "Attributed second card or multiple cards to owner's hardware"
+
+    # 4. NVLink attributed to RTX 4050, owner's laptop, or 'such cards'
+    nvlink_patterns = [
+        r"(?i)\b(?:rtx\s*4050|your\s+(?:laptop|gpu|machine|card)|laptop|such\s+cards?)\b[^.!?\n]*?\bnvlink\b",
+        r"(?i)\bnvlink\b[^.!?\n]*?\b(?:rtx\s*4050|your\s+(?:laptop|gpu|machine|card)|laptop|such\s+cards?)\b",
+    ]
+    for pat in nvlink_patterns:
+        if re.search(pat, text):
+            return "Attributed NVLink to owner's hardware"
 
     return None
 
@@ -479,7 +516,11 @@ async def perform_reply_verification(
     # 3. Deterministic check: Stated hardware conflict with owner memory
     hw_conflict = detect_hardware_conflict(curr_text)
     if hw_conflict and messages_for_regen and local_adapter:
-        extra_instruction = "The owner's laptop has an NVIDIA RTX 4050 with 6 GB VRAM. Do not state any other GPU model or VRAM amount for their machine."
+        extra_instruction = (
+            "The owner's laptop has a single NVIDIA RTX 4050 with 6 GB VRAM. "
+            "It has only one card, 6 GB VRAM total, and no NVLink. "
+            "Do not state any other GPU model, VRAM amount, second card, or NVLink for their machine."
+        )
         regen_msgs = list(messages_for_regen) + [{"role": "system", "content": extra_instruction}]
         t0 = time.perf_counter()
         try:

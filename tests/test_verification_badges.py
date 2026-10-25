@@ -343,3 +343,87 @@ def test_deterministic_hardware_conflict_detected():
     # Compliant statements pass
     assert detect_hardware_conflict("Your laptop has an RTX 4050 with 6 GB VRAM.") is None
     assert detect_hardware_conflict("Training a 70B model requires 80 GB GPUs like A100.") is None
+
+
+def test_hardware_check_detects_real_failure_replies_and_allows_general_advice():
+    """
+    Judge the REPLY text, not the prompt.
+    Flag if a reply attributes a VRAM size other than 6 GB, a second card, or NVLink to the owner's RTX 4050 or laptop.
+    Real replies:
+      - "The RTX 4050 has only 12GB of total VRAM"
+      - "two or more such cards in NVLink"
+      - "your RTX 4050 has only 6 GB VRAM per card"
+    Do not flag general advice about other GPUs.
+    """
+    # 1. Real failure replies must be flagged
+    r1 = "The RTX 4050 has only 12GB of total VRAM"
+    r2 = "You would benefit from using two or more such cards in NVLink mode to access more memory."
+    r3 = "Since your RTX 4050 has only 6 GB VRAM per card, it cannot train this size on its own."
+
+    assert detect_hardware_conflict(r1) is not None
+    assert detect_hardware_conflict(r2) is not None
+    assert detect_hardware_conflict(r3) is not None
+
+    # check_reply on reply text must also flag them
+    from scripts.model_bakeoff import check_reply
+    res1 = check_reply("arbitrary prompt", r1)
+    assert res1["passed"] is False
+    assert any("hardware" in r.lower() or "vram" in r.lower() for r in res1["reasons"])
+
+    res2 = check_reply("arbitrary prompt", r2)
+    assert res2["passed"] is False
+    assert any("hardware" in r.lower() or "nvlink" in r.lower() for r in res2["reasons"])
+
+    res3 = check_reply("arbitrary prompt", r3)
+    assert res3["passed"] is False
+    assert any("hardware" in r.lower() or "per card" in r.lower() for r in res3["reasons"])
+
+    # 2. General advice about other GPUs must pass untouched
+    assert detect_hardware_conflict("Training a 70B model requires 80 GB GPUs like A100.") is None
+    assert detect_hardware_conflict("An RTX 3090, 4090, or cloud A100 with 24 GB VRAM is recommended.") is None
+    assert detect_hardware_conflict("For large enterprise models, multiple A100 GPUs can be connected via NVLink.") is None
+    assert detect_hardware_conflict("Your laptop has an RTX 4050 with 6 GB VRAM.") is None
+
+
+@pytest.mark.asyncio
+async def test_hardware_conflict_triggers_regeneration_with_stored_facts():
+    """If a reply attributes wrong hardware facts to owner's machine, regenerate once with stored facts."""
+    from backend.quality import perform_reply_verification
+
+    class MockAdapter:
+        def __init__(self):
+            self.call_count = 0
+            self.extra_instruction_received = None
+
+        async def stream_chat(self, messages, *args, **kwargs):
+            self.call_count += 1
+            for m in messages:
+                if m.get("role") == "system" and "RTX 4050" in m.get("content", ""):
+                    self.extra_instruction_received = m["content"]
+            yield "Your laptop has an RTX 4050 with 6 GB VRAM, so target 1B to 1.5B models."
+
+    adapter = MockAdapter()
+    draft = "The RTX 4050 has only 12GB of total VRAM, which is insufficient."
+
+    final, verified, ms, status, reason = await perform_reply_verification(
+        draft_reply=draft,
+        used_backend="local",
+        used_model="gemma3:4b",
+        target_opts={},
+        persona_state=None,
+        clock_context="",
+        memory_context="",
+        is_detail=False,
+        local_adapter=adapter,
+        settings=None,
+        messages_for_regen=[{"role": "user", "content": "Tell me about my GPU"}]
+    )
+
+    assert adapter.call_count == 1
+    assert adapter.extra_instruction_received is not None
+    assert "RTX 4050" in adapter.extra_instruction_received
+    assert "6 GB" in adapter.extra_instruction_received
+    assert status == "corrected"
+    assert "hardware conflict" in reason.lower()
+    assert "12GB" not in final
+    assert "6 GB VRAM" in final
