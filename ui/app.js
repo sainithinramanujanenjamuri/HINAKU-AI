@@ -1,7 +1,7 @@
 import { groupConversationsByDate, getPrivacyChipInfo, formatModelDisplayName } from "/static/js/utils.js";
 import { createUserMessageElement, createAssistantMessageElement, updateMetaRow } from "/static/js/message.js";
 import { attachCodeBlockCopyHandlers, formatMarkdown } from "/static/js/markdown.js";
-import { renderMemoryPage, renderRatingsPage, renderDatasetPage } from "/static/js/pages.js";
+import { renderMemoryPage, renderRatingsPage, renderDatasetPage, renderSettingsPage } from "/static/js/pages.js";
 
 // Main application state
 const state = {
@@ -30,6 +30,15 @@ document.addEventListener("DOMContentLoaded", async () => {
   initDomReferences();
   setupEventListeners();
   await checkDemoModeAndLoad();
+
+  const handleHash = () => {
+    const hash = window.location.hash.replace("#", "");
+    if (["memory", "dataset", "ratings", "approval", "settings"].includes(hash)) {
+      openFullPage(hash);
+    }
+  };
+  handleHash();
+  window.addEventListener("hashchange", handleHash);
 });
 
 function initDomReferences() {
@@ -224,6 +233,7 @@ function setupEventListeners() {
   // Full page view navigation
   dom.memoryToggleBtn?.addEventListener("click", () => openFullPage("memory"));
   dom.datasetToggleBtn?.addEventListener("click", () => openFullPage("dataset"));
+  dom.settingsToggleBtn?.addEventListener("click", () => openFullPage("settings"));
   dom.pageBackBtn?.addEventListener("click", closeFullPage);
 
   document.querySelectorAll(".page-nav-item").forEach(item => {
@@ -889,7 +899,8 @@ async function loadPageContent(pageName) {
       memory: "Memories",
       dataset: "Dataset Curation",
       ratings: "Model Ratings",
-      approval: "Self-Build Approval"
+      approval: "Self-Build Approval",
+      settings: "Settings & Preferences"
     };
     dom.pageHeaderTitle.textContent = titles[pageName] || "Page";
   }
@@ -965,6 +976,95 @@ async function loadPageContent(pageName) {
         </div>
       </div>
     `;
+  } else if (pageName === "settings") {
+    try {
+      let settingsData = {
+        default_local_model: state.activeModel || "bonsai-2:9b",
+        router_mode: "auto",
+        memory_enabled: true,
+        reduced_motion: false
+      };
+      const endpoint = state.isDemoMode ? "/api/demo/settings" : "/api/settings";
+      const res = await fetch(endpoint);
+      if (res.ok) {
+        settingsData = await res.json();
+      }
+      renderSettingsPage(
+        dom.pageDynamicContent,
+        settingsData,
+        async (patch) => {
+          if (!state.isDemoMode) {
+            try {
+              await fetch("/api/settings", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(patch)
+              });
+            } catch (err) {
+              console.error("Failed to save settings:", err);
+            }
+          }
+          if (patch.default_local_model) {
+            selectModel(patch.default_local_model);
+          }
+          if (patch.reduced_motion !== undefined) {
+            if (patch.reduced_motion) {
+              document.body.classList.add("reduced-motion");
+            } else {
+              document.body.classList.remove("reduced-motion");
+            }
+          }
+        },
+        async () => {
+          if (state.isDemoMode) {
+            alert("Export downloaded (Demo mode: demo_data.json)");
+            return;
+          }
+          try {
+            const res = await fetch("/api/settings/export");
+            const data = await res.json();
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `hinaku_export_${new Date().toISOString().slice(0, 10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+          } catch (e) {
+            alert("Export failed: " + e.message);
+          }
+        },
+        async () => {
+          const confirmText = prompt("Type 'WIPE_ALL' to permanently delete all conversations, interactions, and memories:");
+          if (confirmText !== "WIPE_ALL") {
+            if (confirmText !== null) alert("Wipe canceled. Confirmation string did not match.");
+            return;
+          }
+          if (state.isDemoMode) {
+            alert("All demo data cleared (simulation).");
+            return;
+          }
+          try {
+            const res = await fetch("/api/settings/wipe-all", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ confirm: "WIPE_ALL" })
+            });
+            if (res.ok) {
+              alert("All data wiped successfully.");
+              window.location.reload();
+            } else {
+              const err = await res.json();
+              alert("Failed to wipe data: " + (err.detail || "Unknown error"));
+            }
+          } catch (e) {
+            alert("Wipe error: " + e.message);
+          }
+        }
+      );
+    } catch (e) {
+      dom.pageDynamicContent.innerHTML = `<div>Error loading settings: ${e.message}</div>`;
+    }
   }
 }
 

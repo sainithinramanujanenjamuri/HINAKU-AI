@@ -4,6 +4,8 @@
 @import url("/static/css/messages.css");
 /* Import Phase 3 context panel and full pages */
 @import url("/static/css/pages.css");
+/* Import Phase 4 settings and polish */
+@import url("/static/css/settings.css");
 
 /* Maintain compatibility classes for existing elements while transitioning */
 .badge {

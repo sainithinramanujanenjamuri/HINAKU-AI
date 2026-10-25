@@ -81,6 +81,29 @@ async def demo_curate():
         ]
     })
 
+@router.get("/settings")
+async def demo_settings():
+    data = _load_demo_data()
+    app_info = data.get("app_info", {})
+    return {
+        "app_name": app_info.get("app_name", "HINAKU"),
+        "router_mode": app_info.get("router", {}).get("mode", "auto"),
+        "memory_enabled": True,
+        "reduced_motion": bool(app_info.get("reduced_motion", False)),
+        "default_local_model": app_info.get("default_model", "bonsai-2:9b"),
+        "allowed_local_models": app_info.get("allowed_models", ["bonsai-2:9b", "gemma3:4b", "qwen3.5:4b"]),
+        "model_options": [
+            {"name": "bonsai-2:9b", "description": "Local primary (9B)"},
+            {"name": "gemma3:4b", "description": "Local lightweight (4B)"},
+            {"name": "qwen3.5:4b", "description": "Local fast (4B)"}
+        ],
+        "quality_mode": True,
+        "api_provider": app_info.get("router", {}).get("api_provider", "openrouter"),
+        "api_model": app_info.get("router", {}).get("api_model", "meta-llama/llama-3.3-70b-instruct:free"),
+        "api_ready": True,
+        "api_logged_by_provider": True
+    }
+
 @router.get("/ratings")
 async def demo_ratings():
     data = _load_demo_data()

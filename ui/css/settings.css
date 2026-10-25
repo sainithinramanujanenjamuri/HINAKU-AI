@@ -1,0 +1,216 @@
+/* ==========================================================================
+   HINAKU SETTINGS PAGE & POLISH (Phase 4)
+   Settings sections, keybindings view, accessibility & reduced-motion
+   ========================================================================== */
+
+/* Settings Section Layout */
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 760px;
+}
+
+.settings-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.settings-card-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-card-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.settings-card-desc {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+/* Settings Form Controls */
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.settings-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.settings-label-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-label {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.settings-sublabel {
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+}
+
+/* Select Dropdowns */
+.settings-select {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-medium);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color var(--transition-fast);
+}
+
+.settings-select:focus {
+  border-color: var(--border-focus);
+}
+
+/* Toggle Switches */
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 22px;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background-color: var(--bg-overlay);
+  border-radius: 22px;
+  transition: var(--transition-fast);
+}
+
+.toggle-slider::before {
+  position: absolute;
+  content: "";
+  height: 16px;
+  width: 16px;
+  left: 3px;
+  bottom: 3px;
+  background-color: var(--text-primary);
+  border-radius: 50%;
+  transition: var(--transition-fast);
+}
+
+input:checked + .toggle-slider {
+  background-color: var(--accent-hinaku);
+}
+
+input:checked + .toggle-slider::before {
+  transform: translateX(18px);
+}
+
+/* Keyboard Shortcuts Table */
+.shortcut-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 13px;
+}
+
+.shortcut-row:last-child {
+  border-bottom: none;
+}
+
+.kbd-badge {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  padding: 2px 7px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
+
+/* Dangerous Action Buttons */
+.danger-button-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.action-btn-danger {
+  background: var(--color-error-dim);
+  border: 1px solid var(--color-error);
+  color: var(--color-error);
+  padding: 7px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.action-btn-danger:hover {
+  background: var(--color-error);
+  color: #fff;
+}
+
+.action-btn-secondary {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-medium);
+  color: var(--text-primary);
+  padding: 7px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.action-btn-secondary:hover {
+  background: var(--bg-overlay);
+}
+
+/* Accessibility Focus Ring pass */
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--accent-hinaku) !important;
+  outline-offset: 2px;
+}
+
+/* Reduced Motion respect */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
