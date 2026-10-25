@@ -1,5 +1,7 @@
 /* Import Phase 1 design system tokens and shell */
 @import url("/static/css/tokens_and_shell.css");
+/* Import Phase 2 conversation view and messages */
+@import url("/static/css/messages.css");
 
 /* Maintain compatibility classes for existing elements while transitioning */
 .badge {

@@ -9,10 +9,11 @@ client = TestClient(app)
 def test_chat_returns_message_id_and_interaction_id():
     from backend.api.chat import history_manager
     # Test non-streaming chat returns message_id and interaction_id
-    with patch("backend.models.ollama_adapter.OllamaAdapter.stream_chat") as mock_stream:
+    with patch("backend.api.chat.local_adapter.stream_chat") as mock_stream, patch("backend.api.chat.model_router.local_adapter.stream_chat") as mock_router_stream:
         async def fake_stream(*args, **kwargs):
             yield "Hello, I am testing feedback."
         mock_stream.side_effect = fake_stream
+        mock_router_stream.side_effect = fake_stream
 
         resp = client.post("/api/chat", json={
             "messages": [{"role": "user", "content": "Hello test message"}],

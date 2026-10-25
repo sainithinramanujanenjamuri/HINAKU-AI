@@ -1,0 +1,421 @@
+/* ==========================================================================
+   HINAKU CONVERSATION VIEW & MESSAGES (Phase 2)
+   Modern desktop AI assistant chat patterns
+   ========================================================================== */
+
+/* Messages container */
+.messages-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+}
+
+/* Base message wrapper */
+.message-wrapper {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  position: relative;
+  transition: opacity var(--transition-fast);
+}
+
+/* User Bubble Pattern: soft tinted bubble, fold for long ones, hover timestamp & actions */
+.user-row {
+  align-self: flex-end;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  max-width: 82%;
+  position: relative;
+}
+
+.user-bubble {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  border-bottom-right-radius: 4px;
+  padding: 12px 16px;
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--text-primary);
+  word-break: break-word;
+  white-space: pre-wrap;
+  position: relative;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+
+.user-row:hover .user-bubble {
+  border-color: var(--border-medium);
+}
+
+.user-bubble.folded {
+  max-height: 180px;
+  overflow: hidden;
+  position: relative;
+  mask-image: linear-gradient(180deg, #000 65%, transparent);
+  -webkit-mask-image: linear-gradient(180deg, #000 65%, transparent);
+}
+
+.fold-toggle-btn {
+  background: transparent;
+  border: none;
+  color: var(--accent-hinaku);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  margin-top: 4px;
+  align-self: flex-start;
+  padding: 2px 4px;
+}
+.fold-toggle-btn:hover {
+  text-decoration: underline;
+}
+
+.user-hover-bar {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.user-row:hover .user-hover-bar {
+  display: flex;
+}
+
+.user-action-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: var(--radius-xs);
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+.user-action-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-subtle-hover);
+}
+
+/* Assistant Pattern: plain text blocks with markdown, tables, and code blocks */
+.assistant-row {
+  align-self: flex-start;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* Collapsible "Worked for X s >" process accordion */
+.process-line-accordion {
+  margin-bottom: 8px;
+  background: transparent;
+  border: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.process-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  user-select: none;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  width: fit-content;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.process-summary:hover {
+  color: var(--text-secondary);
+  background: var(--bg-subtle);
+}
+
+.process-summary .chevron {
+  transition: transform var(--transition-fast);
+  font-size: 10px;
+}
+
+.process-details {
+  display: none;
+  margin-top: 6px;
+  margin-left: 8px;
+  padding: 8px 12px;
+  background: var(--bg-surface);
+  border-left: 2px solid var(--accent-hinaku);
+  border-radius: var(--radius-xs);
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.process-details.open {
+  display: block;
+}
+
+.process-step-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.process-step-item::before {
+  content: "•";
+  color: var(--accent-hinaku);
+}
+
+/* Assistant Markdown body */
+.assistant-body {
+  font-size: 14.5px;
+  line-height: 1.65;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.assistant-body p {
+  margin-bottom: 12px;
+}
+.assistant-body p:last-child {
+  margin-bottom: 0;
+}
+
+.assistant-body h1, .assistant-body h2, .assistant-body h3 {
+  margin-top: 16px;
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.assistant-body ul, .assistant-body ol {
+  margin-left: 20px;
+  margin-bottom: 12px;
+}
+
+.assistant-body li {
+  margin-bottom: 4px;
+}
+
+/* Tables in Assistant messages */
+.assistant-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 14px 0;
+  font-size: 13.5px;
+}
+
+.assistant-body th, .assistant-body td {
+  border: 1px solid var(--border-subtle);
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.assistant-body th {
+  background: var(--bg-raised);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.assistant-body tr:nth-child(even) {
+  background: var(--bg-subtle);
+}
+
+/* Code Blocks with language tag and copy button */
+.assistant-body pre {
+  position: relative;
+  background: #111111;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 34px 14px 14px 14px;
+  margin: 14px 0;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.code-header-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 28px;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-family: var(--font-sans);
+}
+
+.copy-code-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: color var(--transition-fast);
+}
+.copy-code-btn:hover {
+  color: var(--text-primary);
+}
+
+/* Streaming cursor */
+.streaming-cursor {
+  display: inline-block;
+  width: 7px;
+  height: 15px;
+  background: var(--accent-hinaku);
+  vertical-align: middle;
+  margin-left: 4px;
+  animation: blink-cursor 0.9s infinite;
+}
+
+@keyframes blink-cursor {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* Meta row under each reply */
+.assistant-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 11.5px;
+}
+
+/* Badges */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 500;
+}
+.badge-local {
+  background: var(--color-local-dim);
+  color: var(--color-local);
+  border: 1px solid rgba(59, 130, 246, 0.4);
+}
+.badge-online {
+  background: var(--color-online-dim);
+  color: var(--color-online);
+  border: 1px solid rgba(168, 85, 247, 0.4);
+}
+.badge-guard {
+  background: var(--color-warning-dim);
+  color: var(--color-warning);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+.badge-verified {
+  background: var(--color-private-dim);
+  color: var(--color-private);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+.badge-corrected {
+  background: var(--color-warning-dim);
+  color: var(--color-warning);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+/* Hover Action Row on Assistant Replies */
+.assistant-hover-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.assistant-row:hover .assistant-hover-actions {
+  opacity: 1;
+}
+
+.msg-action-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  padding: 4px 6px;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.msg-action-btn:hover {
+  background: var(--bg-subtle-hover);
+  color: var(--text-primary);
+}
+
+.msg-action-btn.active {
+  color: var(--accent-hinaku);
+}
+
+/* Continue button on cut-off responses */
+.continue-btn {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-medium);
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 4px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  margin-top: 8px;
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.continue-btn:hover {
+  background: var(--bg-overlay);
+  border-color: var(--border-focus);
+}
+
+/* Floating Scroll-to-bottom button */
+.scroll-bottom-btn {
+  position: absolute;
+  bottom: 24px;
+  right: 28px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-medium);
+  color: var(--text-primary);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  transition: opacity var(--transition-fast), transform var(--transition-fast);
+}
+.scroll-bottom-btn:hover {
+  background: var(--bg-overlay);
+  transform: translateY(-2px);
+}
+.scroll-bottom-btn.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+

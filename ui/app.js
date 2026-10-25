@@ -1,4 +1,6 @@
 import { groupConversationsByDate, getPrivacyChipInfo, formatModelDisplayName } from "/static/js/utils.js";
+import { createUserMessageElement, createAssistantMessageElement, updateMetaRow } from "/static/js/message.js";
+import { attachCodeBlockCopyHandlers, formatMarkdown } from "/static/js/markdown.js";
 
 // Main application state
 const state = {
@@ -12,7 +14,9 @@ const state = {
   abortController: null,
   isLoadingModel: false,
   theme: "dark",
-  isDemoMode: false
+  isDemoMode: false,
+  isApiLoggedByProvider: false,
+  activeMessages: []
 };
 
 // DOM references
@@ -36,12 +40,15 @@ function initDomReferences() {
     sidebarConversations: document.getElementById("sidebar-conversations"),
     chatTitle: document.getElementById("chat-title"),
     topPrivacyChip: document.getElementById("top-privacy-chip"),
-    topPrivacyText: document.getElementById("top-privacy-text"),
+    privacyIcon: document.getElementById("privacy-icon"),
+    privacyLabel: document.getElementById("privacy-label"),
     topModelChip: document.getElementById("top-model-chip"),
     topModelText: document.getElementById("top-model-text"),
     statusDot: document.getElementById("status-dot"),
+    chatViewport: document.getElementById("chat-viewport"),
     emptyStateView: document.getElementById("empty-state-view"),
     messagesContainer: document.getElementById("messages-container"),
+    scrollBottomBtn: document.getElementById("scroll-bottom-btn"),
     promptInput: document.getElementById("prompt-input"),
     composerPlusBtn: document.getElementById("composer-plus-btn"),
     composerPlusMenu: document.getElementById("composer-plus-menu"),
@@ -61,7 +68,14 @@ function initDomReferences() {
     modelDropdownMenu: document.getElementById("model-dropdown-menu"),
     sendButton: document.getElementById("send-button"),
     sendIcon: document.getElementById("send-icon"),
-    stopIcon: document.getElementById("stop-icon")
+    stopIcon: document.getElementById("stop-icon"),
+    cancelButton: document.getElementById("cancel-button"),
+    noticeBanner: document.getElementById("notice-banner"),
+    noticeText: document.getElementById("notice-text"),
+    noticeDismissBtn: document.getElementById("notice-dismiss-btn"),
+    noticeRemindLaterBtn: document.getElementById("notice-remind-later-btn"),
+    ollamaDownBanner: document.getElementById("ollama-down-banner"),
+    ollamaRetryBtn: document.getElementById("ollama-retry-btn")
   };
 }
 
@@ -121,7 +135,7 @@ function setupEventListeners() {
 
   // Privacy option selection
   dom.privacyDropdownMenu?.querySelectorAll(".privacy-option-item").forEach(item => {
-    item.addEventListener("click", (e) => {
+    item.addEventListener("click", () => {
       const mode = item.getAttribute("data-privacy-mode");
       if (mode) {
         setPrivacyMode(mode);
@@ -155,6 +169,19 @@ function setupEventListeners() {
     dom.modelDropdownMenu?.classList.add("hidden");
   });
 
+  // Scroll to bottom button
+  dom.chatViewport?.addEventListener("scroll", () => {
+    if (!dom.chatViewport || !dom.scrollBottomBtn) return;
+    const distanceToBottom = dom.chatViewport.scrollHeight - dom.chatViewport.scrollTop - dom.chatViewport.clientHeight;
+    if (distanceToBottom > 150) {
+      dom.scrollBottomBtn.classList.remove("hidden");
+    } else {
+      dom.scrollBottomBtn.classList.add("hidden");
+    }
+  });
+
+  dom.scrollBottomBtn?.addEventListener("click", scrollToBottom);
+
   // Keyboard Shortcuts
   window.addEventListener("keydown", (e) => {
     if (e.ctrlKey && e.key.toLowerCase() === "k") {
@@ -169,6 +196,9 @@ function setupEventListeners() {
     } else if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "p") {
       e.preventDefault();
       cyclePrivacyMode();
+    } else if (e.key === "Escape" && state.isGenerating) {
+      e.preventDefault();
+      handleStopGeneration();
     }
   });
 
@@ -190,6 +220,35 @@ function setupEventListeners() {
       handleStopGeneration();
     } else {
       handleSendMessage();
+    }
+  });
+
+  dom.cancelButton?.addEventListener("click", handleStopGeneration);
+
+  // Notice banners
+  dom.noticeDismissBtn?.addEventListener("click", () => {
+    dom.noticeBanner?.classList.add("hidden");
+  });
+
+  dom.noticeRemindLaterBtn?.addEventListener("click", async () => {
+    try {
+      await fetch("/api/self-build/remind-later", { method: "POST" });
+      dom.noticeBanner?.classList.add("hidden");
+    } catch (e) {
+      console.warn("Could not remind later:", e);
+    }
+  });
+
+  dom.ollamaRetryBtn?.addEventListener("click", async () => {
+    try {
+      const res = await fetch("/api/health/ollama");
+      const health = await res.json();
+      if (health.online) {
+        dom.ollamaDownBanner?.classList.add("hidden");
+        dom.statusDot?.classList.remove("offline");
+      }
+    } catch (e) {
+      console.warn("Retry ollama failed:", e);
     }
   });
 }
@@ -218,6 +277,13 @@ async function loadInitialInfo() {
       if (info.default_model) {
         selectModel(info.default_model);
       }
+      if (info.router?.api_logged_by_provider) {
+        state.isApiLoggedByProvider = true;
+      }
+      if (info.ollama_status?.online === false) {
+        dom.ollamaDownBanner?.classList.remove("hidden");
+        dom.statusDot?.classList.add("offline");
+      }
     }
   } catch (e) {
     console.warn("Could not load initial app info:", e);
@@ -231,6 +297,11 @@ async function loadConversations() {
     if (res.ok) {
       state.conversations = await res.json();
       renderConversationsList(state.conversations);
+
+      // In demo mode or if default conversation exists, select the first one for initial render
+      if (state.isDemoMode && state.conversations.length > 0 && !state.currentConversationId) {
+        selectConversation(state.conversations[0].id);
+      }
     }
   } catch (e) {
     console.warn("Could not load conversations:", e);
@@ -313,6 +384,7 @@ function filterConversations(query) {
 
 function startNewChat() {
   state.currentConversationId = null;
+  state.activeMessages = [];
   if (dom.chatTitle) dom.chatTitle.value = "New chat";
   if (dom.emptyStateView) dom.emptyStateView.classList.remove("hidden");
   if (dom.messagesContainer) {
@@ -339,7 +411,8 @@ async function selectConversation(id) {
     const res = await fetch(endpoint);
     if (res.ok) {
       const fullConv = await res.json();
-      renderMessages(fullConv.messages || []);
+      state.activeMessages = fullConv.messages || [];
+      renderConversationMessages(state.activeMessages);
     }
   } catch (err) {
     console.error("Failed to load conversation details:", err);
@@ -348,7 +421,7 @@ async function selectConversation(id) {
   renderConversationsList(state.conversations);
 }
 
-function renderMessages(messages) {
+function renderConversationMessages(messages) {
   if (!messages || messages.length === 0) {
     dom.emptyStateView?.classList.remove("hidden");
     dom.messagesContainer?.classList.add("hidden");
@@ -360,32 +433,45 @@ function renderMessages(messages) {
   dom.messagesContainer.innerHTML = "";
 
   messages.forEach(msg => {
-    const row = document.createElement("div");
-    row.className = "message-row";
-
     if (msg.role === "user") {
-      const bubble = document.createElement("div");
-      bubble.className = "user-bubble";
-      bubble.textContent = msg.content;
-      row.appendChild(bubble);
+      const userEl = createUserMessageElement(msg.content, msg.created_at, (text) => {
+        if (dom.promptInput) {
+          dom.promptInput.value = text;
+          dom.promptInput.focus();
+        }
+      });
+      dom.messagesContainer.appendChild(userEl);
     } else {
-      const body = document.createElement("div");
-      body.className = "assistant-body";
-      body.textContent = msg.content;
-
-      const meta = document.createElement("div");
-      meta.className = "assistant-meta-row";
-      meta.innerHTML = `
-        <span class="badge badge-local">${msg.model || state.activeModel}</span>
-        <span class="badge badge-local">${msg.backend || 'local'}</span>
-        ${msg.verified ? '<span class="badge badge-verified">✓ verified</span>' : ''}
-      `;
-
-      row.appendChild(body);
-      row.appendChild(meta);
+      const { row } = createAssistantMessageElement({
+        id: msg.id,
+        interactionId: msg.interaction_id,
+        model: msg.model || state.activeModel,
+        backend: msg.backend || "local",
+        content: msg.content,
+        verified: Boolean(msg.verified),
+        verifyStatus: msg.verify_status,
+        verifyReason: msg.verify_reason,
+        workedSeconds: msg.worked_seconds,
+        processSteps: msg.process_steps,
+        hitTokenLimit: Boolean(msg.hit_token_limit),
+        onFeedback: handleFeedback,
+        onEditReply: handleEditReply,
+        onRetry: () => handleRetryMessage(msg),
+        onContinue: () => handleContinueMessage()
+      });
+      dom.messagesContainer.appendChild(row);
+      attachCodeBlockCopyHandlers(row);
     }
+  });
 
-    dom.messagesContainer.appendChild(row);
+  scrollToBottom();
+}
+
+function scrollToBottom() {
+  if (!dom.chatViewport) return;
+  dom.chatViewport.scrollTo({
+    top: dom.chatViewport.scrollHeight,
+    behavior: "smooth"
   });
 }
 
@@ -413,7 +499,7 @@ function setPrivacyMode(mode) {
 
   if (dom.topPrivacyChip) {
     dom.topPrivacyChip.className = `status-chip ${info.colorClass}`;
-    if (dom.topPrivacyText) dom.topPrivacyText.textContent = info.label;
+    if (dom.privacyLabel) dom.privacyLabel.textContent = info.label;
   }
 
   if (dom.composerPrivacyChip) {
@@ -480,15 +566,267 @@ async function confirmDeleteConversation(convId) {
   }
 }
 
-function handleSendMessage() {
-  const text = dom.promptInput?.value.trim();
-  if (!text) return;
-  alert(`Sending message: "${text}" with model: ${state.activeModel}, privacy: ${state.privacyMode}`);
+async function handleSendMessage(overrideText = null) {
+  const text = (overrideText || dom.promptInput?.value || "").trim();
+  if (!text || state.isGenerating) return;
+
+  if (dom.promptInput) {
+    dom.promptInput.value = "";
+    dom.promptInput.style.height = "auto";
+  }
+
+  // Hide empty state, ensure messages container is open
+  dom.emptyStateView?.classList.add("hidden");
+  dom.messagesContainer?.classList.remove("hidden");
+
+  // Render User Message
+  const userEl = createUserMessageElement(text, new Date().toISOString());
+  dom.messagesContainer.appendChild(userEl);
+  scrollToBottom();
+
+  // Create Assistant Message Placeholder
+  state.isGenerating = true;
+  setGeneratingUI(true);
+
+  let assistantText = "";
+  let lastMessageId = null;
+  let lastInteractionId = null;
+  let lastBackend = "local";
+  let isVerified = false;
+  let verifyStatus = null;
+  let verifyReason = null;
+  let hitTokenLimit = false;
+  let startTime = Date.now();
+
+  const { row: assistantRow, body: assistantBody, metaRow } = createAssistantMessageElement({
+    model: state.activeModel,
+    backend: "local",
+    content: "",
+    isStreaming: true
+  });
+  dom.messagesContainer.appendChild(assistantRow);
+  scrollToBottom();
+
+  state.abortController = new AbortController();
+
+  if (state.isDemoMode) {
+    // In demo mode, emulate fast streaming response cleanly
+    setTimeout(() => {
+      assistantText = "This is a demonstration response generated locally in UI demo mode. Surface codes and cat codes offer contrasting trade-offs in quantum architecture.";
+      assistantBody.innerHTML = formatMarkdown(assistantText);
+      attachCodeBlockCopyHandlers(assistantBody);
+      updateMetaRow(metaRow, {
+        model: state.activeModel,
+        backend: "local",
+        verified: true,
+        verifyStatus: "verified"
+      });
+      state.isGenerating = false;
+      setGeneratingUI(false);
+      scrollToBottom();
+    }, 400);
+    return;
+  }
+
+  try {
+    const isPrivate = state.privacyMode === "private";
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: [{ role: "user", content: text }],
+        conversation_id: state.currentConversationId,
+        is_private: isPrivate,
+        model: state.activeModel,
+        stream: true,
+        think_harder: state.thinkHarder,
+        detailed: state.detailed
+      }),
+      signal: state.abortController.signal
+    });
+
+    if (!res.ok) {
+      throw new Error(`Server returned HTTP ${res.status}`);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n\n");
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith("data:")) continue;
+        const dataStr = trimmed.slice(5).trim();
+        if (dataStr === "[DONE]") break;
+
+        try {
+          const parsed = JSON.parse(dataStr);
+
+          if (parsed.type === "error") {
+            showNotice(parsed.error || parsed.message || "Model error encountered");
+            assistantRow.remove();
+            break;
+          }
+
+          if (parsed.conversation_id) {
+            state.currentConversationId = parsed.conversation_id;
+          }
+          if (parsed.message_id) {
+            lastMessageId = parsed.message_id;
+            assistantRow.dataset.messageId = parsed.message_id;
+          }
+          if (parsed.interaction_id) {
+            lastInteractionId = parsed.interaction_id;
+            assistantRow.dataset.interactionId = parsed.interaction_id;
+          }
+
+          if (parsed.auto_private) {
+            setPrivacyMode("private");
+            showNotice("Sensitive topic detected. Set conversation to Private.", true);
+          }
+
+          if (parsed.backend) lastBackend = parsed.backend;
+          if (parsed.verified !== undefined) isVerified = Boolean(parsed.verified);
+          if (parsed.verify_status) verifyStatus = parsed.verify_status;
+          if (parsed.verify_reason) verifyReason = parsed.verify_reason;
+          if (parsed.hit_token_limit !== undefined) hitTokenLimit = Boolean(parsed.hit_token_limit);
+
+          if (parsed.chunk) {
+            assistantText += parsed.chunk;
+            assistantBody.innerHTML = formatMarkdown(assistantText);
+            const cursor = document.createElement("span");
+            cursor.className = "streaming-cursor";
+            assistantBody.appendChild(cursor);
+            attachCodeBlockCopyHandlers(assistantBody);
+            scrollToBottom();
+          }
+
+          if (parsed.type === "correction" && parsed.final_content) {
+            assistantText = parsed.final_content;
+            assistantBody.innerHTML = formatMarkdown(assistantText);
+            attachCodeBlockCopyHandlers(assistantBody);
+          }
+        } catch (e) {
+          console.error("Error parsing stream chunk:", e);
+        }
+      }
+    }
+
+    // Finalize assistant reply
+    const workedSeconds = Math.max(1, Math.round((Date.now() - startTime) / 1000));
+    assistantBody.innerHTML = formatMarkdown(assistantText);
+    attachCodeBlockCopyHandlers(assistantBody);
+
+    updateMetaRow(metaRow, {
+      model: state.activeModel,
+      backend: lastBackend,
+      verified: isVerified,
+      verifyStatus,
+      verifyReason
+    });
+
+  } catch (err) {
+    if (err.name !== "AbortError") {
+      console.error("Chat request failed:", err);
+      showNotice(`Request failed: ${err.message}`);
+    }
+  } finally {
+    state.isGenerating = false;
+    setGeneratingUI(false);
+    loadConversations();
+  }
+}
+
+function setGeneratingUI(generating) {
+  if (generating) {
+    dom.sendIcon?.classList.add("hidden");
+    dom.stopIcon?.classList.remove("hidden");
+    dom.sendButton?.classList.add("stop-btn");
+    dom.sendButton?.setAttribute("title", "Stop generation (Esc)");
+  } else {
+    dom.sendIcon?.classList.remove("hidden");
+    dom.stopIcon?.classList.add("hidden");
+    dom.sendButton?.classList.remove("stop-btn");
+    dom.sendButton?.setAttribute("title", "Send message (Enter)");
+  }
 }
 
 function handleStopGeneration() {
+  if (state.abortController) {
+    state.abortController.abort();
+    state.abortController = null;
+  }
   state.isGenerating = false;
-  dom.sendIcon?.classList.remove("hidden");
-  dom.stopIcon?.classList.add("hidden");
-  dom.sendButton?.classList.remove("stop-btn");
+  setGeneratingUI(false);
+}
+
+function handleFeedback(type, buttonEl, rowEl) {
+  rowEl.querySelectorAll(".msg-action-btn").forEach(b => b.classList.remove("active"));
+  buttonEl.classList.add("active");
+
+  const messageId = buttonEl.closest(".message-wrapper")?.dataset?.messageId;
+  if (!messageId || state.isDemoMode) return;
+
+  fetch(`/api/interactions/feedback`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message_id: messageId, feedback: type })
+  }).catch(e => console.error("Feedback error:", e));
+}
+
+function handleEditReply(row, body) {
+  const currentText = body.innerText;
+  const newText = prompt("Edit reply to feed training dataset:", currentText);
+  if (!newText || newText === currentText) return;
+
+  body.innerHTML = formatMarkdown(newText);
+  attachCodeBlockCopyHandlers(body);
+
+  const messageId = row.dataset?.messageId;
+  if (!messageId || state.isDemoMode) return;
+
+  fetch(`/api/interactions/feedback`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message_id: messageId, edited_answer: newText })
+  }).catch(e => console.error("Save edit error:", e));
+}
+
+function handleRetryMessage() {
+  if (dom.messagesContainer) {
+    const userRows = dom.messagesContainer.querySelectorAll(".user-row");
+    if (userRows.length > 0) {
+      const lastUserText = userRows[userRows.length - 1].querySelector(".user-bubble")?.textContent;
+      if (lastUserText) handleSendMessage(lastUserText);
+    }
+  }
+}
+
+function handleContinueMessage() {
+  handleSendMessage("Continue");
+}
+
+function showNotice(text, showUndo = false) {
+  if (!dom.noticeBanner || !dom.noticeText) return;
+  dom.noticeText.textContent = text;
+  dom.noticeBanner.classList.remove("hidden");
+
+  if (showUndo) {
+    const undoBtn = document.createElement("button");
+    undoBtn.textContent = "Undo";
+    undoBtn.className = "notice-action-btn";
+    undoBtn.onclick = () => {
+      setPrivacyMode("standard");
+      dom.noticeBanner?.classList.add("hidden");
+    };
+    dom.noticeText.appendChild(undoBtn);
+  }
 }
