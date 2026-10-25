@@ -168,8 +168,9 @@ All tests run against temporary, isolated databases and mock adapters. Tests nev
   golden.jsonl      15 fixed evaluation scenarios covering persona, honesty, accuracy, support, boundaries, memory
 /models             (git-ignored) Fine-tuned LoRA adapters and exported GGUF files
 /logs               (git-ignored) Training reports, application logs
-/tests              Comprehensive pytest suite (201 passing tests across isolation, verification, memory, router, detail mode, and guards)
-/ui                 Minimalist dark desktop web UI (HTML, CSS, JS, ambient starfield canvas)
+/tests              Comprehensive pytest suite (216 passing tests across UI redesign, isolation, verification, memory, router, detail mode, and guards)
+/docs               Architecture specifications, UI design tokens, review, and screenshots
+/ui                 Modern dark desktop web UI (3-column layout, tokens, composer dock, full-page views)
 AGENTS.md           Project specification and developer rules
 CHANGELOG.md        Step-by-step history of built phases
 README.md           Getting started and architecture documentation
