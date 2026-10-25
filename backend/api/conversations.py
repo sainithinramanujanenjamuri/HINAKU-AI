@@ -15,6 +15,7 @@ class CreateConversationRequest(BaseModel):
 class UpdateConversationRequest(BaseModel):
     title: Optional[str] = None
     is_private: Optional[bool] = None
+    pinned: Optional[bool] = None
 
 @router.get("/conversations")
 async def list_conversations():
@@ -44,6 +45,8 @@ async def update_conversation(conv_id: str, req: UpdateConversationRequest):
         conv = history_manager.rename_conversation(conv_id, req.title)
     if req.is_private is not None:
         conv = history_manager.set_conversation_privacy(conv_id, req.is_private)
+    if req.pinned is not None:
+        conv = history_manager.set_conversation_pinned(conv_id, req.pinned)
 
     return conv
 

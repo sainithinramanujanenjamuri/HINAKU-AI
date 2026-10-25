@@ -124,6 +124,8 @@ class ChatHistoryManager:
             conv_cols = [c["name"] for c in conn.execute("PRAGMA table_info(conversations)").fetchall()]
             if "is_private" not in conv_cols:
                 conn.execute("ALTER TABLE conversations ADD COLUMN is_private INTEGER DEFAULT 0")
+            if "pinned" not in conv_cols:
+                conn.execute("ALTER TABLE conversations ADD COLUMN pinned INTEGER DEFAULT 0")
 
             msg_cols = [c["name"] for c in conn.execute("PRAGMA table_info(messages)").fetchall()]
             if "backend" not in msg_cols:
@@ -186,13 +188,14 @@ class ChatHistoryManager:
     def list_conversations(self) -> List[Dict[str, Any]]:
         with self._get_connection() as conn:
             rows = conn.execute(
-                "SELECT id, title, is_private, created_at, updated_at FROM conversations ORDER BY updated_at DESC"
+                "SELECT id, title, is_private, COALESCE(pinned, 0) as pinned, created_at, updated_at FROM conversations ORDER BY COALESCE(pinned, 0) DESC, updated_at DESC"
             ).fetchall()
             return [
                 {
                     "id": r["id"],
                     "title": r["title"],
                     "is_private": bool(r["is_private"]),
+                    "pinned": bool(r["pinned"]),
                     "created_at": r["created_at"],
                     "updated_at": r["updated_at"]
                 }
@@ -202,7 +205,7 @@ class ChatHistoryManager:
     def get_conversation(self, conv_id: str) -> Optional[Dict[str, Any]]:
         with self._get_connection() as conn:
             conv = conn.execute(
-                "SELECT id, title, is_private, created_at, updated_at FROM conversations WHERE id = ?",
+                "SELECT id, title, is_private, COALESCE(pinned, 0) as pinned, created_at, updated_at FROM conversations WHERE id = ?",
                 (conv_id,)
             ).fetchone()
             if not conv:
@@ -224,11 +227,21 @@ class ChatHistoryManager:
                 "id": conv["id"],
                 "title": conv["title"],
                 "is_private": bool(conv["is_private"]),
+                "pinned": bool(conv["pinned"]),
                 "created_at": conv["created_at"],
                 "updated_at": conv["updated_at"],
                 "messages": [dict(m) for m in msgs]
             }
             return conv_dict
+
+    def set_conversation_pinned(self, conv_id: str, pinned: bool) -> Optional[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            conn.execute(
+                "UPDATE conversations SET pinned = ? WHERE id = ?",
+                (1 if pinned else 0, conv_id)
+            )
+            conn.commit()
+        return self.get_conversation(conv_id)
 
     def rename_conversation(self, conv_id: str, new_title: str) -> Optional[Dict[str, Any]]:
         now = datetime.datetime.now(datetime.timezone.utc).isoformat()

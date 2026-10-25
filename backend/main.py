@@ -13,6 +13,7 @@ from backend.api import (
     training_router,
     self_build_router
 )
+from backend.api.demo import router as demo_router
 from backend.config import ROOT_DIR
 
 @asynccontextmanager
@@ -39,6 +40,7 @@ app.include_router(settings_router, prefix="/api")
 app.include_router(interactions_router, prefix="/api")
 app.include_router(training_router, prefix="/api")
 app.include_router(self_build_router, prefix="/api")
+app.include_router(demo_router, prefix="/api")
 
 UI_DIR = ROOT_DIR / "ui"
 if UI_DIR.exists():

@@ -1,0 +1,139 @@
+{
+  "app_info": {
+    "app_name": "HINAKU",
+    "default_model": "bonsai-2:9b",
+    "allowed_models": ["bonsai-2:9b", "gemma3:4b", "qwen3.5:4b"],
+    "hard_timeout_seconds": 120,
+    "provider": "ollama (local)",
+    "ollama_status": {
+      "online": true,
+      "models": ["bonsai-2:9b", "gemma3:4b", "qwen3.5:4b"]
+    },
+    "router": {
+      "mode": "auto",
+      "fallback_on_failure": true,
+      "api_provider": "openrouter",
+      "api_model": "meta-llama/llama-3.3-70b-instruct:free",
+      "api_ready": true,
+      "api_logged_by_provider": true,
+      "daily_api_requests": 3,
+      "max_daily_api_requests": 50
+    },
+    "reduced_motion": false,
+    "persona": {
+      "is_fallback": false,
+      "notice": null,
+      "file": "config/hinaku_persona.md"
+    }
+  },
+  "conversations": [
+    {
+      "id": "demo-conv-1",
+      "title": "Quantum Error Correction Notes",
+      "is_private": false,
+      "pinned": 1,
+      "created_at": "2026-10-25T14:30:00Z",
+      "updated_at": "2026-10-25T14:30:00Z",
+      "messages": [
+        {
+          "id": "msg-1-1",
+          "conversation_id": "demo-conv-1",
+          "role": "user",
+          "content": "Compare surface codes and bosonic cat codes for fault-tolerant computing on small footprints.",
+          "created_at": "2026-10-25T14:30:05Z"
+        },
+        {
+          "id": "msg-1-2",
+          "conversation_id": "demo-conv-1",
+          "role": "assistant",
+          "content": "Surface codes offer an established 2D layout with local 2-qubit stabilizers, but demand thousands of physical qubits per logical qubit.\n\nBosonic cat codes leverage infinite-dimensional Hilbert spaces in superconducting microwave cavities to autonomously correct bit flips via two-photon dissipation, leaving only phase flips for discrete outer layers. For a 6 GB local laptop workstation simulation, cat codes drastically reduce hardware state overhead.",
+          "model": "bonsai-2:9b",
+          "backend": "local",
+          "created_at": "2026-10-25T14:30:18Z",
+          "interaction_id": "demo-int-1",
+          "feedback": "up",
+          "verified": 1,
+          "verify_status": "verified",
+          "verify_reason": "Four concise sentences within bounds",
+          "worked_seconds": 13,
+          "process_steps": [
+            "Sensitive & live data guard checked (clean)",
+            "Router selected backend: local (bonsai-2:9b)",
+            "Retrieved 2 relevant memories for context",
+            "Inference completed in 12.4s (54 tok/s)",
+            "Deterministic verifier applied: length & capability checks passed"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "demo-conv-2",
+      "title": "FastAPI Webhook Retry Architecture",
+      "is_private": false,
+      "pinned": 0,
+      "created_at": "2026-10-25T09:15:00Z",
+      "updated_at": "2026-10-25T09:15:00Z",
+      "messages": []
+    },
+    {
+      "id": "demo-conv-3",
+      "title": "PostgreSQL Isolation Levels & Deadlocks",
+      "is_private": false,
+      "pinned": 0,
+      "created_at": "2026-10-24T18:00:00Z",
+      "updated_at": "2026-10-24T18:00:00Z",
+      "messages": []
+    },
+    {
+      "id": "demo-conv-4",
+      "title": "Personal journal & project reflections",
+      "is_private": true,
+      "pinned": 0,
+      "created_at": "2026-10-21T11:00:00Z",
+      "updated_at": "2026-10-21T11:00:00Z",
+      "messages": []
+    },
+    {
+      "id": "demo-conv-5",
+      "title": "Initial System Architecture & Ollama Setup",
+      "is_private": false,
+      "pinned": 0,
+      "created_at": "2026-09-15T08:00:00Z",
+      "updated_at": "2026-09-15T08:00:00Z",
+      "messages": []
+    }
+  ],
+  "memories": [
+    {
+      "id": "mem-1",
+      "text": "Name is Sai Nithin Ramanujan.",
+      "created_at": "2026-10-18T10:00:00Z",
+      "updated_at": "2026-10-25T11:00:00Z"
+    },
+    {
+      "id": "mem-2",
+      "text": "Likes to be called Nithin.",
+      "created_at": "2026-10-18T10:05:00Z",
+      "updated_at": "2026-10-25T11:00:00Z"
+    },
+    {
+      "id": "mem-3",
+      "text": "Target machine: HP V15, AMD Ryzen 7, NVIDIA RTX 4050 with 6 GB VRAM.",
+      "created_at": "2026-10-18T10:10:00Z",
+      "updated_at": "2026-10-18T10:10:00Z"
+    },
+    {
+      "id": "mem-4",
+      "text": "Favorite colors are black, red, and blue.",
+      "created_at": "2026-10-19T08:20:00Z",
+      "updated_at": "2026-10-25T11:00:00Z"
+    },
+    {
+      "id": "mem-5",
+      "text": "Wants to build an LLM and open source it.",
+      "created_at": "2026-10-20T16:40:00Z",
+      "updated_at": "2026-10-25T11:00:00Z"
+    }
+  ]
+}
+

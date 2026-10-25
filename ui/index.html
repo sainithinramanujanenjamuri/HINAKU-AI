@@ -1,366 +1,288 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>HINAKU</title>
   <link rel="stylesheet" href="/static/style.css">
-  <!-- Markdown parser -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-  <!-- LaTeX symbol converter -->
   <script src="/static/latex_convert.js"></script>
 </head>
 <body>
-  <!-- Ambient cosmos canvas for subtle drifting particles -->
   <canvas id="starfield" class="starfield"></canvas>
 
-  <div class="app-layout">
-    <!-- Left Sidebar -->
+  <div class="app-shell">
+    <!-- Slim Left Sidebar -->
     <aside id="sidebar" class="sidebar">
       <div class="sidebar-header">
-        <button id="new-chat-btn" class="new-chat-btn" title="Start new conversation">
+        <button id="new-chat-btn" class="new-chat-btn" title="New Chat (Ctrl+N)">
           <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none">
             <line x1="12" y1="5" x2="12" y2="19"></line>
             <line x1="5" y1="12" x2="19" y2="12"></line>
           </svg>
-          <span>New Chat</span>
+          <span>New chat</span>
+          <span class="shortcut">Ctrl+N</span>
         </button>
-        <button id="sidebar-close-btn" class="icon-btn mobile-only" title="Close sidebar">
-          <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
+
+        <div class="search-box">
+          <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
           </svg>
-        </button>
+          <input type="text" id="search-input" class="search-input" placeholder="Search chats... (Ctrl+K)">
+        </div>
       </div>
 
-      <div class="sidebar-section-title">Conversations</div>
-      <div class="conversations-scroll">
-        <div id="conversations-list" class="conversations-list">
-          <!-- Dynamically populated -->
-        </div>
+      <div class="sidebar-content" id="sidebar-conversations">
+        <!-- Rendered dynamically by groups -->
+      </div>
+
+      <div class="sidebar-footer">
+        <button id="memory-toggle-btn" class="footer-nav-btn" title="Memory">
+          <span>🧠 Memories</span>
+        </button>
+        <button id="dataset-toggle-btn" class="footer-nav-btn" title="Dataset Review">
+          <span>📦 Dataset</span>
+        </button>
+        <button id="settings-toggle-btn" class="footer-nav-btn" title="Settings">
+          <span>⚙️ Settings</span>
+        </button>
       </div>
     </aside>
 
-    <!-- Overlay for mobile/narrow screens -->
-    <div id="sidebar-overlay" class="sidebar-overlay"></div>
-
-    <!-- Main Container -->
-    <div class="app-container">
-      <!-- Header -->
-      <header class="app-header">
-        <div class="header-left">
-          <button id="sidebar-toggle-btn" class="icon-btn sidebar-toggle" title="Toggle sidebar">
+    <!-- Main Stage -->
+    <main class="main-stage">
+      <!-- Top Navigation Bar -->
+      <header class="top-bar">
+        <div class="top-bar-left">
+          <button id="sidebar-toggle-btn" class="top-bar-btn" title="Toggle Sidebar (Ctrl+B)">
             <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none">
-              <line x1="3" y1="12" x2="21" y2="12"></line>
-              <line x1="3" y1="6" x2="21" y2="6"></line>
-              <line x1="3" y1="18" x2="21" y2="18"></line>
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="9" y1="3" x2="9" y2="21"></line>
             </svg>
           </button>
-          <div class="brand">
-            <div class="void-mark"></div>
-            <div class="brand-text">
-              <span class="title">HINAKU</span>
-              <span class="subtitle">ヒナク &bull; An infinite void</span>
-            </div>
-          </div>
+          <input type="text" id="chat-title" class="chat-title-editable" value="New chat" title="Click to rename chat">
         </div>
-        <div class="header-status">
-          <button id="private-toggle-btn" class="private-toggle-btn" title="Toggle Private Chat (never uses API)">
+
+        <div class="top-bar-right">
+          <!-- Top Privacy Chip -->
+          <button id="private-toggle-btn" class="private-toggle-btn hidden" title="Toggle Private Chat (never uses API)">
             <span id="privacy-icon" class="privacy-icon">🔓</span>
             <span id="privacy-label" class="privacy-label">Standard</span>
           </button>
-          <button id="memory-toggle-btn" class="header-action-btn" title="What HINAKU remembers">
-            <span class="btn-icon">🧠</span>
-            <span class="btn-text">Memories</span>
-          </button>
-          <button id="dataset-toggle-btn" class="header-action-btn" title="Dataset Review & Curation">
-            <span class="btn-icon">📦</span>
-            <span class="btn-text">Dataset</span>
-          </button>
-          <button id="settings-toggle-btn" class="header-action-btn icon-only" title="Settings">
-            <span class="btn-icon">⚙️</span>
-          </button>
-          <span class="status-indicator" id="status-indicator"></span>
-          <span class="model-badge" id="model-badge">auto &bull; hybrid</span>
-        </div>
-      </header>
-
-      <div id="notice-banner" class="notice-banner hidden">
-        <span class="notice-icon">⚠️</span>
-        <span class="notice-text" id="notice-text">Persona file missing or empty. Using neutral fallback prompt.</span>
-        <button id="notice-remind-later-btn" class="notice-action-btn hidden" title="Postpone reminder for 7 days">Remind Me Later</button>
-        <button id="notice-dismiss-btn" class="notice-dismiss-btn" title="Dismiss" aria-label="Dismiss">&times;</button>
-      </div>
-
-      <div id="ollama-down-banner" class="ollama-down-banner hidden">
-        <span class="banner-icon">⚠️</span>
-        <span class="banner-text">Ollama is not running</span>
-        <button id="ollama-retry-btn" class="banner-retry-btn">Retry</button>
-      </div>
-
-      <!-- Main Chat Area -->
-      <main class="chat-container">
-        <div class="messages" id="messages-container">
-          <div class="message assistant intro-message">
-            <div class="message-meta">
-              <span class="sender-name">HINAKU</span>
-            </div>
-            <div class="message-body">
-              I am HINAKU. I am listening.
-            </div>
+          <div id="top-privacy-chip" class="status-chip privacy-chip-standard" title="Privacy mode">
+            <span id="top-privacy-icon">🛡️</span>
+            <span id="top-privacy-text">Standard</span>
           </div>
-        </div>
-      </main>
 
-      <!-- Input Footer -->
-      <footer class="app-footer">
-        <div class="input-wrapper">
-          <textarea
-            id="prompt-input"
-            placeholder="Speak with intent... (Shift+Enter for newline)"
-            rows="1"
-            autofocus
-          ></textarea>
-          <button id="cancel-button" class="cancel-btn hidden" title="Cancel generation">✕ Stop</button>
-          <button id="send-button" class="action-btn send-btn" title="Send message (Enter)">
-            <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="22" y1="2" x2="11" y2="13"></line>
-              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+          <!-- Top Model Chip -->
+          <div id="top-model-chip" class="status-chip" title="Selected Model">
+            <span id="top-model-text">bonsai-2:9b</span>
+          </div>
+
+          <!-- Connection dot -->
+          <div id="status-dot" class="connection-dot" title="Local model engine connected"></div>
+
+          <!-- Toggle Right Context Panel (Phase 3) -->
+          <button id="context-panel-toggle-btn" class="top-bar-btn" title="Context Panel (Ctrl+.)">
+            <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="15" y1="3" x2="15" y2="21"></line>
             </svg>
           </button>
         </div>
-        <div class="footer-meta">
-          <label class="think-harder-toggle" title="Think harder: send extended reasoning tokens to supported models">
-            <input type="checkbox" id="think-harder-checkbox" />
-            <span class="think-label">🧠 Think harder</span>
-          </label>
-          <label class="detail-toggle" title="Detailed: allow complete, well-organized explanations up to 350 words">
-            <input type="checkbox" id="detail-checkbox" />
-            <span class="detail-label">📖 Detailed</span>
-          </label>
-          <span id="thinking-indicator" class="thinking-indicator hidden">
-            <span class="pulse-dot"></span> Thinking...
-          </span>
-          <span class="hint">HP V15 &bull; RTX 4050 &bull; <span id="footer-backend">Local inference</span></span>
-        </div>
-      </footer>
-    </div>
+      </header>
 
-    <!-- Right Drawer: What HINAKU remembers -->
-    <aside id="memory-drawer" class="memory-drawer closed">
-      <div class="drawer-header">
-        <div class="drawer-title-group">
-          <h2 class="drawer-title">What HINAKU remembers</h2>
-          <span class="drawer-subtitle">Durable facts & preferences</span>
-        </div>
-        <div class="drawer-actions">
-          <button id="reindex-memory-btn" class="drawer-action-btn" title="Re-index memories in ChromaDB">Re-index</button>
-          <button id="drawer-close-btn" class="icon-btn" title="Close drawer">✕</button>
-        </div>
-      </div>
-      <div class="drawer-body">
-        <div class="drawer-search-wrapper">
-          <input type="text" id="memory-search-input" placeholder="Filter memories..." class="drawer-search-input" />
-        </div>
-        <div id="memories-container" class="memories-container">
-          <!-- Dynamically populated -->
-        </div>
-      </div>
-    </aside>
+      <!-- Chat Viewport -->
+      <section class="chat-viewport" id="chat-viewport">
+        <div class="chat-content-container" id="chat-content-container">
+          <!-- Empty State (default when no active messages) -->
+          <div class="empty-state-view" id="empty-state-view">
+            <div class="hinaku-brand-mark">
+              <div style="width: 12px; height: 12px; border-radius: 50%; background: var(--accent-hinaku);"></div>
+            </div>
+            <h1 class="empty-state-headline">What are we working on?</h1>
+          </div>
 
-    <!-- Overlay for Memory Drawer on mobile -->
-    <div id="drawer-overlay" class="drawer-overlay"></div>
-
-    <!-- Settings Modal -->
-    <div id="settings-modal" class="modal-overlay hidden">
-      <div class="modal-container">
-        <div class="modal-header">
-          <h2 class="modal-title">Settings</h2>
-          <button id="settings-close-btn" class="icon-btn" title="Close">✕</button>
+          <!-- Messages Container (populated when conversation active) -->
+          <div class="messages-container hidden" id="messages-container"></div>
         </div>
-        <div class="modal-body">
-          <!-- Router Mode -->
-          <div class="settings-group">
-            <label class="settings-label">Model Router Mode</label>
-            <div class="radio-group">
-              <label class="radio-label">
-                <input type="radio" name="router-mode-radio" value="auto" checked />
-                <div>
-                  <strong>Auto Mode</strong>
-                  <span class="desc">Local for simple/personal; API for reasoning & code</span>
+      </section>
+
+      <!-- Composer Dock -->
+      <div class="composer-dock">
+        <div class="composer-card">
+          <!-- Active mode removable chips -->
+          <div class="composer-active-chips" id="composer-active-chips">
+            <div class="active-chip hidden" id="chip-think-harder">
+              <span>🧠 Think harder</span>
+              <span class="active-chip-remove" id="remove-chip-think">×</span>
+            </div>
+            <div class="active-chip hidden" id="chip-detailed">
+              <span>📄 Detailed</span>
+              <span class="active-chip-remove" id="remove-chip-detailed">×</span>
+            </div>
+          </div>
+
+          <!-- Input row -->
+          <div class="composer-input-row">
+            <textarea
+              id="prompt-input"
+              class="composer-textarea"
+              placeholder="Ask anything or type / for commands..."
+              rows="1"
+            ></textarea>
+          </div>
+
+          <!-- Bottom control bar -->
+          <div class="composer-bottom-bar">
+            <div class="composer-tools-left">
+              <!-- Plus button with popup menu -->
+              <button id="composer-plus-btn" class="composer-icon-btn" title="Add tools & modes">
+                <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none">
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+              </button>
+
+              <!-- Plus dropdown menu -->
+              <div id="composer-plus-menu" class="dropdown-menu hidden">
+                <button class="dropdown-item" id="menu-toggle-think">
+                  <span>🧠 Think harder</span>
+                  <span id="menu-think-check"></span>
+                </button>
+                <button class="dropdown-item" id="menu-toggle-detailed">
+                  <span>📄 Detailed response</span>
+                  <span id="menu-detailed-check"></span>
+                </button>
+                <button class="dropdown-item" disabled>
+                  <span>📎 Attach files</span>
+                  <span class="badge-coming-soon">coming soon</span>
+                </button>
+                <button class="dropdown-item" disabled>
+                  <span>⚡ Agent skills</span>
+                  <span class="badge-coming-soon">coming soon</span>
+                </button>
+              </div>
+
+              <!-- Privacy Chip in composer -->
+              <div id="composer-privacy-chip" class="status-chip privacy-chip-standard" title="Change privacy mode">
+                <span id="composer-privacy-label">Standard</span>
+                <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2" fill="none">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </div>
+
+              <!-- Privacy Selector Dropdown -->
+              <div id="privacy-dropdown-menu" class="dropdown-menu privacy-dropdown-menu hidden">
+                <div class="privacy-option-item" data-privacy-mode="standard">
+                  <div class="privacy-option-title">Standard</div>
+                  <div class="privacy-option-desc">May use online API model for complex queries. Logged by provider.</div>
                 </div>
-              </label>
-              <label class="radio-label">
-                <input type="radio" name="router-mode-radio" value="local_only" />
-                <div>
-                  <strong>Local Only</strong>
-                  <span class="desc">Strictly stays on laptop (never calls external API)</span>
+                <div class="privacy-option-item" data-privacy-mode="local_only">
+                  <div class="privacy-option-title">Local only</div>
+                  <div class="privacy-option-desc">Strictly runs on local Ollama models. Never calls API.</div>
                 </div>
-              </label>
-              <label class="radio-label">
-                <input type="radio" name="router-mode-radio" value="api_only" />
-                <div>
-                  <strong>API Only</strong>
-                  <span class="desc">Routes to API (except chats marked Private)</span>
+                <div class="privacy-option-item" data-privacy-mode="private">
+                  <div class="privacy-option-title">Private</div>
+                  <div class="privacy-option-desc">Local only. Zero memories stored. Excluded from training dataset.</div>
                 </div>
-              </label>
-            </div>
-          </div>
-
-          <!-- Local Model Selector (Part 2) -->
-          <div class="settings-group">
-            <div class="setting-row">
-              <div>
-                <label class="settings-label" for="setting-local-model">Local Model</label>
-                <p class="setting-desc">Primary local model used for chat, verification, and memory extraction</p>
               </div>
-              <select id="setting-local-model" class="model-select-dropdown"></select>
-            </div>
-          </div>
 
-          <!-- Quality Mode Toggle (Part 3) -->
-          <div class="settings-group">
-            <div class="setting-row">
-              <div>
-                <label class="settings-label">Quality Mode</label>
-                <p class="setting-desc">Two-pass verification checks clock, memory, and persona limits</p>
+              <!-- Model Selector Chip -->
+              <div id="composer-model-chip" class="status-chip" title="Change model">
+                <span id="composer-model-label">bonsai-2:9b</span>
+                <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2" fill="none">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
               </div>
-              <label class="switch">
-                <input type="checkbox" id="setting-quality-mode" checked />
-                <span class="slider"></span>
-              </label>
-            </div>
-          </div>
 
-          <!-- Memory Toggle -->
-          <div class="settings-group">
-            <div class="setting-row">
-              <div>
-                <label class="settings-label">Semantic Memory</label>
-                <p class="setting-desc">Extract facts locally after turns and retrieve context</p>
+              <!-- Model Selector Dropdown -->
+              <div id="model-dropdown-menu" class="dropdown-menu hidden">
+                <button class="dropdown-item" data-model="bonsai-2:9b">bonsai-2:9b (default)</button>
+                <button class="dropdown-item" data-model="gemma3:4b">gemma3:4b</button>
+                <button class="dropdown-item" data-model="qwen3.5:4b">qwen3.5:4b</button>
               </div>
-              <label class="switch">
-                <input type="checkbox" id="setting-memory-enabled" checked />
-                <span class="slider"></span>
-              </label>
             </div>
-          </div>
 
-          <!-- Reduced Motion -->
-          <div class="settings-group">
-            <div class="setting-row">
-              <div>
-                <label class="settings-label">Reduced Motion</label>
-                <p class="setting-desc">Disable cosmos drifting starfield and ambient effects</p>
-              </div>
-              <label class="switch">
-                <input type="checkbox" id="setting-reduced-motion" />
-                <span class="slider"></span>
-              </label>
-            </div>
-          </div>
+            <div class="composer-tools-right">
+              <!-- Mic button (disabled placeholder) -->
+              <button class="composer-icon-btn" disabled title="Voice input (coming soon)">
+                <svg viewBox="0 0 24 24" width="17" height="17" stroke="currentColor" stroke-width="2" fill="none">
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                  <line x1="12" y1="19" x2="12" y2="23"></line>
+                  <line x1="8" y1="23" x2="16" y2="23"></line>
+                </svg>
+              </button>
 
-          <!-- Data Management -->
-          <div class="settings-group">
-            <label class="settings-label">Data Management</label>
-            <div class="button-row">
-              <button id="btn-export-data" class="secondary-btn">Export All Data</button>
-              <button id="btn-clear-memory" class="secondary-btn warning-btn">Clear Memory</button>
-              <button id="btn-wipe-all" class="secondary-btn danger-btn">Wipe All Data</button>
+              <!-- Send button (swaps to Stop during generation) -->
+              <button id="send-button" class="send-btn" title="Send message (Enter)">
+                <svg id="send-icon" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2.5" fill="none">
+                  <line x1="12" y1="19" x2="12" y2="5"></line>
+                  <polyline points="5 12 12 5 19 12"></polyline>
+                </svg>
+                <svg id="stop-icon" class="hidden" viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                  <rect x="5" y="5" width="14" height="14" rx="2" ry="2"></rect>
+                </svg>
+              </button>
             </div>
-          </div>
-
-          <!-- Ratings by Model (Part 2) -->
-          <div class="settings-group">
-            <label class="settings-label">Ratings by Model</label>
-            <p class="setting-desc">Feedback ratings and average latency from past interactions</p>
-            <div class="ratings-table-wrapper">
-              <table class="ratings-table">
-                <thead>
-                  <tr>
-                    <th>Model</th>
-                    <th>Total</th>
-                    <th>👍</th>
-                    <th>👎</th>
-                    <th>Edits</th>
-                    <th>Avg Latency</th>
-                  </tr>
-                </thead>
-                <tbody id="ratings-by-model-body">
-                  <tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 12px;">Loading ratings...</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <!-- Self-Build -->
-          <div class="settings-group">
-            <label class="settings-label">Self-Build Cycle</label>
-            <p class="setting-desc">6-month cycle fine-tunes a local model on high-quality interactions.</p>
-            <div class="button-row">
-              <button id="btn-review-dataset" class="secondary-btn">Review Curated Data</button>
-              <button id="btn-view-report" class="secondary-btn">View Report</button>
-              <button id="btn-run-selfbuild" class="secondary-btn action-btn">Run Self-Build Now</button>
-            </div>
-            <div id="selfbuild-status" class="status-msg hidden"></div>
           </div>
         </div>
       </div>
+    </main>
+  </div>
+
+  <!-- Legacy Modals preserved for Phase 1/2 test contracts, transitioning to full pages in Phase 3 -->
+  <aside id="memory-drawer" class="memory-drawer closed hidden">
+    <div class="drawer-header">
+      <h2>What HINAKU remembers</h2>
+      <button id="reindex-memory-btn" class="drawer-action-btn">Re-index</button>
+      <button id="drawer-close-btn" class="icon-btn">✕</button>
     </div>
+    <input type="text" id="memory-search-input" placeholder="Filter memories..." class="drawer-search-input" />
+    <div id="memories-container" class="memories-container"></div>
+  </aside>
+  <div id="drawer-overlay" class="drawer-overlay hidden"></div>
+  <div id="sidebar-overlay" class="sidebar-overlay hidden"></div>
 
-    <!-- Dataset Review Modal (Phase E) -->
-    <div id="dataset-modal" class="modal-overlay hidden">
-      <div class="modal-container wide-modal">
-        <div class="modal-header">
-          <div class="modal-title-group">
-            <h2 class="modal-title">Dataset Curation & Review</h2>
-            <span class="modal-subtitle" style="font-size: 11px; color: var(--text-muted);">Curated interaction training data</span>
-          </div>
-          <button id="dataset-modal-close" class="icon-btn" title="Close">✕</button>
-        </div>
-        <div class="modal-body dataset-modal-body">
-          <div class="dataset-stats-bar">
-            <div class="stat-item">
-              <span class="stat-value" id="dataset-candidate-count">0</span>
-              <span class="stat-label">Candidates</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-value" id="dataset-min-required">200</span>
-              <span class="stat-label">Required Minimum</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-badge waiting" id="dataset-ready-badge">Checking...</span>
-              <span class="stat-label">Status</span>
-            </div>
-            <div class="stat-actions">
-              <button id="btn-build-dataset" class="secondary-btn action-btn" style="padding: 6px 14px; font-size: 12px;">Build Dataset</button>
-            </div>
-          </div>
-          <div id="dataset-build-status" class="status-msg hidden"></div>
-          <div class="dataset-candidates-list" id="dataset-candidates-list">
-            <div class="empty-state">Loading candidate interactions...</div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Self-Build Report Modal (Phase G) -->
-    <div id="report-modal" class="modal-overlay hidden">
-      <div class="modal-container wide-modal">
-        <div class="modal-header">
-          <div class="modal-title-group">
-            <h2 class="modal-title">Self-Build Report</h2>
-            <span class="modal-subtitle" style="font-size: 11px; color: var(--text-muted);">6-month intelligence cycle results</span>
-          </div>
-          <button id="report-modal-close" class="icon-btn" title="Close">✕</button>
-        </div>
-        <div class="modal-body" id="report-modal-body">
-          <div class="empty-state">Loading latest self-build report...</div>
-        </div>
-      </div>
+  <div id="settings-modal" class="modal-overlay hidden">
+    <div class="modal-container">
+      <button id="settings-close-btn" class="icon-btn">✕</button>
+      <select id="setting-local-model" class="model-select-dropdown"></select>
+      <input type="checkbox" id="setting-quality-mode" checked />
+      <input type="checkbox" id="setting-memory-enabled" checked />
+      <input type="checkbox" id="setting-reduced-motion" />
+      <button id="btn-export-data">Export All Data</button>
+      <button id="btn-clear-memory">Clear Memory</button>
+      <button id="btn-wipe-all">Wipe All Data</button>
+      <tbody id="ratings-by-model-body"></tbody>
+      <button id="btn-review-dataset">Review Curated Data</button>
+      <button id="btn-view-report">View Report</button>
+      <button id="btn-run-selfbuild">Run Self-Build Now</button>
+      <div id="selfbuild-status" class="status-msg hidden"></div>
     </div>
   </div>
 
-  <script src="/static/app.js"></script>
+  <div id="dataset-modal" class="modal-overlay hidden">
+    <div class="modal-container wide-modal">
+      <button id="dataset-modal-close" class="icon-btn">✕</button>
+      <span class="stat-value" id="dataset-candidate-count">0</span>
+      <span class="stat-value" id="dataset-min-required">200</span>
+      <span class="stat-badge waiting" id="dataset-ready-badge">Checking...</span>
+      <button id="btn-build-dataset" class="secondary-btn action-btn">Build Dataset</button>
+      <div id="dataset-build-status" class="status-msg hidden"></div>
+      <div class="dataset-candidates-list" id="dataset-candidates-list"></div>
+    </div>
+  </div>
+
+  <div id="report-modal" class="modal-overlay hidden">
+    <div class="modal-container wide-modal">
+      <button id="report-modal-close" class="icon-btn">✕</button>
+      <div class="modal-body" id="report-modal-body"></div>
+    </div>
+  </div>
+
+  <script type="module" src="/static/app.js"></script>
 </body>
 </html>

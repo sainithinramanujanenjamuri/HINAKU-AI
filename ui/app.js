@@ -1,1938 +1,494 @@
-// HINAKU UI Client with Model Router, Private Chat & Backend Badges
-document.addEventListener("DOMContentLoaded", () => {
-  const messagesContainer = document.getElementById("messages-container");
-  const promptInput = document.getElementById("prompt-input");
-  const sendButton = document.getElementById("send-button");
-  const modelBadge = document.getElementById("model-badge");
-  const statusIndicator = document.getElementById("status-indicator");
-  const noticeBanner = document.getElementById("notice-banner");
-  const noticeText = document.getElementById("notice-text");
-  const noticeDismissBtn = document.getElementById("notice-dismiss-btn");
-  if (noticeDismissBtn) {
-    noticeDismissBtn.addEventListener("click", () => {
-      if (noticeBanner) noticeBanner.classList.add("hidden");
+import { groupConversationsByDate, getPrivacyChipInfo, formatModelDisplayName } from "/static/js/utils.js";
+
+// Main application state
+const state = {
+  conversations: [],
+  currentConversationId: null,
+  activeModel: "bonsai-2:9b",
+  privacyMode: "standard", // standard, local_only, private
+  thinkHarder: false,
+  detailed: false,
+  isGenerating: false,
+  abortController: null,
+  isLoadingModel: false,
+  theme: "dark",
+  isDemoMode: false
+};
+
+// DOM references
+let dom = {};
+
+document.addEventListener("DOMContentLoaded", async () => {
+  document.documentElement.setAttribute("data-theme", "dark");
+  state.theme = "dark";
+
+  initDomReferences();
+  setupEventListeners();
+  await checkDemoModeAndLoad();
+});
+
+function initDomReferences() {
+  dom = {
+    sidebar: document.getElementById("sidebar"),
+    sidebarToggleBtn: document.getElementById("sidebar-toggle-btn"),
+    newChatBtn: document.getElementById("new-chat-btn"),
+    searchInput: document.getElementById("search-input"),
+    sidebarConversations: document.getElementById("sidebar-conversations"),
+    chatTitle: document.getElementById("chat-title"),
+    topPrivacyChip: document.getElementById("top-privacy-chip"),
+    topPrivacyText: document.getElementById("top-privacy-text"),
+    topModelChip: document.getElementById("top-model-chip"),
+    topModelText: document.getElementById("top-model-text"),
+    statusDot: document.getElementById("status-dot"),
+    emptyStateView: document.getElementById("empty-state-view"),
+    messagesContainer: document.getElementById("messages-container"),
+    promptInput: document.getElementById("prompt-input"),
+    composerPlusBtn: document.getElementById("composer-plus-btn"),
+    composerPlusMenu: document.getElementById("composer-plus-menu"),
+    menuToggleThink: document.getElementById("menu-toggle-think"),
+    menuToggleDetailed: document.getElementById("menu-toggle-detailed"),
+    menuThinkCheck: document.getElementById("menu-think-check"),
+    menuDetailedCheck: document.getElementById("menu-detailed-check"),
+    chipThinkHarder: document.getElementById("chip-think-harder"),
+    chipDetailed: document.getElementById("chip-detailed"),
+    removeChipThink: document.getElementById("remove-chip-think"),
+    removeChipDetailed: document.getElementById("remove-chip-detailed"),
+    composerPrivacyChip: document.getElementById("composer-privacy-chip"),
+    composerPrivacyLabel: document.getElementById("composer-privacy-label"),
+    privacyDropdownMenu: document.getElementById("privacy-dropdown-menu"),
+    composerModelChip: document.getElementById("composer-model-chip"),
+    composerModelLabel: document.getElementById("composer-model-label"),
+    modelDropdownMenu: document.getElementById("model-dropdown-menu"),
+    sendButton: document.getElementById("send-button"),
+    sendIcon: document.getElementById("send-icon"),
+    stopIcon: document.getElementById("stop-icon")
+  };
+}
+
+function setupEventListeners() {
+  // Sidebar Toggle
+  dom.sidebarToggleBtn?.addEventListener("click", () => {
+    dom.sidebar.classList.toggle("collapsed");
+  });
+
+  // New Chat
+  dom.newChatBtn?.addEventListener("click", startNewChat);
+
+  // Search filter
+  dom.searchInput?.addEventListener("input", (e) => {
+    filterConversations(e.target.value);
+  });
+
+  // Plus menu toggle
+  dom.composerPlusBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    dom.privacyDropdownMenu?.classList.add("hidden");
+    dom.modelDropdownMenu?.classList.add("hidden");
+    dom.composerPlusMenu?.classList.toggle("hidden");
+  });
+
+  // Think harder menu item
+  dom.menuToggleThink?.addEventListener("click", () => {
+    state.thinkHarder = !state.thinkHarder;
+    updateModeChips();
+    dom.composerPlusMenu?.classList.add("hidden");
+  });
+
+  // Detailed menu item
+  dom.menuToggleDetailed?.addEventListener("click", () => {
+    state.detailed = !state.detailed;
+    updateModeChips();
+    dom.composerPlusMenu?.classList.add("hidden");
+  });
+
+  // Removable chips
+  dom.removeChipThink?.addEventListener("click", () => {
+    state.thinkHarder = false;
+    updateModeChips();
+  });
+  dom.removeChipDetailed?.addEventListener("click", () => {
+    state.detailed = false;
+    updateModeChips();
+  });
+
+  // Privacy dropdown
+  dom.composerPrivacyChip?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    dom.composerPlusMenu?.classList.add("hidden");
+    dom.modelDropdownMenu?.classList.add("hidden");
+    dom.privacyDropdownMenu?.classList.toggle("hidden");
+  });
+
+  // Privacy option selection
+  dom.privacyDropdownMenu?.querySelectorAll(".privacy-option-item").forEach(item => {
+    item.addEventListener("click", (e) => {
+      const mode = item.getAttribute("data-privacy-mode");
+      if (mode) {
+        setPrivacyMode(mode);
+      }
+      dom.privacyDropdownMenu.classList.add("hidden");
     });
-  }
-  const noticeRemindLaterBtn = document.getElementById("notice-remind-later-btn");
-  if (noticeRemindLaterBtn) {
-    noticeRemindLaterBtn.addEventListener("click", async () => {
-      try {
-        const res = await fetch("/api/self-build/remind-later", { method: "POST" });
-        if (res.ok) {
-          if (noticeBanner) noticeBanner.classList.add("hidden");
-          if (noticeRemindLaterBtn) noticeRemindLaterBtn.classList.add("hidden");
-        }
-      } catch (e) {
-        console.warn("Error postponing reminder:", e);
+  });
+
+  // Model dropdown
+  dom.composerModelChip?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    dom.composerPlusMenu?.classList.add("hidden");
+    dom.privacyDropdownMenu?.classList.add("hidden");
+    dom.modelDropdownMenu?.classList.toggle("hidden");
+  });
+
+  dom.modelDropdownMenu?.querySelectorAll(".dropdown-item").forEach(item => {
+    item.addEventListener("click", () => {
+      const model = item.getAttribute("data-model");
+      if (model) {
+        selectModel(model);
       }
+      dom.modelDropdownMenu.classList.add("hidden");
     });
-  }
-  const conversationsList = document.getElementById("conversations-list");
-  const newChatBtn = document.getElementById("new-chat-btn");
-  const sidebar = document.getElementById("sidebar");
-  const sidebarToggleBtn = document.getElementById("sidebar-toggle-btn");
-  const sidebarCloseBtn = document.getElementById("sidebar-close-btn");
-  const sidebarOverlay = document.getElementById("sidebar-overlay");
-  const privateToggleBtn = document.getElementById("private-toggle-btn");
-  const privacyIcon = document.getElementById("privacy-icon");
-  const privacyLabel = document.getElementById("privacy-label");
+  });
 
-  let currentConversationId = null;
-  let isCurrentChatPrivate = false;
-  let isGenerating = false;
-  let activeAbortController = null;
-  let isApiLoggedByProvider = false;
+  // Close menus when clicking outside
+  document.addEventListener("click", () => {
+    dom.composerPlusMenu?.classList.add("hidden");
+    dom.privacyDropdownMenu?.classList.add("hidden");
+    dom.modelDropdownMenu?.classList.add("hidden");
+  });
 
-  // Initialize marked settings
-  if (window.marked) {
-    marked.setOptions({
-      breaks: true,
-      gfm: true
-    });
-  }
-
-  function formatMarkdown(text) {
-    if (!text) return "";
-    // Preprocess 1: Convert LaTeX math notation to plain Unicode symbols
-    let processed = (typeof convertLatexSymbols === "function") ? convertLatexSymbols(text) : text;
-    // Preprocess 2: ensure bold heading directly after a list item renders as its own paragraph
-    const normalized = processed.replace(/((?:^|\n)[ \t]*(?:[-*+]|\d+\.)[^\n]+)\n([ \t]*\*\*[^*]+?\*\*.*)/g, "$1\n\n$2");
-    return window.marked ? marked.parse(normalized) : normalized;
-  }
-
-  function updateFooterBackend(backend) {
-    const footerEl = document.getElementById("footer-backend");
-    if (!footerEl) return;
-    if (!backend) {
-      footerEl.textContent = "local";
-      return;
-    }
-    const b = backend.toLowerCase();
-    if (b === "guard") {
-      footerEl.textContent = "guard";
-    } else if (b === "api") {
-      footerEl.textContent = "API";
-    } else {
-      footerEl.textContent = "local";
-    }
-  }
-
-  function getBackendBadgeText(backend, model) {
-    const bKind = (backend || "local").toLowerCase();
-    const mStr = (model || "").toLowerCase();
-    if (bKind === "guard" || mStr.includes("guard")) {
-      if (mStr.includes("sensitive")) {
-        return "sensitive-data guard";
-      }
-      if (mStr.includes("live")) {
-        return "live-data guard";
-      }
-      return "guard";
-    }
-    const mName = model ? model.split("/").pop() : "local";
-    if (bKind === "api") {
-      return isApiLoggedByProvider ? "API · logged by provider" : `${mName} · API`;
-    }
-    return `${mName} · local`;
-  }
-
-  function updateNoticeBanner(visible, message, undoCallback) {
-    if (!noticeBanner || !noticeText) return;
-    if (visible && message) {
-      if (undoCallback) {
-        noticeText.innerHTML = `${message} <button id="notice-undo-btn" class="notice-undo-btn" style="margin-left: 8px; text-decoration: underline; background: none; border: none; color: #a5b4fc; cursor: pointer; font-weight: 500;">Undo</button>`;
-        const btn = document.getElementById("notice-undo-btn");
-        if (btn) btn.onclick = undoCallback;
-      } else {
-        noticeText.textContent = message;
-      }
-      noticeBanner.classList.remove("hidden");
-    } else {
-      noticeBanner.classList.add("hidden");
-    }
-  }
-
-  function updatePrivacyUI(isPrivate) {
-    isCurrentChatPrivate = isPrivate;
-    if (isPrivate) {
-      privateToggleBtn.classList.add("active");
-      if (privacyIcon) privacyIcon.textContent = "🔒";
-      if (privacyLabel) privacyLabel.textContent = "Private (Local)";
-      privateToggleBtn.title = "Private Chat: Stays strictly on this laptop (never uses API)";
-    } else {
-      privateToggleBtn.classList.remove("active");
-      if (privacyIcon) privacyIcon.textContent = "🔓";
-      if (privacyLabel) privacyLabel.textContent = "Standard";
-      privateToggleBtn.title = "Standard Chat: Uses hybrid auto router (Local + API)";
-    }
-  }
-
-  // Toggle privacy button
-  privateToggleBtn.addEventListener("click", async () => {
-    const newState = !isCurrentChatPrivate;
-    updatePrivacyUI(newState);
-    if (!currentConversationId) {
-      try {
-        const res = await fetch("/api/conversations", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ is_private: newState, title: "New conversation" })
-        });
-        if (res.ok) {
-          const conv = await res.json();
-          currentConversationId = conv.id;
-          loadConversations();
-        }
-      } catch (e) {
-        console.error("Failed to create private conversation:", e);
-      }
-    } else {
-      try {
-        await fetch(`/api/conversations/${currentConversationId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ is_private: newState })
-        });
-        loadConversations();
-      } catch (e) {
-        console.error("Failed to update privacy:", e);
-      }
+  // Keyboard Shortcuts
+  window.addEventListener("keydown", (e) => {
+    if (e.ctrlKey && e.key.toLowerCase() === "k") {
+      e.preventDefault();
+      dom.searchInput?.focus();
+    } else if (e.ctrlKey && e.key.toLowerCase() === "n") {
+      e.preventDefault();
+      startNewChat();
+    } else if (e.ctrlKey && e.key.toLowerCase() === "b") {
+      e.preventDefault();
+      dom.sidebar.classList.toggle("collapsed");
+    } else if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "p") {
+      e.preventDefault();
+      cyclePrivacyMode();
     }
   });
 
-  // Fetch status info
-  const ollamaDownBanner = document.getElementById("ollama-down-banner");
-  const ollamaRetryBtn = document.getElementById("ollama-retry-btn");
-  if (ollamaRetryBtn) {
-    ollamaRetryBtn.addEventListener("click", () => {
-      checkInfo();
-    });
-  }
-
-  async function checkInfo() {
-    try {
-      const res = await fetch("/api/info");
-      if (res.ok) {
-        const data = await res.json();
-        window.HINAKU_SETTINGS = data;
-        const mode = data.router?.mode || "auto";
-        const localModel = data.default_model || "qwen3.5:4b";
-        modelBadge.textContent = `${mode} • ${localModel}`;
-
-        if (data.router && data.router.api_logged_by_provider !== undefined) {
-          isApiLoggedByProvider = Boolean(data.router.api_logged_by_provider);
-        }
-
-        if (data.ollama_status && data.ollama_status.online) {
-          statusIndicator.classList.remove("offline");
-          statusIndicator.title = "Ollama online";
-          if (ollamaDownBanner) ollamaDownBanner.classList.add("hidden");
-        } else {
-          statusIndicator.classList.add("offline");
-          statusIndicator.title = "Ollama offline or model not found";
-          if (ollamaDownBanner) ollamaDownBanner.classList.remove("hidden");
-        }
-
-        if (data.persona && data.persona.is_fallback) {
-          updateNoticeBanner(true, data.persona.notice);
-        }
-      }
-    } catch (e) {
-      statusIndicator.classList.add("offline");
-      statusIndicator.title = "Backend unreachable";
-      if (ollamaDownBanner) ollamaDownBanner.classList.remove("hidden");
-    }
-  }
-
-  // Periodic health check every 10 seconds to auto-reconnect
-  setInterval(checkInfo, 10000);
-
-  checkInfo();
-
-  // Sidebar toggle behavior
-  function toggleSidebar() {
-    const isMobile = window.innerWidth <= 768;
-    if (isMobile) {
-      sidebar.classList.toggle("open");
-      sidebarOverlay.classList.toggle("active");
-    } else {
-      sidebar.classList.toggle("collapsed");
-    }
-  }
-
-  function closeMobileSidebar() {
-    sidebar.classList.remove("open");
-    sidebarOverlay.classList.remove("active");
-  }
-
-  sidebarToggleBtn.addEventListener("click", toggleSidebar);
-  if (sidebarCloseBtn) sidebarCloseBtn.addEventListener("click", closeMobileSidebar);
-  sidebarOverlay.addEventListener("click", closeMobileSidebar);
-
-  // Conversations List & Management
-  async function loadConversations() {
-    try {
-      const res = await fetch("/api/conversations");
-      if (!res.ok) return;
-      const convs = await res.json();
-
-      conversationsList.innerHTML = "";
-      if (convs.length === 0) {
-        const empty = document.createElement("div");
-        empty.style.padding = "12px 14px";
-        empty.style.color = "var(--text-dim)";
-        empty.style.fontSize = "12px";
-        empty.textContent = "No conversations yet";
-        conversationsList.appendChild(empty);
-        return;
-      }
-
-      convs.forEach((c) => {
-        const item = document.createElement("div");
-        item.className = `conversation-item ${c.id === currentConversationId ? "active" : ""}`;
-        item.dataset.id = c.id;
-
-        const titleWrapper = document.createElement("span");
-        titleWrapper.className = "conv-title";
-        if (c.is_private) {
-          titleWrapper.innerHTML = `<span style="font-size: 11px; margin-right: 4px;">🔒</span>${escapeHtml(c.title || "Untitled")}`;
-        } else {
-          titleWrapper.textContent = c.title || "Untitled";
-        }
-        titleWrapper.title = c.title || "Untitled";
-
-        const actionsDiv = document.createElement("div");
-        actionsDiv.className = "conv-actions";
-
-        // Rename button
-        const renameBtn = document.createElement("button");
-        renameBtn.className = "conv-btn";
-        renameBtn.title = "Rename conversation";
-        renameBtn.innerHTML = `
-          <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none">
-            <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
-          </svg>
-        `;
-        renameBtn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          startInlineRename(item, c.id, c.title);
-        });
-
-        // Delete button
-        const deleteBtn = document.createElement("button");
-        deleteBtn.className = "conv-btn delete-btn";
-        deleteBtn.title = "Delete conversation";
-        deleteBtn.innerHTML = `
-          <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none">
-            <polyline points="3 6 5 6 21 6"></polyline>
-            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-          </svg>
-        `;
-        deleteBtn.addEventListener("click", async (e) => {
-          e.stopPropagation();
-          if (confirm(`Permanently delete "${c.title}"?`)) {
-            await deleteConversation(c.id);
-          }
-        });
-
-        actionsDiv.appendChild(renameBtn);
-        actionsDiv.appendChild(deleteBtn);
-
-        item.appendChild(titleWrapper);
-        item.appendChild(actionsDiv);
-
-        item.addEventListener("click", () => {
-          openConversation(c.id);
-        });
-
-        conversationsList.appendChild(item);
-      });
-    } catch (e) {
-      console.error("Failed to load conversations:", e);
-    }
-  }
-
-  function escapeHtml(text) {
-    const div = document.createElement("div");
-    div.textContent = text;
-    return div.innerHTML;
-  }
-
-  function startInlineRename(itemDiv, convId, currentTitle) {
-    const titleSpan = itemDiv.querySelector(".conv-title");
-    const actionsDiv = itemDiv.querySelector(".conv-actions");
-    if (!titleSpan) return;
-
-    actionsDiv.style.display = "none";
-    const input = document.createElement("input");
-    input.type = "text";
-    input.className = "rename-input";
-    input.value = currentTitle;
-
-    titleSpan.replaceWith(input);
-    input.focus();
-    input.select();
-
-    async function finishRename() {
-      const newTitle = input.value.trim() || currentTitle;
-      try {
-        await fetch(`/api/conversations/${convId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title: newTitle })
-        });
-      } catch (e) {
-        console.error("Error renaming:", e);
-      }
-      loadConversations();
-    }
-
-    input.addEventListener("blur", finishRename);
-    input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        input.removeEventListener("blur", finishRename);
-        finishRename();
-      } else if (e.key === "Escape") {
-        input.removeEventListener("blur", finishRename);
-        loadConversations();
-      }
-    });
-  }
-
-  async function openConversation(convId) {
-    if (isGenerating) return;
-    try {
-      const res = await fetch(`/api/conversations/${convId}`);
-      if (!res.ok) return;
-      const conv = await res.json();
-
-      currentConversationId = conv.id;
-      updatePrivacyUI(Boolean(conv.is_private));
-      messagesContainer.innerHTML = "";
-
-      if (conv.messages && conv.messages.length > 0) {
-        let lastAssistantBackend = null;
-        conv.messages.forEach((m) => {
-          renderMessage(
-            m.role,
-            m.content,
-            false,
-            m.model,
-            m.backend,
-            m.id,
-            m.interaction_id,
-            m.feedback,
-            m.edited_answer
-          );
-          if (m.role === "assistant" && m.backend) {
-            lastAssistantBackend = m.backend;
-          }
-        });
-        updateFooterBackend(lastAssistantBackend || "local");
-      } else {
-        renderIntroMessage();
-        updateFooterBackend("local");
-      }
-
-      loadConversations();
-      closeMobileSidebar();
-      promptInput.focus();
-    } catch (e) {
-      console.error("Error opening conversation:", e);
-    }
-  }
-
-  async function deleteConversation(convId) {
-    try {
-      await fetch(`/api/conversations/${convId}`, { method: "DELETE" });
-      if (currentConversationId === convId) {
-        startNewChat();
-      } else {
-        loadConversations();
-      }
-    } catch (e) {
-      console.error("Error deleting conversation:", e);
-    }
-  }
-
-  function showChatErrorNotice(errorMessage, originalPrompt) {
-    const existing = document.querySelector(".chat-error-toast");
-    if (existing) existing.remove();
-
-    const toast = document.createElement("div");
-    toast.className = "chat-error-toast";
-
-    const msgSpan = document.createElement("span");
-    msgSpan.className = "toast-message";
-    msgSpan.textContent = `⚠️ Connection error: ${errorMessage}`;
-
-    const actions = document.createElement("div");
-    actions.className = "toast-actions";
-
-    const retryBtn = document.createElement("button");
-    retryBtn.className = "toast-retry-btn";
-    retryBtn.textContent = "Retry";
-    retryBtn.addEventListener("click", () => {
-      toast.remove();
-      if (originalPrompt) {
-        promptInput.value = originalPrompt;
-        sendMessage();
-      }
-    });
-
-    const dismissBtn = document.createElement("button");
-    dismissBtn.className = "toast-dismiss-btn";
-    dismissBtn.innerHTML = "&times;";
-    dismissBtn.title = "Dismiss";
-    dismissBtn.addEventListener("click", () => toast.remove());
-
-    actions.appendChild(retryBtn);
-    actions.appendChild(dismissBtn);
-
-    toast.appendChild(msgSpan);
-    toast.appendChild(actions);
-
-    messagesContainer.appendChild(toast);
-    scrollToBottom();
-  }
-
-  function updateMessageBadge(metaDiv, status, reason) {
-    let vTag = metaDiv.querySelector(".verified-mark");
-    if (!vTag) {
-      vTag = document.createElement("span");
-      metaDiv.appendChild(vTag);
-    }
-    vTag.className = "verified-mark";
-    if (status === "verified") {
-      vTag.textContent = "✓ verified";
-      vTag.title = "Checked, fine";
-    } else if (status === "corrected") {
-      vTag.classList.add("corrected");
-      vTag.textContent = "✎ corrected";
-      vTag.title = reason ? `Corrected: ${reason}` : "Corrected by Quality Guard";
-    } else {
-      vTag.classList.add("not-verified");
-      const rText = reason || "skipped";
-      vTag.textContent = `○ not verified (${rText})`;
-      vTag.title = `Not verified: ${rText}`;
-    }
-  }
-
-  function renderIntroMessage() {
-    messagesContainer.innerHTML = `
-      <div class="message assistant intro-message">
-        <div class="message-meta">
-          <span class="sender-name">HINAKU</span>
-          <span class="backend-tag local">local</span>
-        </div>
-        <div class="message-body">
-          I am HINAKU. I am listening.
-        </div>
-      </div>
-    `;
-    updateFooterBackend("local");
-  }
-
-  function startNewChat() {
-    if (isGenerating) return;
-    currentConversationId = null;
-    updatePrivacyUI(false);
-    renderIntroMessage();
-    updateFooterBackend("local");
-    loadConversations();
-    closeMobileSidebar();
-    promptInput.focus();
-  }
-
-  newChatBtn.addEventListener("click", startNewChat);
-
-  // Auto-resize input
-  promptInput.addEventListener("input", () => {
-    promptInput.style.height = "auto";
-    promptInput.style.height = `${Math.min(promptInput.scrollHeight, 160)}px`;
+  // Auto-expand textarea
+  dom.promptInput?.addEventListener("input", () => {
+    dom.promptInput.style.height = "auto";
+    dom.promptInput.style.height = Math.min(dom.promptInput.scrollHeight, 180) + "px";
   });
 
-  promptInput.addEventListener("keydown", (e) => {
+  dom.promptInput?.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      sendMessage();
+      handleSendMessage();
     }
   });
 
-  sendButton.addEventListener("click", () => {
-    sendMessage();
+  dom.sendButton?.addEventListener("click", () => {
+    if (state.isGenerating) {
+      handleStopGeneration();
+    } else {
+      handleSendMessage();
+    }
   });
+}
 
-  const cancelBtn = document.getElementById("cancel-button");
-  if (cancelBtn) {
-    cancelBtn.addEventListener("click", () => {
-      if (activeAbortController) {
-        activeAbortController.abort();
-      }
-    });
-  }
-
-  function renderMessage(
-    role,
-    content,
-    isStreaming = false,
-    model = null,
-    backend = null,
-    messageId = null,
-    interactionId = null,
-    feedback = null,
-    editedAnswer = null
-  ) {
-    const msgDiv = document.createElement("div");
-    msgDiv.className = `message ${role}`;
-    if (messageId) msgDiv.dataset.messageId = messageId;
-
-    const metaDiv = document.createElement("div");
-    metaDiv.className = "message-meta";
-
-    if (role === "user") {
-      metaDiv.textContent = "You";
-    } else {
-      const nameSpan = document.createElement("span");
-      nameSpan.className = "sender-name";
-      nameSpan.textContent = "HINAKU";
-      metaDiv.appendChild(nameSpan);
-
-      const tag = document.createElement("span");
-      const bKind = (backend || "local").toLowerCase();
-      tag.className = `backend-tag ${bKind}`;
-      tag.dataset.tag = "backend";
-      tag.textContent = getBackendBadgeText(backend, model);
-      metaDiv.appendChild(tag);
+async function checkDemoModeAndLoad() {
+  try {
+    const res = await fetch("/api/demo/status");
+    if (res.ok) {
+      const data = await res.json();
+      state.isDemoMode = data.demo_mode;
     }
-    msgDiv.appendChild(metaDiv);
+  } catch (err) {
+    state.isDemoMode = false;
+  }
 
-    const bodyDiv = document.createElement("div");
-    bodyDiv.className = "message-body";
+  await loadInitialInfo();
+  await loadConversations();
+}
 
-    if (role === "assistant") {
-      if (content) {
-        bodyDiv.innerHTML = formatMarkdown(content);
-      } else {
-        bodyDiv.textContent = content;
+async function loadInitialInfo() {
+  try {
+    const endpoint = state.isDemoMode ? "/api/demo/info" : "/api/info";
+    const res = await fetch(endpoint);
+    if (res.ok) {
+      const info = await res.json();
+      if (info.default_model) {
+        selectModel(info.default_model);
       }
-      if (isStreaming) {
-        const cursor = document.createElement("span");
-        cursor.className = "streaming-cursor";
-        bodyDiv.appendChild(cursor);
-      }
-      attachCopyButtons(bodyDiv);
-
-      if (!isStreaming && messageId) {
-        attachAssistantActions(msgDiv, bodyDiv, metaDiv, messageId, backend, feedback, editedAnswer, content);
-      }
-    } else {
-      bodyDiv.textContent = content;
     }
-
-    msgDiv.appendChild(bodyDiv);
-    messagesContainer.appendChild(msgDiv);
-    scrollToBottom();
-    return { msgDiv, metaDiv, bodyDiv };
+  } catch (e) {
+    console.warn("Could not load initial app info:", e);
   }
+}
 
-  function attachAssistantActions(msgDiv, bodyDiv, metaDiv, messageId, backend, feedback, editedAnswer, initialContent) {
-    if (msgDiv.querySelector(".message-actions")) return;
-    const actionsDiv = document.createElement("div");
-    actionsDiv.className = "message-actions";
-
-    const bKind = (backend || "local").toLowerCase();
-    if (bKind === "guard") {
-      const note = document.createElement("span");
-      note.className = "guard-note";
-      note.textContent = "Guard response · not used for training";
-      actionsDiv.appendChild(note);
-      msgDiv.appendChild(actionsDiv);
-      return;
+async function loadConversations() {
+  try {
+    const endpoint = state.isDemoMode ? "/api/demo/conversations" : "/api/conversations";
+    const res = await fetch(endpoint);
+    if (res.ok) {
+      state.conversations = await res.json();
+      renderConversationsList(state.conversations);
     }
-
-    let currentFeedback = feedback;
-    let rawContent = editedAnswer || initialContent || "";
-
-    const thumbUpBtn = document.createElement("button");
-    thumbUpBtn.className = "action-btn thumbs-up" + (currentFeedback === "thumbs_up" ? " active" : "");
-    thumbUpBtn.title = "Good response (thumbs up)";
-    thumbUpBtn.innerHTML = `<span>👍</span>`;
-
-    const thumbDownBtn = document.createElement("button");
-    thumbDownBtn.className = "action-btn thumbs-down" + (currentFeedback === "thumbs_down" ? " active" : "");
-    thumbDownBtn.title = "Poor response (thumbs down)";
-    thumbDownBtn.innerHTML = `<span>👎</span>`;
-
-    const editBtn = document.createElement("button");
-    editBtn.className = "action-btn edit-btn";
-    editBtn.title = "Edit reply (used for future training)";
-    editBtn.innerHTML = `<span>✏️ Edit</span>`;
-
-    const editedBadge = document.createElement("span");
-    editedBadge.className = "edited-badge";
-    editedBadge.textContent = "edited";
-    editedBadge.style.display = editedAnswer ? "inline-block" : "none";
-
-    actionsDiv.appendChild(thumbUpBtn);
-    actionsDiv.appendChild(thumbDownBtn);
-    actionsDiv.appendChild(editBtn);
-    actionsDiv.appendChild(editedBadge);
-
-    thumbUpBtn.addEventListener("click", async () => {
-      const newFeedback = currentFeedback === "thumbs_up" ? null : "thumbs_up";
-      try {
-        const res = await fetch(`/api/messages/${messageId}/feedback`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ feedback: newFeedback })
-        });
-        if (res.ok) {
-          currentFeedback = newFeedback;
-          if (currentFeedback === "thumbs_up") {
-            thumbUpBtn.classList.add("active");
-            thumbDownBtn.classList.remove("active");
-          } else {
-            thumbUpBtn.classList.remove("active");
-          }
-        }
-      } catch (err) {
-        console.error("Feedback error:", err);
-      }
-    });
-
-    thumbDownBtn.addEventListener("click", async () => {
-      const newFeedback = currentFeedback === "thumbs_down" ? null : "thumbs_down";
-      try {
-        const res = await fetch(`/api/messages/${messageId}/feedback`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ feedback: newFeedback })
-        });
-        if (res.ok) {
-          currentFeedback = newFeedback;
-          if (currentFeedback === "thumbs_down") {
-            thumbDownBtn.classList.add("active");
-            thumbUpBtn.classList.remove("active");
-          } else {
-            thumbDownBtn.classList.remove("active");
-          }
-        }
-      } catch (err) {
-        console.error("Feedback error:", err);
-      }
-    });
-
-    editBtn.addEventListener("click", () => {
-      if (bodyDiv.querySelector(".inline-edit-box")) return;
-      const originalHtml = bodyDiv.innerHTML;
-
-      bodyDiv.innerHTML = "";
-      const editBox = document.createElement("div");
-      editBox.className = "inline-edit-box";
-
-      const textarea = document.createElement("textarea");
-      textarea.className = "inline-edit-textarea";
-      textarea.value = rawContent;
-
-      const actionRow = document.createElement("div");
-      actionRow.className = "inline-edit-actions";
-
-      const cancelBtn = document.createElement("button");
-      cancelBtn.className = "btn-cancel";
-      cancelBtn.textContent = "Cancel";
-
-      const saveBtn = document.createElement("button");
-      saveBtn.className = "btn-save";
-      saveBtn.textContent = "Save edit";
-
-      actionRow.appendChild(cancelBtn);
-      actionRow.appendChild(saveBtn);
-      editBox.appendChild(textarea);
-      editBox.appendChild(actionRow);
-      bodyDiv.appendChild(editBox);
-      textarea.focus();
-
-      cancelBtn.addEventListener("click", () => {
-        bodyDiv.innerHTML = originalHtml;
-        attachCopyButtons(bodyDiv);
-      });
-
-      saveBtn.addEventListener("click", async () => {
-        const newText = textarea.value.trim();
-        if (!newText) return;
-        saveBtn.disabled = true;
-        saveBtn.textContent = "Saving...";
-        try {
-          const res = await fetch(`/api/messages/${messageId}/edit`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ edited_answer: newText })
-          });
-          if (res.ok) {
-            rawContent = newText;
-            bodyDiv.innerHTML = formatMarkdown(newText);
-            attachCopyButtons(bodyDiv);
-            editedBadge.style.display = "inline-block";
-          } else {
-            alert("Failed to save edited reply.");
-            bodyDiv.innerHTML = originalHtml;
-            attachCopyButtons(bodyDiv);
-          }
-        } catch (e) {
-          console.error(e);
-          bodyDiv.innerHTML = originalHtml;
-          attachCopyButtons(bodyDiv);
-        }
-      });
-    });
-
-    msgDiv.appendChild(actionsDiv);
+  } catch (e) {
+    console.warn("Could not load conversations:", e);
   }
+}
 
-  function attachCopyButtons(container) {
-    const preBlocks = container.querySelectorAll("pre");
-    preBlocks.forEach((pre) => {
-      if (!pre.querySelector(".copy-btn")) {
-        const btn = document.createElement("button");
-        btn.className = "copy-btn";
-        btn.textContent = "Copy";
-        btn.addEventListener("click", () => {
-          const code = pre.querySelector("code") ? pre.querySelector("code").innerText : pre.innerText;
-          navigator.clipboard.writeText(code).then(() => {
-            btn.textContent = "Copied!";
-            setTimeout(() => (btn.textContent = "Copy"), 2000);
-          });
-        });
-        pre.appendChild(btn);
-      }
-    });
-  }
+function renderConversationsList(convs) {
+  if (!dom.sidebarConversations) return;
+  dom.sidebarConversations.innerHTML = "";
 
-  function scrollToBottom() {
-    const chatContainer = document.querySelector(".chat-container");
-    if (chatContainer) chatContainer.scrollTop = chatContainer.scrollHeight;
-  }
+  const groups = groupConversationsByDate(convs);
+  const sections = [
+    { label: "Today", items: groups.today },
+    { label: "Yesterday", items: groups.yesterday },
+    { label: "Previous 7 days", items: groups.previous7Days },
+    { label: "Older", items: groups.older }
+  ];
 
-  async function sendMessage() {
-    const text = promptInput.value.trim();
-    if (!text || isGenerating) return;
+  sections.forEach(sec => {
+    if (sec.items.length === 0) return;
 
-    // Reset input
-    promptInput.value = "";
-    promptInput.style.height = "auto";
-    sendButton.disabled = true;
-    isGenerating = true;
+    const groupHeading = document.createElement("div");
+    groupHeading.className = "group-title";
+    groupHeading.textContent = sec.label;
+    dom.sidebarConversations.appendChild(groupHeading);
 
-    // Append user message
-    renderMessage("user", text);
+    sec.items.forEach(c => {
+      const item = document.createElement("div");
+      item.className = `conv-item ${c.id === state.currentConversationId ? 'active' : ''}`;
+      item.dataset.id = c.id;
 
-    // Create assistant message placeholder
-    let assistantText = "";
-    let lastMessageId = null;
-    let lastBackend = "local";
-    let isVerified = false;
-    let verifyStatus = "not_verified";
-    let verifyReason = "in_progress";
-    const { msgDiv, metaDiv, bodyDiv } = renderMessage("assistant", "", true, "routing...", "local");
+      const title = document.createElement("span");
+      title.className = "conv-title";
+      title.textContent = (c.pinned ? "📌 " : "") + (c.title || "Untitled");
 
-    activeAbortController = new AbortController();
+      const actions = document.createElement("div");
+      actions.className = "conv-actions";
 
-    const thinkHarderCheckbox = document.getElementById("think-harder-checkbox");
-    const detailCheckbox = document.getElementById("detail-checkbox");
-    const cancelButton = document.getElementById("cancel-button");
-    const thinkingIndicator = document.getElementById("thinking-indicator");
+      // Pin button
+      const pinBtn = document.createElement("button");
+      pinBtn.className = "conv-action-btn";
+      pinBtn.title = c.pinned ? "Unpin" : "Pin";
+      pinBtn.textContent = "📌";
+      pinBtn.onclick = (e) => {
+        e.stopPropagation();
+        togglePinConversation(c.id, !c.pinned);
+      };
 
-    const thinkHarderVal = thinkHarderCheckbox ? thinkHarderCheckbox.checked : false;
-    const detailedVal = detailCheckbox ? detailCheckbox.checked : false;
-    let hitTokenLimit = false;
-    if (cancelButton) cancelButton.classList.remove("hidden");
-    if (thinkHarderVal && thinkingIndicator) thinkingIndicator.classList.remove("hidden");
+      // Delete button
+      const delBtn = document.createElement("button");
+      delBtn.className = "conv-action-btn";
+      delBtn.title = "Delete conversation";
+      delBtn.textContent = "🗑️";
+      delBtn.onclick = (e) => {
+        e.stopPropagation();
+        confirmDeleteConversation(c.id);
+      };
 
-    const hardTimeoutSeconds = window.HINAKU_SETTINGS?.hard_timeout_seconds || 120;
-    const timeoutId = setTimeout(() => {
-      if (isGenerating && activeAbortController) {
-        console.warn(`Request exceeded ${hardTimeoutSeconds}s hard timeout. Aborting.`);
-        activeAbortController.abort();
-      }
-    }, hardTimeoutSeconds * 1000);
+      actions.appendChild(pinBtn);
+      actions.appendChild(delBtn);
 
-    const modelLoadNoticeTimer = setTimeout(() => {
-      if (isGenerating && !assistantText && bodyDiv) {
-        let loadEl = bodyDiv.querySelector(".model-loading-notice");
-        if (!loadEl) {
-          loadEl = document.createElement("div");
-          loadEl.className = "model-loading-notice";
-          loadEl.innerHTML = `<span class="loading-spinner"></span> Loading model... about 15 s`;
-          bodyDiv.appendChild(loadEl);
-        }
-        if (cancelButton) {
-          cancelButton.classList.remove("hidden");
-          cancelButton.disabled = false;
-        }
-      }
-    }, 2500);
+      item.appendChild(title);
+      item.appendChild(actions);
 
-    try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: [{ role: "user", content: text }],
-          conversation_id: currentConversationId,
-          is_private: isCurrentChatPrivate,
-          stream: true,
-          think_harder: thinkHarderVal,
-          detailed: detailedVal
-        }),
-        signal: activeAbortController.signal
-      });
-
-      if (!response.ok) {
-        throw new Error(`Server returned status ${response.status}`);
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let streamDone = false;
-
-      let hasErrorEvent = false;
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n\n");
-        buffer = lines.pop();
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed.startsWith("data:")) continue;
-          const dataStr = trimmed.slice(5).trim();
-
-          if (dataStr === "[DONE]") {
-            streamDone = true;
-            break;
-          }
-
-          try {
-            const parsed = JSON.parse(dataStr);
-            if (parsed.type === "error") {
-              hasErrorEvent = true;
-              showChatErrorNotice(parsed.error || parsed.message || "Model error", text);
-              if (msgDiv && msgDiv.parentElement) {
-                msgDiv.remove();
-              }
-              break;
-            }
-            if (parsed.conversation_id) {
-              currentConversationId = parsed.conversation_id;
-            }
-            if (parsed.message_id) {
-              lastMessageId = parsed.message_id;
-              msgDiv.dataset.messageId = parsed.message_id;
-            }
-            if (parsed.auto_private || parsed.type === "auto_private_notice") {
-              updatePrivacyUI(true);
-              const targetConv = parsed.conversation_id || currentConversationId;
-              updateNoticeBanner(true, parsed.notice || "Sensitive personal topic detected. Conversation set to Private.", async () => {
-                try {
-                  if (targetConv) {
-                    await fetch(`/api/conversations/${targetConv}`, {
-                      method: "PATCH",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ is_private: false })
-                    });
-                  }
-                  updatePrivacyUI(false);
-                  updateNoticeBanner(false);
-                } catch (e) {
-                  console.error("Failed to undo auto-private:", e);
-                }
-              });
-            } else if (parsed.loading_model || (parsed.notice && parsed.notice.includes("Loading model"))) {
-              let loadEl = bodyDiv.querySelector(".model-loading-notice");
-              if (!loadEl) {
-                loadEl = document.createElement("div");
-                loadEl.className = "model-loading-notice";
-                loadEl.innerHTML = `<span class="loading-spinner"></span> Loading model... about 15 s`;
-                bodyDiv.appendChild(loadEl);
-              }
-              if (cancelButton) {
-                cancelButton.classList.remove("hidden");
-                cancelButton.disabled = false;
-              }
-            } else if (parsed.notice) {
-              updateNoticeBanner(true, parsed.notice);
-            }
-            if (parsed.logged_by_provider !== undefined) {
-              isApiLoggedByProvider = Boolean(parsed.logged_by_provider);
-            }
-            if (parsed.backend) {
-              lastBackend = parsed.backend;
-              updateFooterBackend(parsed.backend);
-              const bTag = metaDiv.querySelector("[data-tag='backend']");
-              if (bTag) {
-                const bKind = parsed.backend.toLowerCase();
-                bTag.className = `backend-tag ${bKind}`;
-                bTag.textContent = getBackendBadgeText(parsed.backend, parsed.model);
-              }
-            }
-            if (parsed.verified !== undefined) {
-              isVerified = Boolean(parsed.verified);
-            }
-            if (parsed.verify_status !== undefined) {
-              verifyStatus = parsed.verify_status;
-            }
-            if (parsed.verify_reason !== undefined) {
-              verifyReason = parsed.verify_reason;
-            }
-            if (parsed.hit_token_limit !== undefined) {
-              hitTokenLimit = Boolean(parsed.hit_token_limit);
-            }
-            if (parsed.type === "correction" && parsed.final_content) {
-              assistantText = parsed.final_content;
-              bodyDiv.innerHTML = formatMarkdown(assistantText);
-              attachCopyButtons(bodyDiv);
-            }
-            if (parsed.chunk) {
-              clearTimeout(modelLoadNoticeTimer);
-              const loadEl = bodyDiv.querySelector(".model-loading-notice");
-              if (loadEl) loadEl.remove();
-              if (thinkingIndicator) thinkingIndicator.classList.add("hidden");
-              assistantText += parsed.chunk;
-              bodyDiv.innerHTML = formatMarkdown(assistantText);
-              const cursor = document.createElement("span");
-              cursor.className = "streaming-cursor";
-              bodyDiv.appendChild(cursor);
-              attachCopyButtons(bodyDiv);
-              scrollToBottom();
-            }
-          } catch (e) {
-            console.error("Failed to parse SSE line:", line, e);
-          }
-        }
-
-        if (streamDone || hasErrorEvent) {
-          break;
-        }
-      }
-
-      if (hasErrorEvent) {
-        return;
-      }
-
-      const cursor = bodyDiv.querySelector(".streaming-cursor");
-      if (cursor) cursor.remove();
-      attachCopyButtons(bodyDiv);
-
-      if (hitTokenLimit) {
-        let contBtn = msgDiv.querySelector(".continue-btn");
-        if (!contBtn) {
-          contBtn = document.createElement("button");
-          contBtn.className = "continue-btn";
-          contBtn.textContent = "Continue";
-          contBtn.title = "Ask HINAKU to continue the explanation";
-          contBtn.addEventListener("click", () => {
-            promptInput.value = "Continue";
-            sendMessage();
-          });
-          bodyDiv.appendChild(contBtn);
-        }
-      }
-
-      if (!assistantText.trim()) {
-        assistantText = "I couldn't put an answer together that time. Ask again, or turn off Think harder.";
-        bodyDiv.innerHTML = formatMarkdown(assistantText);
-      }
-
-      updateMessageBadge(metaDiv, verifyStatus, verifyReason);
-
-      if (lastMessageId) {
-        attachAssistantActions(msgDiv, bodyDiv, metaDiv, lastMessageId, lastBackend, null, null, assistantText);
-      }
-
-      loadConversations();
-
-    } catch (err) {
-      if (err.name === "AbortError") {
-        if (!assistantText.trim()) {
-          assistantText = "Response was stopped or timed out. I am here when you are ready.";
-          bodyDiv.innerHTML = formatMarkdown(assistantText);
-        }
-      } else {
-        // Model/connection errors are not replies: remove empty assistant bubble and show toast
-        if (msgDiv && msgDiv.parentElement) {
-          msgDiv.remove();
-        }
-        showChatErrorNotice(err.message, text);
-      }
-    } finally {
-      clearTimeout(timeoutId);
-      clearTimeout(modelLoadNoticeTimer);
-      const leftoverLoadEl = bodyDiv?.querySelector(".model-loading-notice");
-      if (leftoverLoadEl) leftoverLoadEl.remove();
-      isGenerating = false;
-      sendButton.disabled = false;
-      if (cancelButton) cancelButton.classList.add("hidden");
-      if (thinkingIndicator) thinkingIndicator.classList.add("hidden");
-      promptInput.focus();
-    }
-  }
-
-  // --- Memory Drawer Logic ---
-  const memoryDrawer = document.getElementById("memory-drawer");
-  const memoryToggleBtn = document.getElementById("memory-toggle-btn");
-  const drawerCloseBtn = document.getElementById("drawer-close-btn");
-  const drawerOverlay = document.getElementById("drawer-overlay");
-  const reindexMemoryBtn = document.getElementById("reindex-memory-btn");
-  const memorySearchInput = document.getElementById("memory-search-input");
-  const memoriesContainer = document.getElementById("memories-container");
-
-  let allMemories = [];
-
-  async function loadMemories() {
-    if (!memoriesContainer) return;
-    try {
-      memoriesContainer.innerHTML = '<div class="empty-state">Loading memories...</div>';
-      const res = await fetch("/api/memories");
-      if (res.ok) {
-        allMemories = await res.json();
-        renderMemories(allMemories);
-      } else {
-        memoriesContainer.innerHTML = '<div class="empty-state">Failed to load memories.</div>';
-      }
-    } catch (e) {
-      memoriesContainer.innerHTML = `<div class="empty-state">Error: ${e.message}</div>`;
-    }
-  }
-
-  function escapeHtml(str) {
-    if (!str) return "";
-    return str.replace(/[&<>'"]/g, tag => ({
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      "'": '&#39;',
-      '"': '&quot;'
-    }[tag] || tag));
-  }
-
-  function renderMemories(memories) {
-    if (!memoriesContainer) return;
-    if (!memories || memories.length === 0) {
-      memoriesContainer.innerHTML = '<div class="empty-state">No memories recorded yet.<br><br>HINAKU extracts facts about you automatically as you converse.</div>';
-      return;
-    }
-
-    memoriesContainer.innerHTML = "";
-    memories.forEach(mem => {
-      const card = document.createElement("div");
-      card.className = "memory-card";
-      card.id = `memory-${mem.id}`;
-
-      let dateStr = "";
-      try {
-        dateStr = new Date(mem.updated_at || mem.created_at).toLocaleDateString(undefined, {
-          month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"
-        });
-      } catch (e) {
-        dateStr = mem.updated_at || mem.created_at || "";
-      }
-
-      card.innerHTML = `
-        <div class="memory-card-text" id="memory-text-${mem.id}">${escapeHtml(mem.text)}</div>
-        <div class="memory-card-footer">
-          <span class="memory-date">${dateStr}</span>
-          <div class="memory-card-actions">
-            <button class="memory-btn-icon memory-btn-edit" title="Edit memory" data-id="${mem.id}">✏️</button>
-            <button class="memory-btn-icon memory-btn-delete" title="Delete memory" data-id="${mem.id}">🗑️</button>
-          </div>
-        </div>
-      `;
-
-      card.querySelector(".memory-btn-edit").addEventListener("click", () => editMemoryInline(mem));
-      card.querySelector(".memory-btn-delete").addEventListener("click", () => deleteMemoryItem(mem.id));
-
-      memoriesContainer.appendChild(card);
-    });
-  }
-
-  function editMemoryInline(mem) {
-    const card = document.getElementById(`memory-${mem.id}`);
-    if (!card) return;
-
-    card.innerHTML = `
-      <textarea class="memory-edit-area" id="edit-area-${mem.id}">${escapeHtml(mem.text)}</textarea>
-      <div class="memory-edit-controls">
-        <button class="btn-small" id="cancel-edit-${mem.id}">Cancel</button>
-        <button class="btn-small primary" id="save-edit-${mem.id}">Save</button>
-      </div>
-    `;
-
-    document.getElementById(`cancel-edit-${mem.id}`).addEventListener("click", () => renderMemories(allMemories));
-    document.getElementById(`save-edit-${mem.id}`).addEventListener("click", async () => {
-      const newText = document.getElementById(`edit-area-${mem.id}`).value.trim();
-      if (!newText) return;
-      try {
-        const res = await fetch(`/api/memories/${mem.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: newText })
-        });
-        if (res.ok) {
-          const updated = await res.json();
-          const idx = allMemories.findIndex(m => m.id === mem.id);
-          if (idx !== -1) allMemories[idx] = updated;
-          renderMemories(allMemories);
-        }
-      } catch (e) {
-        alert("Failed to update memory: " + e.message);
-      }
-    });
-  }
-
-  async function deleteMemoryItem(memId) {
-    if (!confirm("Permanently delete this memory?")) return;
-    try {
-      const res = await fetch(`/api/memories/${memId}`, { method: "DELETE" });
-      if (res.ok) {
-        allMemories = allMemories.filter(m => m.id !== memId);
-        renderMemories(allMemories);
-      }
-    } catch (e) {
-      alert("Failed to delete memory: " + e.message);
-    }
-  }
-
-  if (memoryToggleBtn) {
-    memoryToggleBtn.addEventListener("click", () => {
-      const isClosed = memoryDrawer.classList.contains("closed");
-      if (isClosed) {
-        memoryDrawer.classList.remove("closed");
-        if (drawerOverlay) drawerOverlay.classList.add("active");
-        loadMemories();
-      } else {
-        memoryDrawer.classList.add("closed");
-        if (drawerOverlay) drawerOverlay.classList.remove("active");
-      }
-    });
-  }
-
-  if (drawerCloseBtn) {
-    drawerCloseBtn.addEventListener("click", () => {
-      memoryDrawer.classList.add("closed");
-      if (drawerOverlay) drawerOverlay.classList.remove("active");
-    });
-  }
-
-  if (drawerOverlay) {
-    drawerOverlay.addEventListener("click", () => {
-      memoryDrawer.classList.add("closed");
-      drawerOverlay.classList.remove("active");
-    });
-  }
-
-  if (reindexMemoryBtn) {
-    reindexMemoryBtn.addEventListener("click", async () => {
-      reindexMemoryBtn.textContent = "Indexing...";
-      reindexMemoryBtn.disabled = true;
-      try {
-        const res = await fetch("/api/memories/reindex", { method: "POST" });
-        if (res.ok) {
-          const data = await res.json();
-          alert(`Re-indexed ${data.count} memories into ChromaDB.`);
-          loadMemories();
-        }
-      } catch (e) {
-        alert("Re-index failed: " + e.message);
-      } finally {
-        reindexMemoryBtn.textContent = "Re-index";
-        reindexMemoryBtn.disabled = false;
-      }
-    });
-  }
-
-  if (memorySearchInput) {
-    memorySearchInput.addEventListener("input", (e) => {
-      const query = e.target.value.toLowerCase().trim();
-      if (!query) {
-        renderMemories(allMemories);
-      } else {
-        const filtered = allMemories.filter(m => m.text.toLowerCase().includes(query));
-        renderMemories(filtered);
-      }
-    });
-  }
-
-  // --- Settings Modal Logic ---
-  const settingsToggleBtn = document.getElementById("settings-toggle-btn");
-  const settingsModal = document.getElementById("settings-modal");
-  const settingsCloseBtn = document.getElementById("settings-close-btn");
-  const settingMemoryEnabled = document.getElementById("setting-memory-enabled");
-  const settingReducedMotion = document.getElementById("setting-reduced-motion");
-  const settingLocalModel = document.getElementById("setting-local-model");
-  const settingQualityMode = document.getElementById("setting-quality-mode");
-  const ratingsTableBody = document.getElementById("ratings-by-model-body");
-  const btnExportData = document.getElementById("btn-export-data");
-  const btnClearMemory = document.getElementById("btn-clear-memory");
-  const btnWipeAll = document.getElementById("btn-wipe-all");
-  const btnRunSelfbuild = document.getElementById("btn-run-selfbuild");
-  const selfbuildStatus = document.getElementById("selfbuild-status");
-  const routerRadios = document.querySelectorAll("input[name='router-mode-radio']");
-
-  async function openSettings() {
-    if (!settingsModal) return;
-    settingsModal.classList.remove("hidden");
-    try {
-      const res = await fetch("/api/settings");
-      if (res.ok) {
-        const s = await res.json();
-        routerRadios.forEach(r => {
-          r.checked = (r.value === s.router_mode);
-        });
-        if (settingMemoryEnabled) settingMemoryEnabled.checked = s.memory_enabled;
-        if (settingQualityMode && s.quality_mode !== undefined) {
-          settingQualityMode.checked = s.quality_mode;
-        }
-        if (settingReducedMotion) {
-          settingReducedMotion.checked = s.reduced_motion;
-          applyReducedMotion(s.reduced_motion);
-        }
-        if (settingLocalModel && s.allowed_local_models) {
-          settingLocalModel.innerHTML = "";
-          s.allowed_local_models.forEach(m => {
-            const opt = document.createElement("option");
-            opt.value = m;
-            opt.textContent = m;
-            if (m === s.default_local_model) opt.selected = true;
-            settingLocalModel.appendChild(opt);
-          });
-        }
-        loadRatingsByModel();
-      }
-    } catch (e) {
-      console.error("Failed to load settings:", e);
-    }
-  }
-
-  async function loadRatingsByModel() {
-    if (!ratingsTableBody) return;
-    try {
-      const res = await fetch("/api/interactions/ratings-by-model");
-      if (res.ok) {
-        const data = await res.json();
-        const ratings = data.ratings || [];
-        if (ratings.length === 0) {
-          ratingsTableBody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 12px;">No interactions recorded yet.</td></tr>';
-          return;
-        }
-        ratingsTableBody.innerHTML = ratings.map(r => `
-          <tr>
-            <td><strong>${escapeHtml(r.model)}</strong></td>
-            <td>${r.total}</td>
-            <td style="color: #34d399;">${r.thumbs_up}</td>
-            <td style="color: #f87171;">${r.thumbs_down}</td>
-            <td style="color: #fde047;">${r.edits}</td>
-            <td>${r.avg_latency_ms > 0 ? r.avg_latency_ms + 'ms' : 'N/A'}</td>
-          </tr>
-        `).join("");
-      }
-    } catch (e) {
-      ratingsTableBody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #f87171; padding: 12px;">Failed to load ratings: ${e.message}</td></tr>`;
-    }
-  }
-
-  function closeSettings() {
-    if (settingsModal) settingsModal.classList.add("hidden");
-  }
-
-  if (settingsToggleBtn) settingsToggleBtn.addEventListener("click", openSettings);
-  if (settingsCloseBtn) settingsCloseBtn.addEventListener("click", closeSettings);
-
-  if (settingLocalModel) {
-    settingLocalModel.addEventListener("change", async (e) => {
-      await fetch("/api/settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ default_local_model: e.target.value })
-      });
-      checkInfo();
-    });
-  }
-
-  if (settingQualityMode) {
-    settingQualityMode.addEventListener("change", async (e) => {
-      await fetch("/api/settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ quality_mode: e.target.checked })
-      });
-    });
-  }
-
-  routerRadios.forEach(radio => {
-    radio.addEventListener("change", async (e) => {
-      if (e.target.checked) {
-        await fetch("/api/settings", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ router_mode: e.target.value })
-        });
-        checkInfo();
-      }
+      item.onclick = () => selectConversation(c.id);
+      dom.sidebarConversations.appendChild(item);
     });
   });
+}
 
-  if (settingMemoryEnabled) {
-    settingMemoryEnabled.addEventListener("change", async (e) => {
-      await fetch("/api/settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ memory_enabled: e.target.checked })
-      });
-    });
+function filterConversations(query) {
+  const q = query.trim().toLowerCase();
+  if (!q) {
+    renderConversationsList(state.conversations);
+    return;
+  }
+  const filtered = state.conversations.filter(c => (c.title || "").toLowerCase().includes(q));
+  renderConversationsList(filtered);
+}
+
+function startNewChat() {
+  state.currentConversationId = null;
+  if (dom.chatTitle) dom.chatTitle.value = "New chat";
+  if (dom.emptyStateView) dom.emptyStateView.classList.remove("hidden");
+  if (dom.messagesContainer) {
+    dom.messagesContainer.classList.add("hidden");
+    dom.messagesContainer.innerHTML = "";
+  }
+  if (dom.promptInput) {
+    dom.promptInput.value = "";
+    dom.promptInput.focus();
+  }
+  renderConversationsList(state.conversations);
+}
+
+async function selectConversation(id) {
+  state.currentConversationId = id;
+  const conv = state.conversations.find(c => c.id === id);
+  if (conv && dom.chatTitle) {
+    dom.chatTitle.value = conv.title || "Untitled";
+    setPrivacyMode(conv.is_private ? "private" : "standard");
   }
 
-  function applyReducedMotion(enabled) {
-    if (enabled) {
-      document.body.classList.add("reduced-motion");
+  try {
+    const endpoint = state.isDemoMode ? `/api/demo/conversations/${id}` : `/api/conversations/${id}`;
+    const res = await fetch(endpoint);
+    if (res.ok) {
+      const fullConv = await res.json();
+      renderMessages(fullConv.messages || []);
+    }
+  } catch (err) {
+    console.error("Failed to load conversation details:", err);
+  }
+
+  renderConversationsList(state.conversations);
+}
+
+function renderMessages(messages) {
+  if (!messages || messages.length === 0) {
+    dom.emptyStateView?.classList.remove("hidden");
+    dom.messagesContainer?.classList.add("hidden");
+    return;
+  }
+
+  dom.emptyStateView?.classList.add("hidden");
+  dom.messagesContainer?.classList.remove("hidden");
+  dom.messagesContainer.innerHTML = "";
+
+  messages.forEach(msg => {
+    const row = document.createElement("div");
+    row.className = "message-row";
+
+    if (msg.role === "user") {
+      const bubble = document.createElement("div");
+      bubble.className = "user-bubble";
+      bubble.textContent = msg.content;
+      row.appendChild(bubble);
     } else {
-      document.body.classList.remove("reduced-motion");
-    }
-  }
+      const body = document.createElement("div");
+      body.className = "assistant-body";
+      body.textContent = msg.content;
 
-  if (settingReducedMotion) {
-    settingReducedMotion.addEventListener("change", async (e) => {
-      const enabled = e.target.checked;
-      applyReducedMotion(enabled);
-      await fetch("/api/settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reduced_motion: enabled })
-      });
-    });
-  }
-
-  if (btnExportData) {
-    btnExportData.addEventListener("click", async () => {
-      try {
-        const res = await fetch("/api/settings/export");
-        if (res.ok) {
-          const data = await res.json();
-          const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          const dateStr = new Date().toISOString().slice(0, 10);
-          a.href = url;
-          a.download = `hinaku_export_${dateStr}.json`;
-          a.click();
-          URL.revokeObjectURL(url);
-        }
-      } catch (e) {
-        alert("Export failed: " + e.message);
-      }
-    });
-  }
-
-  if (btnClearMemory) {
-    btnClearMemory.addEventListener("click", async () => {
-      if (!confirm("Are you sure you want to clear all semantic memories? This cannot be undone.")) return;
-      try {
-        const res = await fetch("/api/settings/clear-memory", { method: "POST" });
-        if (res.ok) {
-          alert("All memories have been cleared.");
-          allMemories = [];
-          renderMemories([]);
-        }
-      } catch (e) {
-        alert("Clear memory failed: " + e.message);
-      }
-    });
-  }
-
-  if (btnWipeAll) {
-    btnWipeAll.addEventListener("click", async () => {
-      const token = prompt("CAUTION: This will permanently wipe all conversations, messages, interactions, and memories.\n\nType 'WIPE_ALL' to confirm:");
-      if (token !== "WIPE_ALL") return;
-
-      try {
-        const res = await fetch("/api/settings/wipe-all", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ confirm: "WIPE_ALL" })
-        });
-        if (res.ok) {
-          alert("All data wiped successfully. Reloading HINAKU...");
-          window.location.reload();
-        }
-      } catch (e) {
-        alert("Wipe failed: " + e.message);
-      }
-    });
-  }
-
-  if (btnRunSelfbuild) {
-    btnRunSelfbuild.addEventListener("click", async () => {
-      if (selfbuildStatus) {
-        selfbuildStatus.textContent = "Starting self-build cycle...";
-        selfbuildStatus.classList.remove("hidden");
-      }
-      try {
-        const res = await fetch("/api/settings/self-build/run", { method: "POST" });
-        if (res.ok) {
-          const data = await res.json();
-          if (selfbuildStatus) {
-            selfbuildStatus.textContent = `Self-build initiated at ${data.timestamp}. ${data.message}`;
-          }
-        }
-      } catch (e) {
-        if (selfbuildStatus) {
-          selfbuildStatus.textContent = `Self-build error: ${e.message}`;
-        }
-      }
-    });
-  }
-
-  // --- Dataset Review Modal Logic (Phase E) ---
-  const datasetModal = document.getElementById("dataset-modal");
-  const datasetToggleBtn = document.getElementById("dataset-toggle-btn");
-  const btnReviewDataset = document.getElementById("btn-review-dataset");
-  const datasetModalClose = document.getElementById("dataset-modal-close");
-  const datasetCandidateCount = document.getElementById("dataset-candidate-count");
-  const datasetMinRequired = document.getElementById("dataset-min-required");
-  const datasetReadyBadge = document.getElementById("dataset-ready-badge");
-  const datasetCandidatesList = document.getElementById("dataset-candidates-list");
-  const btnBuildDataset = document.getElementById("btn-build-dataset");
-  const datasetBuildStatus = document.getElementById("dataset-build-status");
-
-  async function openDatasetModal() {
-    if (!datasetModal) return;
-    datasetModal.classList.remove("hidden");
-    if (settingsModal) settingsModal.classList.add("hidden");
-    await loadCurationCandidates();
-  }
-
-  function closeDatasetModal() {
-    if (!datasetModal) return;
-    datasetModal.classList.add("hidden");
-  }
-
-  if (datasetToggleBtn) datasetToggleBtn.addEventListener("click", openDatasetModal);
-  if (btnReviewDataset) btnReviewDataset.addEventListener("click", openDatasetModal);
-  if (datasetModalClose) datasetModalClose.addEventListener("click", closeDatasetModal);
-  if (datasetModal) {
-    datasetModal.addEventListener("click", (e) => {
-      if (e.target === datasetModal) closeDatasetModal();
-    });
-  }
-
-  async function loadCurationCandidates() {
-    if (!datasetCandidatesList) return;
-    datasetCandidatesList.innerHTML = '<div class="empty-state">Loading candidate interactions...</div>';
-    try {
-      const res = await fetch("/api/training/curate");
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-
-      if (datasetCandidateCount) datasetCandidateCount.textContent = data.total_candidates;
-      if (datasetMinRequired) datasetMinRequired.textContent = data.min_examples_required;
-
-      if (datasetReadyBadge) {
-        if (data.ready_for_training) {
-          datasetReadyBadge.textContent = "Ready";
-          datasetReadyBadge.className = "stat-badge ready";
-        } else {
-          const needed = Math.max(0, data.min_examples_required - data.total_candidates);
-          datasetReadyBadge.textContent = `Need ${needed} more`;
-          datasetReadyBadge.className = "stat-badge waiting";
-        }
-      }
-
-      renderDatasetCandidates(data.candidates || []);
-    } catch (e) {
-      datasetCandidatesList.innerHTML = `<div class="empty-state">Error loading curation: ${e.message}</div>`;
-    }
-  }
-
-  function renderDatasetCandidates(candidates) {
-    if (!datasetCandidatesList) return;
-    if (candidates.length === 0) {
-      datasetCandidatesList.innerHTML = '<div class="empty-state">No qualifying interaction examples found yet.<br><br>Examples appear when you rate assistant responses with thumbs-up, edit a response, or accept API responses.</div>';
-      return;
-    }
-
-    datasetCandidatesList.innerHTML = "";
-    candidates.forEach((c) => {
-      const card = document.createElement("div");
-      card.className = "dataset-candidate-card";
-      card.id = `candidate-${c.interaction_id}`;
-
-      let tagsHtml = "";
-      const sourceLabel = c.source || (c.is_edited ? "owner-edited" : (c.backend === "api" ? "API" : "local"));
-      tagsHtml += `<span class="candidate-tag source-tag" style="font-weight: 600; background: rgba(147, 51, 234, 0.2); color: #c084fc;">source: ${escapeHtml(sourceLabel)}</span>`;
-      if (c.inclusion_reasons && c.inclusion_reasons.length > 0) {
-        c.inclusion_reasons.forEach((r) => {
-          let label = r;
-          if (r === "thumbs_up") label = "👍 thumbs-up";
-          if (r === "owner_edited") label = "✏️ edited";
-          if (r === "accepted_api") label = "🌐 API";
-          tagsHtml += `<span class="candidate-tag ${r}">${label}</span>`;
-        });
-      }
-
-      card.innerHTML = `
-        <div class="candidate-header">
-          <div class="candidate-tags">${tagsHtml}</div>
-          <button class="candidate-btn-remove" title="Exclude from training dataset" data-id="${c.interaction_id}">Remove</button>
-        </div>
-        <div class="candidate-content">
-          <div class="candidate-prompt">${escapeHtml(c.user_prompt)}</div>
-          <div class="candidate-answer">${escapeHtml(c.final_answer)}</div>
-        </div>
+      const meta = document.createElement("div");
+      meta.className = "assistant-meta-row";
+      meta.innerHTML = `
+        <span class="badge badge-local">${msg.model || state.activeModel}</span>
+        <span class="badge badge-local">${msg.backend || 'local'}</span>
+        ${msg.verified ? '<span class="badge badge-verified">✓ verified</span>' : ''}
       `;
 
-      card.querySelector(".candidate-btn-remove").addEventListener("click", async () => {
-        try {
-          const res = await fetch("/api/training/curate/exclude", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ interaction_id: c.interaction_id })
-          });
-          if (res.ok) {
-            card.remove();
-            const remaining = datasetCandidatesList.querySelectorAll(".dataset-candidate-card").length;
-            if (datasetCandidateCount) datasetCandidateCount.textContent = remaining;
-            if (remaining === 0) {
-              datasetCandidatesList.innerHTML = '<div class="empty-state">All candidates removed.</div>';
-            }
-          }
-        } catch (e) {
-          alert("Failed to remove item: " + e.message);
-        }
-      });
+      row.appendChild(body);
+      row.appendChild(meta);
+    }
 
-      datasetCandidatesList.appendChild(card);
+    dom.messagesContainer.appendChild(row);
+  });
+}
+
+function updateModeChips() {
+  if (state.thinkHarder) {
+    dom.chipThinkHarder?.classList.remove("hidden");
+    if (dom.menuThinkCheck) dom.menuThinkCheck.textContent = "✓";
+  } else {
+    dom.chipThinkHarder?.classList.add("hidden");
+    if (dom.menuThinkCheck) dom.menuThinkCheck.textContent = "";
+  }
+
+  if (state.detailed) {
+    dom.chipDetailed?.classList.remove("hidden");
+    if (dom.menuDetailedCheck) dom.menuDetailedCheck.textContent = "✓";
+  } else {
+    dom.chipDetailed?.classList.add("hidden");
+    if (dom.menuDetailedCheck) dom.menuDetailedCheck.textContent = "";
+  }
+}
+
+function setPrivacyMode(mode) {
+  state.privacyMode = mode;
+  const info = getPrivacyChipInfo(mode);
+
+  if (dom.topPrivacyChip) {
+    dom.topPrivacyChip.className = `status-chip ${info.colorClass}`;
+    if (dom.topPrivacyText) dom.topPrivacyText.textContent = info.label;
+  }
+
+  if (dom.composerPrivacyChip) {
+    dom.composerPrivacyChip.className = `status-chip ${info.colorClass}`;
+    if (dom.composerPrivacyLabel) dom.composerPrivacyLabel.textContent = info.label;
+  }
+}
+
+function cyclePrivacyMode() {
+  const modes = ["standard", "local_only", "private"];
+  const nextIdx = (modes.indexOf(state.privacyMode) + 1) % modes.length;
+  setPrivacyMode(modes[nextIdx]);
+}
+
+function selectModel(modelName) {
+  state.activeModel = modelName;
+  const label = formatModelDisplayName(modelName, state.isLoadingModel);
+  if (dom.topModelText) dom.topModelText.textContent = label;
+  if (dom.composerModelLabel) dom.composerModelLabel.textContent = label;
+}
+
+async function togglePinConversation(convId, pinned) {
+  if (state.isDemoMode) {
+    const c = state.conversations.find(item => item.id === convId);
+    if (c) c.pinned = pinned ? 1 : 0;
+    renderConversationsList(state.conversations);
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/conversations/${convId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pinned })
     });
+    if (res.ok) {
+      await loadConversations();
+    }
+  } catch (err) {
+    console.error("Failed to update pinned state:", err);
+  }
+}
+
+async function confirmDeleteConversation(convId) {
+  if (!confirm("Are you sure you want to delete this conversation?")) {
+    return;
   }
 
-  if (btnBuildDataset) {
-    btnBuildDataset.addEventListener("click", async () => {
-      if (datasetBuildStatus) {
-        datasetBuildStatus.textContent = "Building instruction dataset...";
-        datasetBuildStatus.classList.remove("hidden");
-      }
-      try {
-        const res = await fetch("/api/training/datasets/build", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({})
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (datasetBuildStatus) {
-            datasetBuildStatus.textContent = `Dataset built successfully: ${data.metadata.example_count} examples written to ${data.dataset_path}`;
-          }
-        } else {
-          const err = await res.json();
-          if (datasetBuildStatus) {
-            datasetBuildStatus.textContent = `Build failed: ${err.detail || "Unknown error"}`;
-          }
-        }
-      } catch (e) {
-        if (datasetBuildStatus) {
-          datasetBuildStatus.textContent = `Build error: ${e.message}`;
-        }
-      }
-    });
+  if (state.isDemoMode) {
+    state.conversations = state.conversations.filter(c => c.id !== convId);
+    if (state.currentConversationId === convId) startNewChat();
+    renderConversationsList(state.conversations);
+    return;
   }
 
-  // --- Self-Build Report Modal Logic (Phase G) ---
-  const reportModal = document.getElementById("report-modal");
-  const btnViewReport = document.getElementById("btn-view-report");
-  const reportModalClose = document.getElementById("report-modal-close");
-  const reportModalBody = document.getElementById("report-modal-body");
-
-  async function openReportModal() {
-    if (!reportModal) return;
-    reportModal.classList.remove("hidden");
-    if (settingsModal) settingsModal.classList.add("hidden");
-    await loadLatestReport();
+  try {
+    const res = await fetch(`/api/conversations/${convId}`, { method: "DELETE" });
+    if (res.ok) {
+      if (state.currentConversationId === convId) startNewChat();
+      await loadConversations();
+    }
+  } catch (err) {
+    console.error("Failed to delete conversation:", err);
   }
+}
 
-  function closeReportModal() {
-    if (!reportModal) return;
-    reportModal.classList.add("hidden");
-  }
+function handleSendMessage() {
+  const text = dom.promptInput?.value.trim();
+  if (!text) return;
+  alert(`Sending message: "${text}" with model: ${state.activeModel}, privacy: ${state.privacyMode}`);
+}
 
-  if (btnViewReport) btnViewReport.addEventListener("click", openReportModal);
-  if (reportModalClose) reportModalClose.addEventListener("click", closeReportModal);
-  if (reportModal) {
-    reportModal.addEventListener("click", (e) => {
-      if (e.target === reportModal) closeReportModal();
-    });
-  }
-
-  async function loadLatestReport() {
-    if (!reportModalBody) return;
-    reportModalBody.innerHTML = '<div class="empty-state">Loading latest self-build report...</div>';
-    try {
-      const res = await fetch("/api/self-build/reports/latest");
-      if (!res.ok) {
-        if (res.status === 404) {
-          reportModalBody.innerHTML = '<div class="empty-state">No self-build runs recorded yet.<br><br>The cycle runs every 6 months automatically, or you can trigger it with "Run Self-Build Now".</div>';
-          return;
-        }
-        throw new Error(`HTTP ${res.status}`);
-      }
-      const data = await res.json();
-      renderReportView(data);
-    } catch (e) {
-      reportModalBody.innerHTML = `<div class="empty-state">Error loading report: ${e.message}</div>`;
-    }
-  }
-
-  function renderReportView(report) {
-    if (!reportModalBody) return;
-    const isPromoted = report.status === "promoted";
-    const isPending = report.status === "pending_approval";
-    const statusColor = isPromoted ? "#34d399" : (isPending ? "#38bdf8" : (report.status === "rejected" ? "#f87171" : "#facc15"));
-    const statusBg = isPromoted ? "rgba(16, 185, 129, 0.15)" : (isPending ? "rgba(56, 189, 248, 0.15)" : (report.status === "rejected" ? "rgba(239, 68, 68, 0.15)" : "rgba(234, 179, 8, 0.15)"));
-
-    const ev = report.evaluation || {};
-    const candScore = ev.candidate_score !== undefined ? `${(ev.candidate_score * 100).toFixed(1)}%` : "N/A";
-    const locScore = ev.current_local_score !== undefined ? `${(ev.current_local_score * 100).toFixed(1)}%` : "N/A";
-    const margin = ev.improvement_margin !== undefined ? `${(ev.improvement_margin >= 0 ? "+" : "")}${(ev.improvement_margin * 100).toFixed(1)}%` : "N/A";
-
-    // Build Category Score Table (Candidate vs Current vs API)
-    let catTableHtml = "";
-    if (ev.category_table && Object.keys(ev.category_table).length > 0) {
-      let rows = "";
-      for (const [cat, data] of Object.entries(ev.category_table)) {
-        const cVal = data.candidate !== undefined ? `${(data.candidate * 100).toFixed(1)}%` : "-";
-        const lVal = data.local !== undefined ? `${(data.local * 100).toFixed(1)}%` : "-";
-        const aVal = data.api !== null && data.api !== undefined ? `${(data.api * 100).toFixed(1)}%` : "N/A";
-        const worseColor = data.worse ? "#f87171" : "#34d399";
-        rows += `
-          <tr style="border-bottom: 1px solid rgba(255,255,255,0.06);">
-            <td style="padding: 6px 8px; text-transform: capitalize; color: #e2e8f0;">${escapeHtml(cat)}</td>
-            <td style="padding: 6px 8px; font-weight: 600; color: #38bdf8;">${cVal}</td>
-            <td style="padding: 6px 8px; color: var(--text-muted);">${lVal}</td>
-            <td style="padding: 6px 8px; color: var(--text-muted);">${aVal}</td>
-            <td style="padding: 6px 8px; font-weight: 600; color: ${worseColor};">${data.worse ? "Worse" : "OK"}</td>
-          </tr>
-        `;
-      }
-      catTableHtml = `
-        <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; margin-top: 10px;">
-          <h4 style="font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; margin-bottom: 8px;">Score Table: Candidate vs Current Local vs API (Per Category)</h4>
-          <table style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
-            <thead>
-              <tr style="border-bottom: 1px solid var(--border-color); color: var(--text-muted);">
-                <th style="padding: 6px 8px;">Category</th>
-                <th style="padding: 6px 8px;">Candidate</th>
-                <th style="padding: 6px 8px;">Current Local</th>
-                <th style="padding: 6px 8px;">API</th>
-                <th style="padding: 6px 8px;">Status</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>
-      `;
-    }
-
-    // Build Side-by-Side Responses (At least 10 prompts)
-    let sideBySideHtml = "";
-    if (ev.side_by_side && ev.side_by_side.length > 0) {
-      let cards = "";
-      ev.side_by_side.slice(0, 12).forEach((s, idx) => {
-        cards += `
-          <div style="background: rgba(18,20,28,0.7); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; margin-bottom: 8px; font-size: 11px;">
-            <div style="font-weight: 600; color: #f1f5f9; margin-bottom: 4px;">#${idx + 1} [${escapeHtml(s.category)}] ${escapeHtml(s.prompt)}</div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px;">
-              <div style="background: rgba(56,189,248,0.08); border-left: 2px solid #38bdf8; padding: 6px 8px; border-radius: 4px;">
-                <span style="font-size: 10px; color: #38bdf8; font-weight: 700; text-transform: uppercase;">Candidate (score: ${s.candidate_score})</span>
-                <p style="margin-top: 2px; color: #cbd5e1; white-space: pre-wrap;">${escapeHtml(s.candidate_response || "None")}</p>
-              </div>
-              <div style="background: rgba(255,255,255,0.03); border-left: 2px solid var(--border-color); padding: 6px 8px; border-radius: 4px;">
-                <span style="font-size: 10px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Current Local (score: ${s.local_score})</span>
-                <p style="margin-top: 2px; color: #94a3b8; white-space: pre-wrap;">${escapeHtml(s.local_response || "None")}</p>
-              </div>
-            </div>
-          </div>
-        `;
-      });
-      sideBySideHtml = `
-        <div style="margin-top: 10px;">
-          <h4 style="font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; margin-bottom: 8px;">Side-by-Side Prompt Evaluations (${Math.min(ev.side_by_side.length, 12)} prompts)</h4>
-          <div style="max-height: 280px; overflow-y: auto; padding-right: 4px;">${cards}</div>
-        </div>
-      `;
-    }
-
-    reportModalBody.innerHTML = `
-      <div style="display: flex; flex-direction: column; gap: 14px;">
-        <div style="display: flex; align-items: center; justify-content: space-between; padding-bottom: 12px; border-bottom: 1px solid var(--border-color);">
-          <div>
-            <h3 style="font-size: 15px; color: #fff; margin-bottom: 4px;">Version hinaku-${escapeHtml(report.version || "unknown")}</h3>
-            <span style="font-size: 11px; color: var(--text-muted);">${escapeHtml(report.timestamp || "")}</span>
-          </div>
-          <span style="background: ${statusBg}; color: ${statusColor}; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 12px; text-transform: uppercase;">
-            ${escapeHtml(report.status || "UNKNOWN")}
-          </span>
-        </div>
-
-        <div class="dataset-stats-bar">
-          <div class="stat-item">
-            <span class="stat-value">${candScore}</span>
-            <span class="stat-label">Candidate Score</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-value">${locScore}</span>
-            <span class="stat-label">Current Local</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-value" style="color: ${statusColor};">${margin}</span>
-            <span class="stat-label">Improvement</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-value">${report.dataset ? report.dataset.example_count : 0}</span>
-            <span class="stat-label">Training Examples</span>
-          </div>
-        </div>
-
-        <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; font-size: 12px; line-height: 1.6; color: #cbd5e1;">
-          <h4 style="font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; margin-bottom: 6px;">Approval & Cycle Status</h4>
-          <p><strong>Outcome:</strong> ${escapeHtml(report.status === "promoted" ? "Model promoted and active." : (isPending ? "Passed evaluation. Awaiting owner confirmation to promote." : (report.evaluation && report.evaluation.rejection_reason ? report.evaluation.rejection_reason : report.message || "Completed.")))}</p>
-          <p><strong>Dry Run:</strong> ${report.dry_run ? "Yes (simulated weights & preflight validation)" : "No (full GPU weights)"}</p>
-          ${report.preflight ? `<p><strong>Preflight:</strong> ${escapeHtml(report.preflight.message || "")}</p>` : ""}
-        </div>
-
-        ${catTableHtml}
-        ${sideBySideHtml}
-
-        <div style="display: flex; justify-content: flex-end; gap: 8px; padding-top: 10px; border-top: 1px solid var(--border-color);">
-          ${isPending ? `
-            <button id="btn-report-reject" class="secondary-btn" style="padding: 6px 14px; font-size: 12px; color: #f87171;">Reject Candidate</button>
-            <button id="btn-report-promote" class="primary-btn action-btn" style="padding: 6px 14px; font-size: 12px; background: #10b981; color: #fff;">Confirm & Promote Model</button>
-          ` : `
-            <button id="btn-report-rollback" class="secondary-btn" style="padding: 6px 14px; font-size: 12px;">Rollback Model</button>
-          `}
-        </div>
-      </div>
-    `;
-
-    const btnPromote = reportModalBody.querySelector("#btn-report-promote");
-    if (btnPromote) {
-      btnPromote.addEventListener("click", async () => {
-        try {
-          const res = await fetch("/api/training/promote", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              version: report.version,
-              candidate_score: ev.candidate_score,
-              current_local_score: ev.current_local_score,
-              confirmed: true,
-              dry_run: Boolean(report.dry_run)
-            })
-          });
-          if (res.ok) {
-            alert("Candidate model confirmed and activated successfully!");
-            loadLatestReport();
-          } else {
-            const err = await res.json();
-            alert("Promotion failed: " + (err.detail || "Unknown error"));
-          }
-        } catch (e) {
-          alert("Promotion error: " + e.message);
-        }
-      });
-    }
-
-    const btnReject = reportModalBody.querySelector("#btn-report-reject");
-    if (btnReject) {
-      btnReject.addEventListener("click", async () => {
-        if (!confirm("Reject this candidate model?")) return;
-        try {
-          const res = await fetch("/api/training/reject-pending", { method: "POST" });
-          if (res.ok) {
-            alert("Candidate rejected.");
-            loadLatestReport();
-          }
-        } catch (e) {
-          alert("Error: " + e.message);
-        }
-      });
-    }
-
-    const btnRollback = reportModalBody.querySelector("#btn-report-rollback");
-    if (btnRollback) {
-      btnRollback.addEventListener("click", async () => {
-        if (!confirm("Rollback active model to the previous promoted version?")) return;
-        try {
-          const res = await fetch("/api/training/rollback", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({})
-          });
-          if (res.ok) {
-            alert("Model rolled back successfully!");
-            loadLatestReport();
-          } else {
-            const err = await res.json();
-            alert("Rollback failed: " + (err.detail || "Unknown error"));
-          }
-        } catch (e) {
-          alert("Rollback error: " + e.message);
-        }
-      });
-    }
-  }
-
-  // Load initial conversations
-  loadConversations();
-
-
-  // Check if 6-month self-build run is due
-  async function checkSelfBuildDue() {
-    try {
-      const res = await fetch("/api/self-build/check-due");
-      if (!res.ok) return;
-      const data = await res.json();
-      if (data.due) {
-        updateNoticeBanner(
-          true,
-          `Self-Build due: ${data.message} Open Settings -> 'Review Curated Data' or 'Run Self-Build Now'.`
-        );
-        if (noticeRemindLaterBtn) {
-          if (data.show_remind_later) {
-            noticeRemindLaterBtn.classList.remove("hidden");
-          } else {
-            noticeRemindLaterBtn.classList.add("hidden");
-          }
-        }
-      } else {
-        if (noticeBanner) noticeBanner.classList.add("hidden");
-        if (noticeRemindLaterBtn) noticeRemindLaterBtn.classList.add("hidden");
-      }
-    } catch (e) {
-      console.warn("Could not check self-build due status:", e);
-    }
-  }
-  checkSelfBuildDue();
-
-    // Subtle starfield ambient canvas
-  initStarfield();
-
-  function initStarfield() {
-    const canvas = document.getElementById("starfield");
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-
-    let width = (canvas.width = window.innerWidth);
-    let height = (canvas.height = window.innerHeight);
-
-    window.addEventListener("resize", () => {
-      width = canvas.width = window.innerWidth;
-      height = canvas.height = window.innerHeight;
-    });
-
-    const starCount = 65;
-    const stars = [];
-
-    for (let i = 0; i < starCount; i++) {
-      stars.push({
-        x: Math.random() * width,
-        y: Math.random() * height,
-        radius: Math.random() * 1.2 + 0.3,
-        alpha: Math.random() * 0.6 + 0.1,
-        speed: Math.random() * 0.15 + 0.05
-      });
-    }
-
-    function render() {
-      ctx.clearRect(0, 0, width, height);
-
-      for (let s of stars) {
-        s.y -= s.speed;
-        if (s.y < 0) {
-          s.y = height;
-          s.x = Math.random() * width;
-        }
-
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, s.radius, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(180, 190, 220, ${s.alpha})`;
-        ctx.fill();
-      }
-
-      requestAnimationFrame(render);
-    }
-
-    render();
-  }
-});
+function handleStopGeneration() {
+  state.isGenerating = false;
+  dom.sendIcon?.classList.remove("hidden");
+  dom.stopIcon?.classList.add("hidden");
+  dom.sendButton?.classList.remove("stop-btn");
+}
