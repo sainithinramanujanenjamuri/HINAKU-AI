@@ -206,3 +206,52 @@ async def test_deterministic_verification_passes_advice_and_fixes_timer_offer():
     assert final_fixed == "Take a break. Drink some water."
     assert status_fixed == "corrected"
     assert "Forbidden capability offer removed" in reason_fixed
+
+
+def test_first_person_offers_flagged_with_conversational_verbs_allowed():
+    """
+    Flag first-person offers such as:
+      - "Do you want me to find/look up/search/open/remind..."
+      - "Do you want to schedule it now?"
+      - "Shall I check..."
+    Allow conversational verbs:
+      - explain, walk through, outline, list, draft, write, summarize, help me think.
+    Real replies tested:
+      - "Do you want me to find a guided meditation?"
+      - "Do you want to schedule it now?"
+    Keep "Draft a message stating you are running late..." passing.
+    """
+    # Real replies to flag:
+    r_meditation = "Do you want me to find a guided meditation?"
+    r_schedule = "Do you want to schedule it now?"
+    r_check = "Shall I check the weather for tomorrow?"
+    r_lookup = "Do you want me to look up the API docs?"
+
+    assert detect_forbidden_offers(r_meditation) is not None
+    assert detect_forbidden_offers(r_schedule) is not None
+    assert detect_forbidden_offers(r_check) is not None
+    assert detect_forbidden_offers(r_lookup) is not None
+
+    # check_reply flags them
+    res_med = check_reply("I feel stressed", r_meditation)
+    assert res_med["passed"] is False
+    assert any("capability" in r.lower() for r in res_med["reasons"])
+
+    res_sched = check_reply("We should meet", r_schedule)
+    assert res_sched["passed"] is False
+    assert any("capability" in r.lower() for r in res_sched["reasons"])
+
+    # Conversational verbs must pass:
+    assert detect_forbidden_offers("Do you want me to explain the difference?") is None
+    assert detect_forbidden_offers("Shall I walk through the code step by step?") is None
+    assert detect_forbidden_offers("Do you want me to outline the architecture?") is None
+    assert detect_forbidden_offers("Shall I list the options?") is None
+    assert detect_forbidden_offers("Do you want me to draft a response?") is None
+    assert detect_forbidden_offers("Shall I write a helper function?") is None
+    assert detect_forbidden_offers("Do you want me to summarize the changes?") is None
+    assert detect_forbidden_offers("I can help you think through this design.") is None
+
+    # Imperative advice to user must pass:
+    assert detect_forbidden_offers("Draft a message stating you are running late by 15 minutes.") is None
+    res_advice = check_reply("What should I do?", "Draft a message stating you are running late by 15 minutes.")
+    assert res_advice["passed"] is True

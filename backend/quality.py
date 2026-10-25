@@ -61,24 +61,28 @@ KNOWN_PERSONA_EXAMPLES = [
     "no. rushing a release without tests creates bigger fires tomorrow. run the critical tests first."
 ]
 
-OFFER_PREFIX = r"(?:i\s*'ll|i\s+(?:can|will|am\s+able\s+to|could)|let\s+me|do\s+you\s+want\s+me\s+to|want\s+me\s+to|shall\s+i|should\s+i|would\s+you\s+like\s+me\s+to)"
+OFFER_PREFIX = r"(?:i\s*'ll|i\s+(?:can|will|am\s+able\s+to|could)|let\s+me|do\s+you\s+want\s+(?:me\s+)?to|want\s+me\s+to|shall\s+i|should\s+i|can\s+i|may\s+i|would\s+you\s+like\s+(?:me\s+)?to)"
+
+CONVERSATIONAL_VERB_PAT = r"(?i)\b(?:explain|walk\s+through|outline|list|draft|write|summarize|help(?:\s+me|\s+you)?\s+think)\b"
 
 FORBIDDEN_CAPABILITY_PATTERNS = [
     # 1. Timers & Alarms (first-person only)
     (rf"(?i)\b{OFFER_PREFIX}\s+(?:set|start|create|run)\s+(?:\w+\s+){{0,2}}(?:timer|alarm)\b", "Offers to set timer/alarm"),
     (rf"(?i)\b{OFFER_PREFIX}\s+set\s+(?:\w+\s+){{0,2}}timer\s+for\s+\d+\b", "Offers to set a timer"),
     # 2. Reminders & Notifications (first-person only)
-    (rf"(?i)\b{OFFER_PREFIX}\s+(?:(?:set|send|create)\s+(?:\w+\s+){{0,2}}(?:reminder|notification)|remind\s+you|notify\s+you|alert\s+you)\b", "Offers to set reminder/notification"),
+    (rf"(?i)\b{OFFER_PREFIX}\s+(?:(?:set|send|create)\s+(?:\w+\s+){{0,2}}(?:reminder|notification)|remind\s+you|notify\s+you|alert\s+you|remind\b)", "Offers to set reminder/notification"),
     # 3. Music & Sounds (first-person only)
     (rf"(?i)\b{OFFER_PREFIX}\s+(?:play|stream|put\s+on)\s+(?:\w+\s+){{0,2}}(?:music|sounds?|lofi|audio|track)\b", "Offers to play music or sounds"),
     # 4. Sending Messages / Emails / Texts (first-person only, not advice to user)
     (rf"(?i)\b{OFFER_PREFIX}\s+(?:send|dispatch|draft\s+and\s+send)\s+(?:\w+\s+){{0,2}}(?:message|email|text|notification|dm)\b", "Offers to send message"),
-    # 5. Calendar Scheduling (first-person only)
-    (rf"(?i)\b{OFFER_PREFIX}\s+(?:schedule|create|add|book)\s+(?:\w+\s+){{0,2}}(?:calendar\s+event|event|meeting|appointment)\b", "Offers to schedule calendar event"),
+    # 5. Calendar Scheduling (first-person only, e.g. "Do you want to schedule it now?")
+    (rf"(?i)\b{OFFER_PREFIX}\s+(?:schedule|book|create\s+a\s+calendar|add\s+to\s+calendar)\b", "Offers to schedule"),
     # 6. Opening Apps / Programs (first-person only)
-    (rf"(?i)\b{OFFER_PREFIX}\s+(?:open|launch|run|execute)\s+(?:\w+\s+){{0,2}}(?:vs\s*code|vscode|app|application|editor|browser|window|program)\b", "Offers to open app"),
+    (rf"(?i)\b{OFFER_PREFIX}\s+(?:open|launch|run|execute)\s+(?:\w+\s+){{0,2}}(?:vs\s*code|vscode|app|application|editor|browser|window|program|files?)\b", "Offers to open app"),
     # 7. Tracking / System Monitoring (first-person only)
-    (rf"(?i)\b{OFFER_PREFIX}\s+(?:keep\s+)?(?:watching|tracking|monitoring)\s+(?:\w+\s+){{0,2}}(?:system|laptop|temp|temperature|gpu|cpu|usage|process|battery|schedule|anything)\b", "Offers to track/monitor")
+    (rf"(?i)\b{OFFER_PREFIX}\s+(?:keep\s+)?(?:watching|tracking|monitoring)\s+(?:\w+\s+){{0,2}}(?:system|laptop|temp|temperature|gpu|cpu|usage|process|battery|schedule|anything)\b", "Offers to track/monitor"),
+    # 8. External search / find / look up / check (first-person only)
+    (rf"(?i)\b{OFFER_PREFIX}\s+(?:find|look\s+up|search(?:\s+for)?|check)\b", "Offers to find/search/check"),
 ]
 
 
@@ -119,16 +123,24 @@ def trim_to_four_sentences(text: str) -> str:
 
 def detect_forbidden_offers(text: str) -> Optional[str]:
     """
-    Checks if reply contains first-person offers or claims of forbidden capabilities
-    ("I can/will/'ll send/set/play/open/schedule...", "Do you want me to...", "Shall I...").
-    Does NOT flag second-person advice to the user (e.g. "Draft a message stating you are running late...").
-    Returns specific violation description if detected, else None.
+    Checks if reply contains first-person offers or claims of forbidden capabilities.
+    Flags:
+      - "Do you want me to find/look up/search/open/remind..."
+      - "Do you want to schedule it now?"
+      - "Shall I check..."
+      - Timers, alarms, reminders, music, sending messages, tracking, opening apps.
+    Allows conversational verbs:
+      - explain, walk through, outline, list, draft, write, summarize, help me think.
+    Does NOT flag second-person advice or instructions to the user
+      (e.g. "Draft a message stating you are running late...").
     """
     for pat, desc in FORBIDDEN_CAPABILITY_PATTERNS:
-        m = re.search(pat, text)
-        if m:
+        for m in re.finditer(pat, text):
             matched_prefix = text[:m.start()].lower()
             if any(neg in matched_prefix[-30:] for neg in ["cannot", "can't", "unable", "won't", "will not", "never", "don't", "do not", "not able to"]):
+                continue
+            following_text = text[m.start():m.end() + 30]
+            if re.search(CONVERSATIONAL_VERB_PAT, following_text):
                 continue
             return desc
     return None
@@ -491,7 +503,7 @@ async def perform_reply_verification(
     # 2. Deterministic check: Forbidden capability offers
     offer_desc = detect_forbidden_offers(curr_text)
     if offer_desc and messages_for_regen and local_adapter:
-        extra_instruction = "HINAKU cannot play music or sounds, set reminders, alarms, timers, notifications, schedule calendar events, send messages, open apps, or track anything. Do not offer or claim to do any of these."
+        extra_instruction = "HINAKU cannot play music or sounds, set reminders, alarms, timers, notifications, schedule calendar events, send messages, open apps, find or search online, check external data, or track anything. Do not offer or claim to do any of these."
         regen_msgs = list(messages_for_regen) + [{"role": "system", "content": extra_instruction}]
         t0 = time.perf_counter()
         try:
