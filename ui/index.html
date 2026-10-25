@@ -92,8 +92,12 @@
         </div>
       </header>
 
-      <!-- Chat Viewport -->
-      <section class="chat-viewport" id="chat-viewport">
+      <!-- Stage Body (Horizontal 2-Pane: Chat Column + Right Context Panel) -->
+      <div class="stage-body">
+        <!-- Center Chat Column (Chat Viewport + Composer Dock) -->
+        <div class="chat-column">
+          <!-- Chat Viewport -->
+          <section class="chat-viewport" id="chat-viewport">
         <div class="chat-content-container" id="chat-content-container">
           <!-- Empty State (default when no active messages) -->
           <div class="empty-state-view" id="empty-state-view">
@@ -114,60 +118,6 @@
           </svg>
         </button>
       </section>
-
-      <!-- Right Context Panel (Phase 3) -->
-      <aside id="context-panel" class="context-panel collapsed">
-        <div class="context-panel-header">
-          <span class="context-panel-title">Context & Details</span>
-          <button id="context-panel-close-btn" class="top-bar-btn" title="Close Panel (Ctrl+.)">✕</button>
-        </div>
-        <div class="context-tabs-nav">
-          <button class="context-tab-btn active" data-tab="memory">Memory</button>
-          <button class="context-tab-btn" data-tab="details">Details</button>
-        </div>
-        <div class="context-tab-content" id="context-tab-memory">
-          <div class="context-card">
-            <span class="context-card-title">Active Memories Injected</span>
-            <div id="context-memory-list" class="context-card-value">No memories injected in this turn.</div>
-          </div>
-        </div>
-        <div class="context-tab-content hidden" id="context-tab-details">
-          <div class="context-card">
-            <span class="context-card-title">Routing Mode</span>
-            <span class="context-card-value" id="context-route-mode">Auto (hybrid)</span>
-          </div>
-          <div class="context-card">
-            <span class="context-card-title">Hardware Grounding</span>
-            <span class="context-card-value">RTX 4050 · 6 GB VRAM</span>
-          </div>
-          <div class="context-card">
-            <span class="context-card-title">System Clock</span>
-            <span class="context-card-value" id="context-clock-val">Sync with system time</span>
-          </div>
-        </div>
-      </aside>
-
-      <!-- Full Page View Overlay (Memory, Dataset, Ratings, Approval) -->
-      <div id="full-page-view" class="full-page-view hidden">
-        <div class="page-header">
-          <div class="page-header-left">
-            <button id="page-back-btn" class="back-to-chat-btn">← Back to Chat</button>
-            <span class="page-title" id="page-header-title">Page Title</span>
-          </div>
-        </div>
-        <div class="page-container">
-          <aside class="page-sidebar">
-            <button class="page-nav-item active" data-page="memory">🧠 Memory Drawer</button>
-            <button class="page-nav-item" data-page="dataset">📦 Dataset Review</button>
-            <button class="page-nav-item" data-page="ratings">⭐ Model Ratings</button>
-            <button class="page-nav-item" data-page="approval">🚀 Self-Build Approval</button>
-            <button class="page-nav-item" data-page="settings">⚙️ Settings</button>
-          </aside>
-          <main class="page-content" id="page-dynamic-content">
-            <!-- Dynamic page body -->
-          </main>
-        </div>
-      </div>
 
       <!-- Composer Dock -->
       <div class="composer-dock">
@@ -290,6 +240,62 @@
           </div>
         </div>
       </div>
+      </div>
+
+      <!-- Right Context Panel (Phase 3) -->
+      <aside id="context-panel" class="context-panel collapsed">
+        <div class="context-panel-header">
+          <span class="context-panel-title">Context & Details</span>
+          <button id="context-panel-close-btn" class="top-bar-btn" title="Close Panel (Ctrl+.)">✕</button>
+        </div>
+        <div class="context-tabs-nav">
+          <button class="context-tab-btn active" data-tab="memory">Memory</button>
+          <button class="context-tab-btn" data-tab="details">Details</button>
+        </div>
+        <div class="context-tab-content" id="context-tab-memory">
+          <div class="context-card">
+            <span class="context-card-title">Active Memories Injected</span>
+            <div id="context-memory-list" class="context-card-value">No memories injected in this turn.</div>
+          </div>
+        </div>
+        <div class="context-tab-content hidden" id="context-tab-details">
+          <div class="context-card">
+            <span class="context-card-title">Routing Mode</span>
+            <span class="context-card-value" id="context-route-mode">Auto (hybrid)</span>
+          </div>
+          <div class="context-card">
+            <span class="context-card-title">Hardware Grounding</span>
+            <span class="context-card-value">RTX 4050 · 6 GB VRAM</span>
+          </div>
+          <div class="context-card">
+            <span class="context-card-title">System Clock</span>
+            <span class="context-card-value" id="context-clock-val">Sync with system time</span>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <!-- Full Page View Overlay (Memory, Dataset, Ratings, Approval, Settings) -->
+    <div id="full-page-view" class="full-page-view hidden">
+      <div class="page-header">
+        <div class="page-header-left">
+          <button id="page-back-btn" class="back-to-chat-btn">← Back to Chat</button>
+          <span class="page-title" id="page-header-title">Page Title</span>
+        </div>
+      </div>
+      <div class="page-container">
+        <aside class="page-sidebar">
+          <button class="page-nav-item active" data-page="memory">🧠 Memory Drawer</button>
+          <button class="page-nav-item" data-page="dataset">📦 Dataset Review</button>
+          <button class="page-nav-item" data-page="ratings">⭐ Model Ratings</button>
+          <button class="page-nav-item" data-page="approval">🚀 Self-Build Approval</button>
+          <button class="page-nav-item" data-page="settings">⚙️ Settings</button>
+        </aside>
+        <main class="page-content" id="page-dynamic-content">
+          <!-- Dynamic page body -->
+        </main>
+      </div>
+    </div>
     </main>
   </div>
 

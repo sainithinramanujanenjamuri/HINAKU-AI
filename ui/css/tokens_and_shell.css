@@ -315,6 +315,30 @@ body {
   flex-direction: column;
   background: var(--bg-base);
   height: 100%;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Stage Body (Horizontal Row: Chat Column + Right Context Panel) */
+.stage-body {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Chat Column (Chat Viewport + Composer Dock) */
+.chat-column {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
   overflow: hidden;
   position: relative;
 }
@@ -482,6 +506,7 @@ body {
   margin: 0 auto;
   padding: 0 20px 20px 20px;
   z-index: 10;
+  flex-shrink: 0;
 }
 
 .composer-card {
