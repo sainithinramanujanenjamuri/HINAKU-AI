@@ -80,3 +80,33 @@ async def test_call_model_retries_when_thinking_exhausts_tokens_with_no_content(
     assert res["retry_fired"] is True
     assert "Retried direct answer" in res["reply"]
     assert call_count == 2
+
+
+def test_improved_grader_strips_markdown_and_accepts_number_words():
+    from scripts.benchmark_thinking import strip_markdown, TEST_PROMPTS
+
+    # 1. strip_markdown checks
+    raw_md = "**Nine** sheep are left. `code` and $$math$$ $x=7$."
+    cleaned = strip_markdown(raw_md)
+    assert "**" not in cleaned
+    assert "`" not in cleaned
+    assert "$$" not in cleaned
+
+    # 2. Q1 accepts "Nine." and "Nine sheep are left."
+    check_q1 = TEST_PROMPTS[0]["check"]
+    assert check_q1("Nine.") is True
+    assert check_q1("Nine sheep are left.") is True
+    assert check_q1("9 sheep are left.") is True
+    assert check_q1("8 sheep are left.") is False
+
+    # 3. Q3 accepts real explanation concluding in "she has 1 sister" despite "2 sisters" in context
+    check_q3 = TEST_PROMPTS[2]["check"]
+    good_q3_reply = "Since each brother has 2 sisters, there are exactly 2 girls in the family. Sally is one of them, so she has 1 sister."
+    assert check_q3(good_q3_reply) is True
+    assert check_q3("Sally has 0 sisters.") is False
+
+    # 4. Q5 accepts $0.05 even when breakdown mentions $1.10 and $1.00
+    check_q5 = TEST_PROMPTS[4]["check"]
+    good_q5_reply = "The ball costs **$0.05**. Here is the breakdown: - Let the ball's price be $x. - The bat costs $x + 1.00. - Total: $x"
+    assert check_q5(good_q5_reply) is True
+    assert check_q5("The ball costs $0.10.") is False

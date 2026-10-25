@@ -12,76 +12,92 @@ import httpx
 ROOT_DIR = Path(__file__).resolve().parent.parent
 
 # 10 diverse reasoning prompts with ground truth evaluation
+def strip_markdown(text: str) -> str:
+    clean = re.sub(r"```[\s\S]*?```", "", text)
+    clean = re.sub(r"`([^`]+)`", r"\1", clean)
+    clean = re.sub(r"\$\$[\s\S]*?\$\$", "", clean)
+    clean = re.sub(r"\$([^\$]+)\$", r"\1", clean)
+    clean = re.sub(r"\*\*([^*]+)\*\*", r"\1", clean)
+    clean = re.sub(r"\*([^*]+)\*", r"\1", clean)
+    clean = re.sub(r"__([^_]+)__", r"\1", clean)
+    clean = re.sub(r"_([^_]+)_", r"\1", clean)
+    clean = re.sub(r"^#+\s+", "", clean, flags=re.MULTILINE)
+    return clean.strip()
+
+# 10 diverse reasoning prompts with improved grader (markdown-stripped, number-words accepted)
 TEST_PROMPTS = [
     {
         "id": 1,
         "category": "logic_trick",
         "prompt": "A farmer has 17 sheep and all but 9 die. How many are left?",
         "ground_truth": "9",
-        "check": lambda ans: "9" in ans and "8" not in ans.split() and "17" not in ans.split()
+        "check": lambda ans: bool(re.search(r"\b(?:9|nine)\b", strip_markdown(ans), re.I)) and not bool(re.search(r"\b(?:8|eight)\s+(?:sheep\s+)?(?:are\s+)?left\b", strip_markdown(ans), re.I))
     },
     {
         "id": 2,
         "category": "classic_crt",
         "prompt": "If it takes 5 machines 5 minutes to make 5 widgets, how long does it take 100 machines to make 100 widgets?",
         "ground_truth": "5 minutes",
-        "check": lambda ans: bool(re.search(r"\b(?:5|five)\s+minutes?\b", ans, re.I)) and not bool(re.search(r"\b100\s+minutes?\b", ans, re.I))
+        "check": lambda ans: bool(re.search(r"\b(?:5|five)\s+minutes?\b", strip_markdown(ans), re.I)) and not bool(re.search(r"\b100\s+minutes?\b", strip_markdown(ans), re.I))
     },
     {
         "id": 3,
         "category": "family_logic",
         "prompt": "Sally has 3 brothers. Each brother has 2 sisters. How many sisters does Sally have?",
         "ground_truth": "1 sister",
-        "check": lambda ans: bool(re.search(r"\b(?:1|one)\s+sister\b", ans, re.I)) and not bool(re.search(r"\b2\s+sisters?\b", ans, re.I))
+        "check": lambda ans: (bool(re.search(r"\b(?:she\s+has\s+(?:1|one)\s+sister|sally\s+has\s+(?:1|one)\s+sister|(?:1|one)\s+sister)\b", strip_markdown(ans), re.I))
+                             and not bool(re.search(r"\b(?:sally\s+has\s+(?:0|zero)\s+sisters|has\s+(?:0|zero)\s+sisters|0\s+sisters)\b", strip_markdown(ans), re.I)))
     },
     {
         "id": 4,
         "category": "algebra",
         "prompt": "Solve step by step: If 2x + 5 = 19, what is the value of 3x - 4?",
         "ground_truth": "17",
-        "check": lambda ans: "17" in ans and ("7" in ans or "x = 7" in ans or "x=7" in ans)
+        "check": lambda ans: (bool(re.search(r"\b(?:17|seventeen)\b", strip_markdown(ans), re.I))
+                             and bool(re.search(r"\b(?:7|seven|x\s*=\s*7)\b", strip_markdown(ans), re.I)))
     },
     {
         "id": 5,
         "category": "classic_crt",
         "prompt": "A bat and a ball cost $1.10 in total. The bat costs $1.00 more than the ball. How much does the ball cost?",
         "ground_truth": "5 cents / $0.05",
-        "check": lambda ans: bool(re.search(r"(?:5\s*cents?|0\.05|\$0\.05|five\s*cents?)", ans, re.I)) and not bool(re.search(r"(?:10\s*cents?|0\.10|\$0\.10)", ans, re.I))
+        "check": lambda ans: (bool(re.search(r"(?:ball(?:\s+costs)?\s*[:=]?\s*(?:\$0?\.05|5\s*cents?|five\s*cents?)|0\.05|\$0\.05|5\s*cents?|five\s*cents?)", strip_markdown(ans), re.I))
+                             and not bool(re.search(r"(?:ball(?:\s+costs)?\s*[:=]?\s*(?:\$0?\.10|10\s*cents?|ten\s*cents?)|ball\s+is\s+\$0\.10)", strip_markdown(ans), re.I)))
     },
     {
         "id": 6,
         "category": "modular_calendar",
         "prompt": "If yesterday was Wednesday, what day of the week will it be 100 days from today?",
         "ground_truth": "Saturday (Today is Thursday; 100 % 7 = 2; Thursday + 2 = Saturday)",
-        "check": lambda ans: "saturday" in ans.lower()
+        "check": lambda ans: "saturday" in strip_markdown(ans).lower()
     },
     {
         "id": 7,
         "category": "measurement_nuance",
         "prompt": "Which is heavier: a pound of feathers or a pound of gold? Or are they the same weight? Explain the nuance.",
         "ground_truth": "Feathers are heavier (avoirdupois pound ~453.6g vs troy pound ~373.2g), or standard units equal",
-        "check": lambda ans: any(w in ans.lower() for w in ["troy", "avoirdupois", "feather", "same", "equal"])
+        "check": lambda ans: any(w in strip_markdown(ans).lower() for w in ["troy", "avoirdupois", "feather", "same", "equal"])
     },
     {
         "id": 8,
         "category": "riddle",
         "prompt": "Mary's father has five daughters: Nana, Nene, Nini, Nono, and who?",
         "ground_truth": "Mary",
-        "check": lambda ans: "mary" in ans.lower()
+        "check": lambda ans: "mary" in strip_markdown(ans).lower()
     },
     {
         "id": 9,
         "category": "puzzle",
         "prompt": "You have 3 boxes: one labeled Apples, one Oranges, and one Apples and Oranges. ALL labels are wrong. You can pick one fruit from one box without looking inside. Which box should you pick from to determine the contents of all three boxes?",
         "ground_truth": "The box labeled Apples and Oranges / both",
-        "check": lambda ans: any(w in ans.lower() for w in ["apples and oranges", "both", "all labels are wrong", "pick from the box labeled"])
+        "check": lambda ans: any(w in strip_markdown(ans).lower() for w in ["apples and oranges", "both", "all labels are wrong", "pick from the box labeled"])
     },
     {
         "id": 10,
         "category": "deductive_syllogism",
         "prompt": "If all roses are flowers and some flowers fade quickly, does it follow that some roses fade quickly?",
         "ground_truth": "No / It does not follow",
-        "check": lambda ans: any(w in ans.lower() for w in ["no", "does not follow", "not necessarily", "invalid", "cannot be concluded"])
+        "check": lambda ans: any(w in strip_markdown(ans).lower() for w in ["no", "does not follow", "not necessarily", "invalid", "cannot be concluded"])
     }
 ]
 
@@ -292,6 +308,7 @@ async def run_benchmark(output_dir: Optional[Path] = None):
                     "total_time": res["total_time"],
                     "is_non_empty": bool(reply_text.strip()),
                     "is_correct": is_correct,
+                    "reply": reply_text,
                     "reply_preview": reply_text[:120].replace("\n", " ")
                 }
                 all_records.append(record)
