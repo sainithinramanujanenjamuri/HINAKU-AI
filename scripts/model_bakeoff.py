@@ -19,6 +19,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from backend.config import ROOT_DIR, get_settings
 from backend.history import ChatHistoryManager
@@ -26,7 +27,7 @@ from backend.memory.storage import MemoryStorage
 from backend.memory.manager import MemoryManager
 from backend.models.ollama_adapter import OllamaAdapter
 from backend.persona import PersonaManager
-from backend.quality import verify_reply, count_sentences
+from backend.quality import verify_reply, count_sentences, perform_reply_verification
 from backend.guards import (
     check_and_redact_sensitive_data,
     is_live_data_query,
@@ -648,22 +649,20 @@ async def run_bakeoff(
 
                         if not is_guard and not mock_mode:
                             try:
-                                v_res = await verify_reply(
-                                    draft=draft_reply,
-                                    persona_rules=persona_state.content,
-                                    clock_ctx=clock_ctx,
-                                    memory_ctx=mem_context or "",
+                                final_reply, was_verified, verify_ms, verify_status, verify_reason = await perform_reply_verification(
+                                    draft_reply=draft_reply,
+                                    used_backend="local",
+                                    used_model=model,
+                                    target_opts=options,
+                                    persona_state=persona_state,
+                                    clock_context=clock_ctx,
+                                    memory_context=mem_context or "",
+                                    is_detail=is_detail,
                                     local_adapter=adapter,
-                                    model=model,
-                                    options=options,
-                                    keep_alive=settings.local_keep_alive,
-                                    is_detail=is_detail
+                                    settings=settings,
+                                    messages_for_regen=messages,
+                                    clock_dt=None
                                 )
-                                final_reply = v_res.final_reply
-                                was_verified = v_res.was_verified
-                                verify_ms = v_res.elapsed_ms
-                                verify_status = v_res.status
-                                verify_reason = v_res.reason
                             except Exception as e:
                                 print(f" [verify error: {e}]", end="", flush=True)
 
@@ -707,7 +706,7 @@ async def run_bakeoff(
                             "model": model,
                             "run": run_idx,
                             "prompt": prompt,
-                            "quality_mode": True,
+                            "quality_mode": False,
                             "draft": draft_reply,
                             "final": final_reply,
                             "verifier_changed": verifier_changed,
@@ -720,6 +719,12 @@ async def run_bakeoff(
                             "tps": tps,
                             "ttft_sec": round(ttft_sec, 3),
                             "total_sec": round(latency_sec, 3),
+                            "check_draft": chk_draft,
+                            "check_final": chk_final,
+                            "draft_status": chk_draft["status"],
+                            "final_status": chk_final["status"],
+                            "draft_reasons": chk_draft.get("reasons", []),
+                            "final_reasons": chk_final.get("reasons", []),
                             "check_status": chk_final["status"],
                             "check_reasons": chk_final.get("reasons", []),
                             "gpu_sample": gpu_smi_turn,
@@ -1005,14 +1010,15 @@ def generate_report_from_jsonl(jsonl_path: Path, output_date: Optional[str] = No
             "gpu_smi_snapshot": {}
         }
         for rec in m_recs:
-            if rec.get("check_status") == "PASS":
-                st["passed"] += 1
-                st["final_passed"] += 1
-            elif rec.get("check_status") == "NEEDS_REVIEW":
-                st["needs_review"] += 1
-
-            if not rec.get("verifier_changed") and rec.get("check_status") == "PASS":
+            draft_status = rec.get("draft_status") or ("PASS" if (not rec.get("verifier_changed") and rec.get("check_status") == "PASS") else "FAIL")
+            final_status = rec.get("final_status") or rec.get("check_status")
+            if draft_status == "PASS":
                 st["draft_passed"] += 1
+            if final_status == "PASS":
+                st["final_passed"] += 1
+                st["passed"] += 1
+            elif final_status == "NEEDS_REVIEW":
+                st["needs_review"] += 1
 
             if rec.get("verifier_changed"):
                 st["changed_count"] += 1

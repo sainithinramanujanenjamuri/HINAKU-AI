@@ -389,3 +389,125 @@ async def verify_reply(
             trimmed = trim_to_four_sentences(clean_draft)
             return VerificationResult(trimmed, True, elapsed_ms, "corrected", "Trimmed to four sentences outside detail mode")
         return VerificationResult(draft, False, elapsed_ms, "not_verified", f"error: {str(e)}")
+
+
+async def perform_reply_verification(
+    draft_reply: str,
+    used_backend: str,
+    used_model: str,
+    target_opts: Dict[str, Any],
+    persona_state: Any,
+    clock_context: str,
+    memory_context: str,
+    is_detail: bool,
+    local_adapter: Any,
+    settings: Any,
+    messages_for_regen: Optional[List[Dict[str, str]]] = None,
+    clock_dt: Optional[datetime] = None
+) -> Tuple[str, bool, int, str, Optional[str]]:
+    """
+    Executes deterministic checks and optional single-pass regenerations.
+    Returns: (final_reply, was_verified, verify_ms, verify_status, verify_reason)
+    """
+    if not draft_reply.strip():
+        fallback = "I couldn't put an answer together that time. Ask again, or turn off Think harder."
+        return fallback, False, 0, "not_verified", "empty_reply"
+
+    if used_backend != "local":
+        return draft_reply, False, 0, "not_verified", "api_backend"
+
+    curr_text = draft_reply
+    verify_ms = 0
+    correction_reasons = []
+
+    # 1. Deterministic check: Clock errors (wrong weekday/date) fixed directly in code
+    fixed_clock_text, did_fix_clock, clock_reason = fix_clock_error_in_code(curr_text, clock_dt=clock_dt)
+    if did_fix_clock:
+        curr_text = fixed_clock_text
+        correction_reasons.append(clock_reason)
+
+    # 2. Deterministic check: Forbidden capability offers
+    offer_desc = detect_forbidden_offers(curr_text)
+    if offer_desc and messages_for_regen and local_adapter:
+        extra_instruction = "HINAKU cannot play music or sounds, set reminders, alarms, timers, notifications, schedule calendar events, send messages, open apps, or track anything. Do not offer or claim to do any of these."
+        regen_msgs = list(messages_for_regen) + [{"role": "system", "content": extra_instruction}]
+        t0 = time.perf_counter()
+        try:
+            chunks = []
+            async for c in local_adapter.stream_chat(
+                messages=regen_msgs,
+                model=used_model,
+                options=target_opts,
+                think=False,
+                keep_alive=getattr(settings, "local_keep_alive", "30m"),
+                call_type="deterministic_regen"
+            ):
+                chunks.append(c)
+            verify_ms += int((time.perf_counter() - t0) * 1000)
+            candidate = "".join(chunks).strip()
+            if candidate and not detect_forbidden_offers(candidate):
+                curr_text = candidate
+                correction_reasons.append("Forbidden capability offer removed (regenerated)")
+        except Exception as e:
+            logger.warning(f"Error regenerating forbidden offer: {e}")
+
+    # 3. Deterministic check: Stated hardware conflict with owner memory
+    hw_conflict = detect_hardware_conflict(curr_text)
+    if hw_conflict and messages_for_regen and local_adapter:
+        extra_instruction = "The owner's laptop has an NVIDIA RTX 4050 with 6 GB VRAM. Do not state any other GPU model or VRAM amount for their machine."
+        regen_msgs = list(messages_for_regen) + [{"role": "system", "content": extra_instruction}]
+        t0 = time.perf_counter()
+        try:
+            chunks = []
+            async for c in local_adapter.stream_chat(
+                messages=regen_msgs,
+                model=used_model,
+                options=target_opts,
+                think=False,
+                keep_alive=getattr(settings, "local_keep_alive", "30m"),
+                call_type="deterministic_regen"
+            ):
+                chunks.append(c)
+            verify_ms += int((time.perf_counter() - t0) * 1000)
+            candidate = "".join(chunks).strip()
+            if candidate and not detect_hardware_conflict(candidate):
+                curr_text = candidate
+                correction_reasons.append("Corrected hardware conflict with owner memory (regenerated)")
+        except Exception as e:
+            logger.warning(f"Error regenerating hardware conflict: {e}")
+
+    # 4. Deterministic check: More than 4 sentences outside detail mode, or word cap in detail mode
+    if not is_detail:
+        num_s = count_sentences(curr_text)
+        if num_s > 4:
+            curr_text = trim_to_four_sentences(curr_text)
+            correction_reasons.append("Trimmed to four sentences outside detail mode")
+    else:
+        from backend.guards import trim_to_word_cap
+        capped_detail, was_capped = trim_to_word_cap(curr_text, max_words=350)
+        if was_capped:
+            curr_text = capped_detail
+            correction_reasons.append("Trimmed to sentence boundary at about 350 words")
+
+    # 5. Optional LLM verifier (off by default)
+    if getattr(settings, "quality_mode", False):
+        persona_content = persona_state.content if hasattr(persona_state, "content") else str(persona_state)
+        llm_reply, llm_verified, llm_ms, llm_status, llm_reason = await verify_reply(
+            draft=curr_text,
+            persona_rules=persona_content,
+            clock_ctx=clock_context,
+            memory_ctx=memory_context or "",
+            local_adapter=local_adapter,
+            model=used_model,
+            options=target_opts,
+            keep_alive=getattr(settings, "local_keep_alive", "30m"),
+            is_detail=is_detail
+        )
+        verify_ms += llm_ms
+        if llm_status == "corrected" and llm_reply != curr_text:
+            curr_text = llm_reply
+            correction_reasons.append(llm_reason or "Minimal edit accepted by verifier")
+
+    if correction_reasons:
+        return curr_text, True, verify_ms, "corrected", "; ".join(correction_reasons)
+    return curr_text, True, verify_ms, "verified", None
