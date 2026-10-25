@@ -168,6 +168,7 @@ def is_live_data_query(text: str, custom_patterns: Optional[List[str]] = None) -
 
 DETAIL_PATTERNS = [
     r"(?i)\b(?:in\s+more\s+detail|in\s+detail|in-depth|in\s+depth|longer\s+explanation|longer|more\s+detail|elaborate|explain\s+more|step\s+by\s+step|step-by-step|deep\s+dive|detailed|break\s+it\s+down\s+more)\b",
+    r"(?i)\bexplain\s+(?:the\s+)?differences?\b",
 ]
 
 SHORT_FOLLOWUP_DETAIL_WORDS = {

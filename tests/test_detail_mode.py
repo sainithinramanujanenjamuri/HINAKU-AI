@@ -227,3 +227,71 @@ async def test_detail_mode_trims_at_sentence_boundary_as_last_resort():
     assert len(final_words) <= 350
     assert final.endswith(".")
     assert "last resort" in reason
+
+
+def test_detail_mode_key_phrases_take_detail_path():
+    # Confirm "in detail", "step by step", and "explain the difference" take the detail path
+    assert is_detail_request("in detail") is True
+    assert is_detail_request("step by step") is True
+    assert is_detail_request("explain the difference") is True
+    assert is_detail_request("Explain how gradient descent works in detail.") is True
+    assert is_detail_request("Walk me through how virtual memory and paging work step by step.") is True
+    assert is_detail_request("Explain the difference between TCP and UDP.") is True
+
+
+def test_detail_mode_real_app_path_options_and_prompt(monkeypatch):
+    from fastapi.testclient import TestClient
+    from backend.main import app
+    from backend.api import chat as chat_module
+
+    captured_calls = []
+
+    async def mock_stream_chat(messages, model, **kwargs):
+        captured_calls.append({"messages": messages, "model": model, "kwargs": kwargs})
+        yield "This is a detailed answer that explains the topic thoroughly and clearly."
+
+    async def mock_is_loaded(model):
+        return True
+
+    monkeypatch.setattr(chat_module.local_adapter, "stream_chat", mock_stream_chat)
+    monkeypatch.setattr(chat_module.model_router.local_adapter, "stream_chat", mock_stream_chat)
+    monkeypatch.setattr(chat_module.local_adapter, "is_model_loaded", mock_is_loaded)
+    monkeypatch.setattr(chat_module.model_router.local_adapter, "is_model_loaded", mock_is_loaded)
+    monkeypatch.setattr(chat_module.memory_manager, "retrieve_context", lambda *a, **kw: "")
+    client = TestClient(app)
+
+    # 1. Test prompt with "in detail"
+    res1 = client.post("/api/chat", json={
+        "messages": [{"role": "user", "content": "Explain how gradient descent works in detail."}],
+        "is_private": True,
+        "stream": False
+    })
+    assert res1.status_code == 200
+    data1 = res1.json()
+    assert data1["detailed_used"] is True
+    assert data1["options"]["num_predict"] == 900
+    sys_msg1 = next(m["content"] for m in captured_calls[-1]["messages"] if m["role"] == "system")
+    assert "250 words" in sys_msg1
+    assert "one-sentence conclusion" in sys_msg1
+
+    # 2. Test prompt with "step by step"
+    res2 = client.post("/api/chat", json={
+        "messages": [{"role": "user", "content": "Walk me through how virtual memory and paging work step by step."}],
+        "is_private": True,
+        "stream": False
+    })
+    assert res2.status_code == 200
+    data2 = res2.json()
+    assert data2["detailed_used"] is True
+    assert data2["options"]["num_predict"] == 900
+
+    # 3. Test prompt with "explain the difference"
+    res3 = client.post("/api/chat", json={
+        "messages": [{"role": "user", "content": "Explain the difference between TCP and UDP."}],
+        "is_private": True,
+        "stream": False
+    })
+    assert res3.status_code == 200
+    data3 = res3.json()
+    assert data3["detailed_used"] is True
+    assert data3["options"]["num_predict"] == 900

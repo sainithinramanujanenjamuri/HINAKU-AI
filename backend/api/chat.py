@@ -125,6 +125,7 @@ class ChatResponse(BaseModel):
     hit_token_limit: bool = False
     is_private: bool = False
     latency_breakdown: Optional[Dict[str, int]] = None
+    options: Optional[Dict[str, Any]] = None
 
 @router.get("/info")
 async def get_info():
@@ -543,7 +544,8 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                 "auto_private": auto_private_triggered,
                 "logged_by_provider": settings.api_logged_by_provider,
                 "think_harder_used": think_harder_used,
-                "detailed_used": is_detail
+                "detailed_used": is_detail,
+                "options": target_opts
             }
             yield f"data: {json.dumps(init_meta)}\n\n"
 
@@ -842,5 +844,6 @@ async def chat_endpoint(req: ChatRequest, response: Response):
             detailed_used=is_detail,
             hit_token_limit=was_cut,
             is_private=is_private,
-            latency_breakdown=latency_breakdown
+            latency_breakdown=latency_breakdown,
+            options=target_opts
         )
