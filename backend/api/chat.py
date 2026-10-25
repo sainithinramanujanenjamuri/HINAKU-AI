@@ -547,6 +547,21 @@ async def chat_endpoint(req: ChatRequest, response: Response):
             }
             yield f"data: {json.dumps(init_meta)}\n\n"
 
+            if not is_api:
+                try:
+                    is_loaded = await local_adapter.is_model_loaded(target_model)
+                    if not is_loaded:
+                        loading_notice = {
+                            "type": "notice",
+                            "notice": "Loading model... about 15 s",
+                            "loading_model": True,
+                            "model": target_model,
+                            "conversation_id": conv_id
+                        }
+                        yield f"data: {json.dumps(loading_notice)}\n\n"
+                except Exception:
+                    pass
+
             t_gen_start = time.perf_counter()
             encountered_error = None
             async for event in model_router.stream_chat(

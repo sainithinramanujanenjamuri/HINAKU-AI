@@ -1,10 +1,14 @@
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
+import asyncio
 import datetime
+import logging
 import yaml
 from pathlib import Path
 from backend.config import get_settings
+
+logger = logging.getLogger("hinaku.settings")
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -89,6 +93,21 @@ async def update_settings_endpoint(req: UpdateSettingsRequest):
         if req.default_local_model not in settings.allowed_local_models:
             raise HTTPException(status_code=400, detail=f"Model '{req.default_local_model}' is not in allowed_local_models")
         settings.local["default_model"] = req.default_local_model
+
+        async def warm_selected_model(m: str):
+            try:
+                from backend.api.chat import local_adapter
+                await local_adapter.chat(
+                    messages=[{"role": "user", "content": "ping"}],
+                    model=m,
+                    options={"num_predict": 1},
+                    keep_alive=getattr(settings, "local_keep_alive", "30m"),
+                    call_type="model_warm"
+                )
+            except Exception as e:
+                logger.warning(f"Error warming model {m}: {e}")
+
+        asyncio.create_task(warm_selected_model(req.default_local_model))
 
     return await get_settings_endpoint()
 

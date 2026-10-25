@@ -533,6 +533,35 @@ body {
   padding: 0 4px;
 }
 
+/* Model cold load indicator */
+.model-loading-notice {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #94a3b8;
+  font-size: 13px;
+  font-style: italic;
+  padding: 6px 12px;
+  background: rgba(30, 41, 59, 0.5);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 6px;
+  margin: 4px 0;
+  animation: pulse 1.8s infinite ease-in-out;
+}
+
+.model-loading-notice .loading-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(148, 163, 184, 0.3);
+  border-top-color: #a5b4fc;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 /* Chat container */
 .chat-container {
   flex: 1;

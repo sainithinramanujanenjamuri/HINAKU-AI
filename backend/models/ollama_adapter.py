@@ -44,6 +44,21 @@ class OllamaAdapter:
             pass
         return {"online": False, "has_default_model": False, "models": []}
 
+    async def is_model_loaded(self, model: Optional[str] = None) -> bool:
+        """Checks via Ollama /api/ps whether the model is currently active in VRAM."""
+        target = model or self.default_model
+        url = f"{self.host}/api/ps"
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                res = await client.get(url)
+                if res.status_code == 200:
+                    data = res.json()
+                    models = [m.get("name", "") for m in data.get("models", [])]
+                    return any(target == m or target.split(":")[0] == m.split(":")[0] for m in models)
+        except Exception:
+            pass
+        return False
+
     async def stream_chat(
         self,
         messages: List[Dict[str, str]],

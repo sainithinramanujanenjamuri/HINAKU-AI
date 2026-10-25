@@ -817,6 +817,22 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }, hardTimeoutSeconds * 1000);
 
+    const modelLoadNoticeTimer = setTimeout(() => {
+      if (isGenerating && !assistantText && bodyDiv) {
+        let loadEl = bodyDiv.querySelector(".model-loading-notice");
+        if (!loadEl) {
+          loadEl = document.createElement("div");
+          loadEl.className = "model-loading-notice";
+          loadEl.innerHTML = `<span class="loading-spinner"></span> Loading model... about 15 s`;
+          bodyDiv.appendChild(loadEl);
+        }
+        if (cancelButton) {
+          cancelButton.classList.remove("hidden");
+          cancelButton.disabled = false;
+        }
+      }
+    }, 2500);
+
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
@@ -896,6 +912,18 @@ document.addEventListener("DOMContentLoaded", () => {
                   console.error("Failed to undo auto-private:", e);
                 }
               });
+            } else if (parsed.loading_model || (parsed.notice && parsed.notice.includes("Loading model"))) {
+              let loadEl = bodyDiv.querySelector(".model-loading-notice");
+              if (!loadEl) {
+                loadEl = document.createElement("div");
+                loadEl.className = "model-loading-notice";
+                loadEl.innerHTML = `<span class="loading-spinner"></span> Loading model... about 15 s`;
+                bodyDiv.appendChild(loadEl);
+              }
+              if (cancelButton) {
+                cancelButton.classList.remove("hidden");
+                cancelButton.disabled = false;
+              }
             } else if (parsed.notice) {
               updateNoticeBanner(true, parsed.notice);
             }
@@ -930,6 +958,9 @@ document.addEventListener("DOMContentLoaded", () => {
               attachCopyButtons(bodyDiv);
             }
             if (parsed.chunk) {
+              clearTimeout(modelLoadNoticeTimer);
+              const loadEl = bodyDiv.querySelector(".model-loading-notice");
+              if (loadEl) loadEl.remove();
               if (thinkingIndicator) thinkingIndicator.classList.add("hidden");
               assistantText += parsed.chunk;
               bodyDiv.innerHTML = formatMarkdown(assistantText);
@@ -1000,6 +1031,9 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     } finally {
       clearTimeout(timeoutId);
+      clearTimeout(modelLoadNoticeTimer);
+      const leftoverLoadEl = bodyDiv?.querySelector(".model-loading-notice");
+      if (leftoverLoadEl) leftoverLoadEl.remove();
       isGenerating = false;
       sendButton.disabled = false;
       if (cancelButton) cancelButton.classList.add("hidden");
