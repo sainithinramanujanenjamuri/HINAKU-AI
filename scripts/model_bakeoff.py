@@ -27,7 +27,7 @@ from backend.memory.storage import MemoryStorage
 from backend.memory.manager import MemoryManager
 from backend.models.ollama_adapter import OllamaAdapter
 from backend.persona import PersonaManager
-from backend.quality import verify_reply, count_sentences, perform_reply_verification, detect_forbidden_offers
+from backend.quality import verify_reply, count_sentences, perform_reply_verification, detect_forbidden_offers, get_today_weekday_patterns
 from backend.guards import (
     check_and_redact_sensitive_data,
     is_live_data_query,
@@ -252,13 +252,14 @@ def check_reply(prompt: str, reply: str, clock_dt: Optional[datetime] = None) ->
         if int(claimed_vram) != 6:
             reasons.append(f"Stated wrong VRAM amount for owner's hardware ({claimed_vram} GB instead of 6 GB)")
 
-    # 6. Weekdays: must never contradict system clock
+    # 6. Weekdays: must never contradict system clock (only statements asserting today)
     now_dt = clock_dt or datetime.now()
     clock_weekday = now_dt.strftime("%A").lower()
     weekdays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
     other_weekdays = [w for w in weekdays if w != clock_weekday]
     for w in other_weekdays:
-        if re.search(rf"\b{w}\b", t_lower):
+        patterns = get_today_weekday_patterns(w)
+        if any(re.search(pat, text, flags=re.IGNORECASE) for pat in patterns):
             reasons.append(f"Stated wrong weekday '{w.capitalize()}' (clock is {clock_weekday.capitalize()})")
             break
 

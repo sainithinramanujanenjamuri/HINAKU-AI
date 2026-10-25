@@ -263,6 +263,62 @@ def test_deterministic_clock_weekday_fixed_by_code():
     assert "Fixed weekday 'Tuesday' to 'Saturday'" in reason
 
 
+def test_weekday_fixer_only_corrects_today_statements_and_leaves_other_days_unchanged():
+    """
+    Only correct statements that say what TODAY is ("Today is X", "It's X today", "X today").
+    Never change weekday words that refer to other days (tomorrow, next Monday, "on Monday").
+    Real draft: "If the work isn't done, you risk falling behind on Monday" (today is Sunday; must stay unchanged).
+    """
+    mock_sun = datetime(2026, 10, 25, 10, 0)  # Sunday
+
+    # 1. Real draft: referring to future day ("on Monday") -> must stay unchanged
+    real_draft = "If the work isn't done, you risk falling behind on Monday"
+    fixed, did_fix, reason = fix_clock_error_in_code(real_draft, clock_dt=mock_sun)
+    assert did_fix is False
+    assert fixed == real_draft
+    assert reason is None
+
+    # check_reply must also not flag "on Monday" as a wrong weekday when clock is Sunday
+    from scripts.model_bakeoff import check_reply
+    res = check_reply("What should I keep in mind for my sprint?", real_draft, clock_dt=mock_sun)
+    assert not any("wrong weekday" in r.lower() for r in res.get("reasons", []))
+
+    # 2. Other-day references ("next Monday", "tomorrow is Monday", "by Monday") must stay unchanged
+    for other_day_phrase in [
+        "Let's review this next Monday.",
+        "Tomorrow is Monday, so be prepared.",
+        "Make sure to submit it by Monday."
+    ]:
+        f, changed, _ = fix_clock_error_in_code(other_day_phrase, clock_dt=mock_sun)
+        assert changed is False
+        assert f == other_day_phrase
+
+    # 3. Statements asserting what TODAY is must be corrected
+    # "Today is X"
+    f1, ch1, r1 = fix_clock_error_in_code("Today is Tuesday. Focus on the core bug.", clock_dt=mock_sun)
+    assert ch1 is True
+    assert f1 == "Today is Sunday. Focus on the core bug."
+    assert "Fixed weekday 'Tuesday' to 'Sunday'" in r1
+
+    # "It's X today"
+    f2, ch2, r2 = fix_clock_error_in_code("It's Tuesday today. Keep moving forward.", clock_dt=mock_sun)
+    assert ch2 is True
+    assert f2 == "It's Sunday today. Keep moving forward."
+
+    # "X today"
+    f3, ch3, r3 = fix_clock_error_in_code("Tuesday today. Clear the backlog.", clock_dt=mock_sun)
+    assert ch3 is True
+    assert f3 == "Sunday today. Clear the backlog."
+
+    # Combined: asserts today is Tuesday AND mentions on Monday
+    combined_draft = "Today is Tuesday. If the work isn't done, you risk falling behind on Monday."
+    f4, ch4, r4 = fix_clock_error_in_code(combined_draft, clock_dt=mock_sun)
+    assert ch4 is True
+    assert f4 == "Today is Sunday. If the work isn't done, you risk falling behind on Monday."
+    assert "Tuesday" not in f4
+    assert "on Monday" in f4
+
+
 def test_deterministic_forbidden_offers_detected():
     """Detect forbidden capability offers (music, reminders, alarms, timers, calendar, sending messages, opening apps, tracking)."""
     assert detect_forbidden_offers("I can play some ambient music if you wish.") is not None

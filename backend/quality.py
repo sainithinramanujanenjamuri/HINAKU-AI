@@ -134,10 +134,26 @@ def detect_forbidden_offers(text: str) -> Optional[str]:
     return None
 
 
+def get_today_weekday_patterns(day: str) -> List[str]:
+    d = re.escape(day)
+    return [
+        # 1. "Today is [a/an/a typical] X", "Today's X"
+        rf"\b(?:today\s+(?:is|was)|today's)\s+(?:a\s+|an\s+|a\s+typical\s+|a\s+quiet\s+)?(?P<day>{d})\b",
+        # 2. "It is / It's [a/an/a typical] X today"
+        rf"\b(?:it\s+(?:is|was)|it's)\s+(?:a\s+|an\s+|a\s+typical\s+|a\s+quiet\s+)?(?P<day>{d})\s+today\b",
+        # 3. Start of sentence or clause: "X today"
+        rf"(?:^|[.!?;\n])\s*(?:a\s+|an\s+|a\s+typical\s+|a\s+quiet\s+)?(?P<day>{d})\s+today\b",
+        # 4. Start of sentence or clause: "It is / It's [a/an/a typical] X"
+        rf"(?:^|[.!?;\n])\s*(?:it\s+(?:is|was)|it's)\s+(?:a\s+|an\s+|a\s+typical\s+|a\s+quiet\s+)?(?P<day>{d})\b(?!\s+(?:morning|afternoon|evening|night)?\s*(?:next|last|following))"
+    ]
+
+
 def fix_clock_error_in_code(text: str, clock_dt: Optional[datetime] = None) -> Tuple[str, bool, Optional[str]]:
     """
-    Checks for wrong weekday or date contradictions in code and replaces them
-    with the true clock value without calling any LLM.
+    Checks for wrong weekday contradictions in code and replaces only statements
+    that say what TODAY is ("Today is X", "It's X today", "X today") with the true
+    clock value without calling any LLM. Never changes weekday words that refer to
+    other days (tomorrow, next Monday, "on Monday").
     """
     now_dt = clock_dt or datetime.now()
     curr_weekday = now_dt.strftime("%A")  # e.g. "Saturday"
@@ -151,22 +167,26 @@ def fix_clock_error_in_code(text: str, clock_dt: Optional[datetime] = None) -> T
     reasons = []
 
     for wrong_day in other_weekdays:
-        # Check case-insensitive boundary match
-        pattern = rf"\b{re.escape(wrong_day)}\b"
-        if re.search(pattern, fixed_text, flags=re.IGNORECASE):
-            # Replace preserving case
-            def replacer(match):
-                matched_str = match.group(0)
-                if matched_str.isupper():
-                    return curr_weekday.upper()
-                elif matched_str.islower():
-                    return curr_weekday.lower()
-                else:
-                    return curr_weekday
+        patterns = get_today_weekday_patterns(wrong_day)
+        for pattern in patterns:
+            if re.search(pattern, fixed_text, flags=re.IGNORECASE):
+                def replacer(match):
+                    full = match.group(0)
+                    day_str = match.group("day")
+                    if day_str.isupper():
+                        rep = curr_weekday.upper()
+                    elif day_str.islower():
+                        rep = curr_weekday.lower()
+                    else:
+                        rep = curr_weekday
+                    s, e = match.span("day")
+                    rel_s = s - match.start()
+                    rel_e = e - match.start()
+                    return full[:rel_s] + rep + full[rel_e:]
 
-            fixed_text = re.sub(pattern, replacer, fixed_text, flags=re.IGNORECASE)
-            was_fixed = True
-            reasons.append(f"Fixed weekday '{wrong_day}' to '{curr_weekday}'")
+                fixed_text = re.sub(pattern, replacer, fixed_text, flags=re.IGNORECASE)
+                was_fixed = True
+                reasons.append(f"Fixed weekday '{wrong_day}' to '{curr_weekday}'")
 
     if was_fixed:
         return fixed_text, True, "; ".join(reasons)
