@@ -1,3 +1,5 @@
+from unittest.mock import AsyncMock
+from backend.quality import detect_forbidden_offers, perform_reply_verification
 import pytest
 from pathlib import Path
 from scripts.model_bakeoff import check_reply
@@ -126,3 +128,81 @@ def test_persona_principle_location_and_prohibited_list():
     assert "You cannot play music or sounds, set reminders, alarms, or notifications" in content
     assert "schedule or create calendar events, send messages, open apps, or keep watching or tracking anything" in content
     assert "You cannot set timers, monitor systems, run programs, or act outside this chat." in content
+
+
+def test_advice_to_user_is_not_flagged_as_offer():
+    # Second-person advice or imperative instruction given to user must pass untouched
+    advice_reply = "Draft a message stating you are running late by 15 minutes."
+    assert detect_forbidden_offers(advice_reply) is None
+
+    # Check via check_reply as well
+    res = check_reply("What should I tell my team?", advice_reply)
+    assert res["passed"] is True
+    assert not any("capability" in r.lower() for r in res.get("reasons", []))
+
+
+def test_first_person_timer_offer_is_flagged():
+    timer_offer = "Do you want me to set a timer?"
+    flag = detect_forbidden_offers(timer_offer)
+    assert flag is not None
+    assert "timer" in flag.lower()
+
+    res = check_reply("I need to focus", timer_offer)
+    assert res["passed"] is False
+    assert any("capability" in r.lower() for r in res.get("reasons", []))
+
+
+class MockLocalAdapter:
+    def __init__(self, reply="Take a break. Drink some water."):
+        self.reply = reply
+        self.called = False
+
+    async def stream_chat(self, *args, **kwargs):
+        self.called = True
+        yield self.reply
+
+
+@pytest.mark.asyncio
+async def test_deterministic_verification_passes_advice_and_fixes_timer_offer():
+    # 1. Advice reply: passes completely untouched without regeneration
+    advice_reply = "Draft a message stating you are running late by 15 minutes."
+    adapter = MockLocalAdapter()
+
+    final, verified, ms, status, reason = await perform_reply_verification(
+        draft_reply=advice_reply,
+        used_backend="local",
+        used_model="gemma3:4b",
+        target_opts={},
+        persona_state=None,
+        clock_context="",
+        memory_context="",
+        is_detail=False,
+        local_adapter=adapter,
+        settings=None,
+        messages_for_regen=[{"role": "user", "content": "What should I tell my team?"}]
+    )
+    assert final == advice_reply
+    assert status == "verified"
+    assert adapter.called is False
+
+    # 2. Timer offer: must trigger regeneration and be fixed
+    offer_reply = "Take a break. Do you want me to set a timer?"
+    adapter_offer = MockLocalAdapter(reply="Take a break. Drink some water.")
+
+    final_fixed, verified_fixed, ms_fixed, status_fixed, reason_fixed = await perform_reply_verification(
+        draft_reply=offer_reply,
+        used_backend="local",
+        used_model="gemma3:4b",
+        target_opts={},
+        persona_state=None,
+        clock_context="",
+        memory_context="",
+        is_detail=False,
+        local_adapter=adapter_offer,
+        settings=None,
+        messages_for_regen=[{"role": "user", "content": "I am tired"}]
+    )
+    assert adapter_offer.called is True
+    assert final_fixed == "Take a break. Drink some water."
+    assert status_fixed == "corrected"
+    assert "Forbidden capability offer removed" in reason_fixed
