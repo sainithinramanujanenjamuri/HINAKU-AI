@@ -23,12 +23,39 @@ const state = {
 // DOM references
 let dom = {};
 
+// Rotating Opening Headlines (matches HINAKU's calm, observant persona)
+const HINAKU_OPENING_PROMPTS = [
+  "What are we working on?",
+  "Where does the work begin?",
+  "The quiet remains. What are we solving?",
+  "A clean canvas. Where do you want to start?",
+  "What problem needs dissecting?",
+  "The void is quiet. What are we building?",
+  "What question brought you back?",
+  "Focus is sharpest in the dark. What's on your mind?",
+  "What shall we unravel today?",
+  "Quiet space. What are we crafting?",
+  "The machine is listening. Where shall we look?",
+  "Clarity through precision. What are we exploring?"
+];
+
+function rotateEmptyStateHeadline() {
+  const headlineEl = document.getElementById("empty-state-headline");
+  if (!headlineEl) return;
+  const current = headlineEl.textContent.trim();
+  const pool = HINAKU_OPENING_PROMPTS.filter(p => p !== current);
+  const picked = pool[Math.floor(Math.random() * pool.length)] || HINAKU_OPENING_PROMPTS[0];
+  headlineEl.textContent = picked;
+}
+window.rotateEmptyStateHeadline = rotateEmptyStateHeadline;
+
 document.addEventListener("DOMContentLoaded", async () => {
   document.documentElement.setAttribute("data-theme", "dark");
   state.theme = "dark";
 
   initDomReferences();
   setupEventListeners();
+  rotateEmptyStateHeadline();
   await checkDemoModeAndLoad();
 
   const handleHash = () => {
@@ -451,7 +478,10 @@ function startNewChat() {
   state.currentConversationId = null;
   state.activeMessages = [];
   if (dom.chatTitle) dom.chatTitle.value = "New chat";
-  if (dom.emptyStateView) dom.emptyStateView.classList.remove("hidden");
+  if (dom.emptyStateView) {
+    dom.emptyStateView.classList.remove("hidden");
+    rotateEmptyStateHeadline();
+  }
   if (dom.messagesContainer) {
     dom.messagesContainer.classList.add("hidden");
     dom.messagesContainer.innerHTML = "";

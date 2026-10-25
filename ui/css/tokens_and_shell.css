@@ -62,6 +62,30 @@
   padding: 0;
 }
 
+/* Custom Subtle Dark Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-medium);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-medium) transparent;
+}
+
 body {
   font-family: var(--font-sans);
   background-color: var(--bg-base);
@@ -100,20 +124,29 @@ body {
 /* Slim Left Sidebar */
 .sidebar {
   width: var(--sidebar-width);
+  min-width: var(--sidebar-width);
+  max-width: var(--sidebar-width);
   height: 100%;
   background: var(--bg-surface);
   border-right: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  transition: transform var(--transition-normal), width var(--transition-normal);
+  transition: width var(--transition-normal), min-width var(--transition-normal), max-width var(--transition-normal), opacity var(--transition-normal);
   z-index: 30;
+  overflow: hidden;
+  position: relative;
 }
 
 .sidebar.collapsed {
-  transform: translateX(-100%);
-  width: 0;
-  border-right: none;
+  width: 0 !important;
+  min-width: 0 !important;
+  max-width: 0 !important;
+  border-right: none !important;
+  overflow: hidden !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 .sidebar-header {
