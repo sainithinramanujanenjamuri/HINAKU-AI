@@ -63,7 +63,18 @@ PROMPTS = [
     # 5. Detail mode prompts
     "explain how vector memory works in detail",
     "explain the difference between mutable and immutable in Python in detail",
-    "explain gradient accumulation in deep learning step by step"
+    "explain gradient accumulation in deep learning step by step",
+    # 6. Casual, personal-style prompts (added per Item 5: total 31 prompts >= 30)
+    "hey",
+    "I finally got that stubborn bug fixed",
+    "thinking about taking tomorrow off",
+    "what should I call you?",
+    "I'm having trouble focusing today",
+    "do you ever sleep?",
+    "just making some coffee before getting back into it",
+    "that was a tough pull request review",
+    "thanks for sticking with me on this project",
+    "ready to dive back in"
 ]
 
 REASONING_PROMPTS = [
@@ -571,6 +582,14 @@ async def run_bakeoff(
                                 reply_text = "Lists are mutable and can be modified after creation. Tuples are immutable and fixed once defined."
                             elif "tired" in p_low or "exhausted" in p_low:
                                 reply_text = "Step away from the screen for a bit. We will continue when you are rested."
+                            elif "hey" in p_low:
+                                reply_text = "I'm here. What are we working on?"
+                            elif "coffee" in p_low:
+                                reply_text = "Good pause. Take your time before the next piece."
+                            elif "thanks" in p_low:
+                                reply_text = "Anytime. Let me know when the next piece is ready."
+                            elif "call you" in p_low:
+                                reply_text = "HINAKU."
                             else:
                                 reply_text = "Step away from the screen for five minutes. Reset."
                         else:
@@ -1106,8 +1125,7 @@ def generate_report_from_jsonl(jsonl_path: Path, output_date: Optional[str] = No
         md_lines.append(f"| **{m}** | {st['draft_passed']}/{tot} ({off_pct}%) | {st['final_passed']}/{tot} ({on_pct}%) | {delta_str} | {gen_ms_avg} ms | {ver_ms_avg} ms | {changed} |")
     md_lines.append("")
 
-    md_lines.append("### Verification Latency Analysis\n")
-    md_lines.append("The Quality Mode verifier takes approximately 0.5 to 1.5 seconds per local reply because it passes the draft reply, system clock, persona rules, and stored memories back into the local model for a complete evaluation pass before accepting or rewriting.\n")
+
 
     md_lines.append("## Before-and-After Pairs (Real Verification Edits)\n")
     if diff_pairs:
