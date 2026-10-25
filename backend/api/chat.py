@@ -481,8 +481,8 @@ async def chat_endpoint(req: ChatRequest, response: Response):
     persona_text = persona_state.content
     if is_api:
         persona_text += "\n\nDo not use LaTeX or mathematical dollar signs ($...$ or $$...$$). Use standard Unicode characters (e.g. →, ×, ≤, ≥, ≠, ·, etc.) for symbols and equations."
-        if is_detail:
-            persona_text += "\nKeep the explanation clear and well-organized, up to about 350 words maximum."
+    if is_detail:
+        persona_text += "\nExplain in about 250 words ending with a one-sentence conclusion. Do not open with 'Okay, let's break down' or similar filler; begin directly with the answer."
     system_parts = [persona_text, clock_context]
     if memory_context:
         system_parts.append(memory_context)
@@ -595,12 +595,7 @@ async def chat_endpoint(req: ChatRequest, response: Response):
             if was_cut:
                 draft_reply = trimmed_draft
                 yield f"data: {json.dumps({'type': 'correction', 'final_content': draft_reply, 'conversation_id': conv_id, 'hit_token_limit': True})}\n\n"
-            if is_detail:
-                from backend.guards import trim_to_word_cap
-                capped_draft, was_capped = trim_to_word_cap(draft_reply, max_words=350)
-                if was_capped:
-                    draft_reply = capped_draft
-                    yield f"data: {json.dumps({'type': 'correction', 'final_content': draft_reply, 'conversation_id': conv_id, 'detail_capped': True})}\n\n"
+            
 
             final_reply = draft_reply
             was_verified = False
@@ -754,11 +749,7 @@ async def chat_endpoint(req: ChatRequest, response: Response):
         if was_cut:
             draft_reply = trimmed_draft
 
-        if is_detail:
-            from backend.guards import trim_to_word_cap
-            capped_draft, was_capped = trim_to_word_cap(draft_reply, max_words=350)
-            if was_capped:
-                draft_reply = capped_draft
+        
 
         final_reply = draft_reply
         was_verified = False

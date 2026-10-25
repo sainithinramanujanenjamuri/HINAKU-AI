@@ -56,8 +56,9 @@ async def test_call(client: httpx.AsyncClient, model: str, prompt: str, run_idx:
                 "content": (
                     "You are HINAKU, a personal AI. Default to four sentences or fewer. "
                     "If the owner asks for more detail, a longer explanation, or an in-depth answer, "
-                    "give a complete, well-organized explanation (short paragraphs, up to about 350 words) "
-                    "and ignore the four-sentence limit for that reply. Stay on the topic asked and do not pad."
+                    "give a complete, well-organized explanation of about 250 words ending with a one-sentence conclusion, "
+                    "and ignore the four-sentence limit for that reply. Never open with 'Okay, let's break down' or similar filler. "
+                    "Stay on the topic asked and do not pad."
                 )
             },
             {"role": "user", "content": prompt}
@@ -97,6 +98,7 @@ async def test_call(client: httpx.AsyncClient, model: str, prompt: str, run_idx:
         "sentence_count": final_sentences,
         "duration_seconds": round(dur, 2),
         "meets_criteria": (final_sentences >= 6 and 150 <= final_words <= 350),
+        "reply": capped_reply,
         "reply_preview": capped_reply[:150] + ("..." if len(capped_reply) > 150 else "")
     }
 

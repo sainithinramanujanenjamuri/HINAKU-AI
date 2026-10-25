@@ -127,3 +127,103 @@ def test_trim_to_word_cap_enforces_hard_cap_at_sentence_boundary():
     assert was_cut is False
     assert unchanged == short_text
 
+
+
+def test_persona_detail_rules_and_opener_prohibition():
+    from backend.config import ROOT_DIR
+    persona_path = ROOT_DIR / "config" / "hinaku_persona.md"
+    assert persona_path.exists()
+    content = persona_path.read_text(encoding="utf-8")
+
+    # 1. Asks for about 250 words ending with a one-sentence conclusion
+    assert "about 250 words ending with a one-sentence conclusion" in content
+
+    # 2. Forbids "Okay, let's break down" opener
+    assert "Okay, let's break down" in content
+    assert "Never open explanations with filler phrases" in content
+
+
+class MockDetailAdapter:
+    def __init__(self, reply: str):
+        self.reply = reply
+        self.call_count = 0
+        self.last_messages = None
+
+    async def stream_chat(self, *args, **kwargs):
+        self.call_count += 1
+        self.last_messages = kwargs.get("messages", [])
+        yield self.reply
+
+
+@pytest.mark.asyncio
+async def test_detail_mode_regenerates_when_over_350_words():
+    from backend.quality import perform_reply_verification
+
+    # Create a 400-word draft (40 sentences * 10 words)
+    sentences_long = [f"Sentence number {i} contains exactly ten words to test proper length." for i in range(1, 41)]
+    long_draft = " ".join(sentences_long)
+    words = re.findall(r"\b\w+\b", long_draft)
+    assert len(words) == 440
+
+    # Shorter regenerated reply (~200 words) ending with a one-sentence conclusion
+    regen_sentences = [f"Concise sentence {i} contains exactly ten words for clean test." for i in range(1, 20)]
+    regen_sentences.append("In conclusion, the architecture cleanly separates concerns.")
+    regen_reply = " ".join(regen_sentences)
+    regen_words = re.findall(r"\b\w+\b", regen_reply)
+    assert len(regen_words) <= 350
+
+    adapter = MockDetailAdapter(reply=regen_reply)
+
+    final, verified, ms, status, reason = await perform_reply_verification(
+        draft_reply=long_draft,
+        used_backend="local",
+        used_model="gemma3:4b",
+        target_opts={},
+        persona_state=None,
+        clock_context="",
+        memory_context="",
+        is_detail=True,
+        local_adapter=adapter,
+        settings=None,
+        messages_for_regen=[{"role": "user", "content": "Explain virtual memory in detail"}]
+    )
+
+    assert adapter.call_count == 1
+    # Verify extra instruction was passed
+    assert any("200 words" in m.get("content", "") for m in adapter.last_messages)
+    assert any("one-sentence conclusion" in m.get("content", "") for m in adapter.last_messages)
+    assert final == regen_reply
+    assert status == "corrected"
+    assert "Regenerated detail reply to target under 350 words" in reason
+
+
+@pytest.mark.asyncio
+async def test_detail_mode_trims_at_sentence_boundary_as_last_resort():
+    from backend.quality import perform_reply_verification
+
+    # Create a 440-word draft
+    sentences_long = [f"Sentence number {i} contains exactly ten words to test proper length." for i in range(1, 41)]
+    long_draft = " ".join(sentences_long)
+
+    # Adapter returns a candidate that is STILL over 350 words (440 words)
+    stubborn_adapter = MockDetailAdapter(reply=long_draft)
+
+    final, verified, ms, status, reason = await perform_reply_verification(
+        draft_reply=long_draft,
+        used_backend="local",
+        used_model="gemma3:4b",
+        target_opts={},
+        persona_state=None,
+        clock_context="",
+        memory_context="",
+        is_detail=True,
+        local_adapter=stubborn_adapter,
+        settings=None,
+        messages_for_regen=[{"role": "user", "content": "Explain virtual memory in detail"}]
+    )
+
+    assert stubborn_adapter.call_count == 1
+    final_words = re.findall(r"\b\w+\b", final)
+    assert len(final_words) <= 350
+    assert final.endswith(".")
+    assert "last resort" in reason

@@ -327,7 +327,7 @@ async def verify_reply(
     stripped_persona = strip_persona_examples(persona_rules)
 
     rule_3 = (
-        "3. Detail mode is active: do not enforce sentence limit, but cap at about 350 words."
+        "3. Detail mode is active: do not enforce sentence limit, but ensure explanation is about 250 words ending with a one-sentence conclusion (cap at 350 words)."
         if is_detail else
         "3. Outside detail mode: ensure reply is four sentences or fewer."
     )
@@ -488,11 +488,45 @@ async def perform_reply_verification(
             curr_text = trim_to_four_sentences(curr_text)
             correction_reasons.append("Trimmed to four sentences outside detail mode")
     else:
-        from backend.guards import trim_to_word_cap
-        capped_detail, was_capped = trim_to_word_cap(curr_text, max_words=350)
-        if was_capped:
-            curr_text = capped_detail
-            correction_reasons.append("Trimmed to sentence boundary at about 350 words")
+        words = re.findall(r"\b\w+\b", curr_text)
+        if len(words) > 350:
+            # If reply is over 350, regenerate once with a shorter target
+            if messages_for_regen and local_adapter:
+                extra_instruction = (
+                    "The previous explanation was over 350 words. Rewrite it concisely, "
+                    "keeping it around 200 words and ending with a one-sentence conclusion. "
+                    "Begin directly with the explanation and do not use filler."
+                )
+                regen_msgs = list(messages_for_regen) + [{"role": "system", "content": extra_instruction}]
+                t0 = time.perf_counter()
+                try:
+                    chunks = []
+                    async for c in local_adapter.stream_chat(
+                        messages=regen_msgs,
+                        model=used_model,
+                        options=target_opts,
+                        think=False,
+                        keep_alive=getattr(settings, "local_keep_alive", "30m"),
+                        call_type="deterministic_regen"
+                    ):
+                        chunks.append(c)
+                    verify_ms += int((time.perf_counter() - t0) * 1000)
+                    candidate = "".join(chunks).strip()
+                    cand_words = re.findall(r"\b\w+\b", candidate)
+                    if candidate and len(cand_words) <= 350:
+                        curr_text = candidate
+                        correction_reasons.append("Regenerated detail reply to target under 350 words")
+                    elif candidate:
+                        curr_text = candidate
+                except Exception as e:
+                    logger.warning(f"Error regenerating detail reply: {e}")
+
+            # Trim at a sentence boundary only as a last resort
+            from backend.guards import trim_to_word_cap
+            capped_detail, was_capped = trim_to_word_cap(curr_text, max_words=350)
+            if was_capped:
+                curr_text = capped_detail
+                correction_reasons.append("Trimmed to sentence boundary at about 350 words (last resort)")
 
     # 5. Optional LLM verifier (off by default)
     if getattr(settings, "quality_mode", False):
