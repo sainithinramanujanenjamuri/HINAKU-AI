@@ -2,6 +2,8 @@
 @import url("/static/css/tokens_and_shell.css");
 /* Import Phase 2 conversation view and messages */
 @import url("/static/css/messages.css");
+/* Import Phase 3 context panel and full pages */
+@import url("/static/css/pages.css");
 
 /* Maintain compatibility classes for existing elements while transitioning */
 .badge {

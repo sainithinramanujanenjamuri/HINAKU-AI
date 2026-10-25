@@ -14,7 +14,7 @@ def _load_demo_data():
     if DEMO_FIXTURE_PATH.exists():
         with open(DEMO_FIXTURE_PATH, "r", encoding="utf-8") as f:
             return json.load(f)
-    return {"app_info": {}, "conversations": [], "memories": []}
+    return {"app_info": {}, "conversations": [], "memories": [], "dataset": {}, "ratings": []}
 
 @router.get("/status")
 async def demo_status():
@@ -29,7 +29,6 @@ async def demo_info():
 @router.get("/conversations")
 async def demo_conversations():
     data = _load_demo_data()
-    # Return without full message payloads for list view
     return [
         {
             "id": c["id"],
@@ -55,3 +54,62 @@ async def demo_memories():
     data = _load_demo_data()
     return data.get("memories", [])
 
+@router.get("/curate")
+async def demo_curate():
+    data = _load_demo_data()
+    return data.get("dataset", {
+        "candidate_count": 42,
+        "min_required": 200,
+        "ready": False,
+        "candidates": [
+            {
+                "id": "cand-1",
+                "user_prompt": "Compare surface codes and bosonic cat codes for fault-tolerant computing.",
+                "answer": "Surface codes offer an established 2D layout but demand thousands of physical qubits per logical qubit. Bosonic cat codes leverage infinite-dimensional Hilbert spaces to autonomously correct bit flips.",
+                "model": "bonsai-2:9b",
+                "backend": "local",
+                "feedback": "thumbs_up"
+            },
+            {
+                "id": "cand-2",
+                "user_prompt": "What is the capital of Australia?",
+                "answer": "Canberra.",
+                "model": "bonsai-2:9b",
+                "backend": "local",
+                "feedback": "thumbs_up"
+            }
+        ]
+    })
+
+@router.get("/ratings")
+async def demo_ratings():
+    data = _load_demo_data()
+    return data.get("ratings", [
+        {
+            "model": "bonsai-2:9b",
+            "backend": "local",
+            "thumbs_up": 24,
+            "thumbs_down": 1,
+            "total_feedback": 25,
+            "upvote_pct": 96.0,
+            "avg_latency_ms": 1340
+        },
+        {
+            "model": "gemma3:4b",
+            "backend": "local",
+            "thumbs_up": 18,
+            "thumbs_down": 2,
+            "total_feedback": 20,
+            "upvote_pct": 90.0,
+            "avg_latency_ms": 980
+        },
+        {
+            "model": "qwen3.5:4b",
+            "backend": "local",
+            "thumbs_up": 12,
+            "thumbs_down": 3,
+            "total_feedback": 15,
+            "upvote_pct": 80.0,
+            "avg_latency_ms": 1120
+        }
+    ])

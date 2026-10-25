@@ -1,6 +1,7 @@
 import { groupConversationsByDate, getPrivacyChipInfo, formatModelDisplayName } from "/static/js/utils.js";
 import { createUserMessageElement, createAssistantMessageElement, updateMetaRow } from "/static/js/message.js";
 import { attachCodeBlockCopyHandlers, formatMarkdown } from "/static/js/markdown.js";
+import { renderMemoryPage, renderRatingsPage, renderDatasetPage } from "/static/js/pages.js";
 
 // Main application state
 const state = {
@@ -70,6 +71,20 @@ function initDomReferences() {
     sendIcon: document.getElementById("send-icon"),
     stopIcon: document.getElementById("stop-icon"),
     cancelButton: document.getElementById("cancel-button"),
+    contextPanel: document.getElementById("context-panel"),
+    contextPanelToggleBtn: document.getElementById("context-panel-toggle-btn"),
+    contextPanelCloseBtn: document.getElementById("context-panel-close-btn"),
+    contextTabMemory: document.getElementById("context-tab-memory"),
+    contextTabDetails: document.getElementById("context-tab-details"),
+    contextMemoryList: document.getElementById("context-memory-list"),
+    contextRouteMode: document.getElementById("context-route-mode"),
+    fullPageView: document.getElementById("full-page-view"),
+    pageBackBtn: document.getElementById("page-back-btn"),
+    pageHeaderTitle: document.getElementById("page-header-title"),
+    pageDynamicContent: document.getElementById("page-dynamic-content"),
+    memoryToggleBtn: document.getElementById("memory-toggle-btn"),
+    datasetToggleBtn: document.getElementById("dataset-toggle-btn"),
+    settingsToggleBtn: document.getElementById("settings-toggle-btn"),
     noticeBanner: document.getElementById("notice-banner"),
     noticeText: document.getElementById("notice-text"),
     noticeDismissBtn: document.getElementById("notice-dismiss-btn"),
@@ -182,6 +197,43 @@ function setupEventListeners() {
 
   dom.scrollBottomBtn?.addEventListener("click", scrollToBottom);
 
+  // Context panel toggle
+  dom.contextPanelToggleBtn?.addEventListener("click", () => {
+    dom.contextPanel?.classList.toggle("collapsed");
+  });
+  dom.contextPanelCloseBtn?.addEventListener("click", () => {
+    dom.contextPanel?.classList.add("collapsed");
+  });
+
+  // Context tabs
+  document.querySelectorAll(".context-tab-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".context-tab-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      const tab = btn.dataset.tab;
+      if (tab === "memory") {
+        dom.contextTabMemory?.classList.remove("hidden");
+        dom.contextTabDetails?.classList.add("hidden");
+      } else {
+        dom.contextTabMemory?.classList.add("hidden");
+        dom.contextTabDetails?.classList.remove("hidden");
+      }
+    });
+  });
+
+  // Full page view navigation
+  dom.memoryToggleBtn?.addEventListener("click", () => openFullPage("memory"));
+  dom.datasetToggleBtn?.addEventListener("click", () => openFullPage("dataset"));
+  dom.pageBackBtn?.addEventListener("click", closeFullPage);
+
+  document.querySelectorAll(".page-nav-item").forEach(item => {
+    item.addEventListener("click", () => {
+      document.querySelectorAll(".page-nav-item").forEach(i => i.classList.remove("active"));
+      item.classList.add("active");
+      loadPageContent(item.dataset.page);
+    });
+  });
+
   // Keyboard Shortcuts
   window.addEventListener("keydown", (e) => {
     if (e.ctrlKey && e.key.toLowerCase() === "k") {
@@ -193,6 +245,9 @@ function setupEventListeners() {
     } else if (e.ctrlKey && e.key.toLowerCase() === "b") {
       e.preventDefault();
       dom.sidebar.classList.toggle("collapsed");
+    } else if (e.ctrlKey && e.key === ".") {
+      e.preventDefault();
+      dom.contextPanel?.classList.toggle("collapsed");
     } else if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "p") {
       e.preventDefault();
       cyclePrivacyMode();
@@ -812,6 +867,105 @@ function handleRetryMessage() {
 
 function handleContinueMessage() {
   handleSendMessage("Continue");
+}
+
+function openFullPage(pageName) {
+  if (!dom.fullPageView) return;
+  dom.fullPageView.classList.remove("hidden");
+  document.querySelectorAll(".page-nav-item").forEach(i => {
+    i.classList.toggle("active", i.dataset.page === pageName);
+  });
+  loadPageContent(pageName);
+}
+
+function closeFullPage() {
+  dom.fullPageView?.classList.add("hidden");
+}
+
+async function loadPageContent(pageName) {
+  if (!dom.pageDynamicContent) return;
+  if (dom.pageHeaderTitle) {
+    const titles = {
+      memory: "Memories",
+      dataset: "Dataset Curation",
+      ratings: "Model Ratings",
+      approval: "Self-Build Approval"
+    };
+    dom.pageHeaderTitle.textContent = titles[pageName] || "Page";
+  }
+
+  if (pageName === "memory") {
+    try {
+      const endpoint = state.isDemoMode ? "/api/demo/memories" : "/api/memories";
+      const res = await fetch(endpoint);
+      const mems = await res.json();
+      renderMemoryPage(
+        dom.pageDynamicContent,
+        mems,
+        async (id, currentText) => {
+          const newText = prompt("Edit memory:", currentText);
+          if (newText && newText !== currentText) {
+            await fetch(`/api/memories/${id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ text: newText })
+            });
+            loadPageContent("memory");
+          }
+        },
+        async (id) => {
+          if (confirm("Delete this memory?")) {
+            await fetch(`/api/memories/${id}`, { method: "DELETE" });
+            loadPageContent("memory");
+          }
+        }
+      );
+    } catch (e) {
+      dom.pageDynamicContent.innerHTML = `<div>Error loading memories: ${e.message}</div>`;
+    }
+  } else if (pageName === "ratings") {
+    try {
+      const endpoint = state.isDemoMode ? "/api/demo/ratings" : "/api/interactions/ratings-by-model";
+      const res = await fetch(endpoint);
+      const ratings = await res.json();
+      renderRatingsPage(dom.pageDynamicContent, ratings);
+    } catch (e) {
+      dom.pageDynamicContent.innerHTML = `<div>Error loading ratings: ${e.message}</div>`;
+    }
+  } else if (pageName === "dataset") {
+    try {
+      const endpoint = state.isDemoMode ? "/api/demo/curate" : "/api/training/curate";
+      const res = await fetch(endpoint);
+      const data = await res.json();
+      renderDatasetPage(dom.pageDynamicContent, data, () => {
+        alert("Build dataset requested.");
+      });
+    } catch (e) {
+      dom.pageDynamicContent.innerHTML = `<div>Error loading dataset curation: ${e.message}</div>`;
+    }
+  } else if (pageName === "approval") {
+    dom.pageDynamicContent.innerHTML = `
+      <div class="approval-card">
+        <h3>6-Month Self-Build Promotion Gate</h3>
+        <p style="color: var(--text-secondary); font-size: 13.5px;">
+          The self-build cycle compares the newly trained fine-tuned model against current local and golden evaluation baselines.
+        </p>
+        <div class="score-comparison-grid">
+          <div class="score-box">
+            <div class="context-card-title">Candidate Adapter Score</div>
+            <div class="score-value">84.2%</div>
+          </div>
+          <div class="score-box">
+            <div class="context-card-title">Current Local Baseline</div>
+            <div class="score-value">79.6%</div>
+          </div>
+        </div>
+        <div style="color: var(--color-private); font-weight: 500; font-size: 13.5px;">
+          ✓ Candidate beats baseline by +4.6%. Ready for promotion.
+        </div>
+      </div>
+    `;
+  }
 }
 
 function showNotice(text, showUndo = false) {
