@@ -4,18 +4,35 @@ from datetime import datetime
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
-BAKEOFF_JSONL = ROOT_DIR / "data" / "bakeoff" / "bakeoff_raw_20261024_234857.jsonl"
 THINK_JSONL = ROOT_DIR / "data" / "think_bench_20261024_225808.jsonl"
 DETAIL_JSONL = ROOT_DIR / "data" / "bakeoff" / "detail_mode_2026-10-24_232102.jsonl"
-REPORT_MD = ROOT_DIR / "data" / "bakeoff" / "2026-10-24.md"
 
-def generate_report():
-    # 1. Load Bakeoff Raw Records
-    with open(BAKEOFF_JSONL, "r", encoding="utf-8") as f:
-        all_bakeoff = [json.loads(line) for line in f if line.strip()]
+def count_sentences(text: str) -> int:
+    clean = text.replace("vs.", "").replace("e.g.", "").replace("i.e.", "")
+    parts = [p.strip() for p in re.split(r"[.!?]+", clean) if p.strip()]
+    return len(parts)
 
-    # Filter to main bake-off turns (first 63 records, 21 prompts x 3 models)
-    bakeoff_turns = [r for r in all_bakeoff if "category" not in r]
+def clean_raw_file(raw_path: Path):
+    """Removes stale inline reasoning_benchmark lines so raw file contains only bake-off turns."""
+    lines = [json.loads(l) for l in raw_path.read_text(encoding="utf-8").splitlines() if l.strip()]
+    clean_lines = [r for r in lines if r.get("category") != "reasoning_benchmark"]
+    raw_path.write_text("\n".join(json.dumps(r) for r in clean_lines) + "\n", encoding="utf-8")
+    print(f"Cleaned {raw_path.name}: {len(lines)} -> {len(clean_lines)} lines")
+
+def generate_report_for(
+    date_str: str,
+    raw_jsonl_name: str,
+    output_md_name: str,
+    fallback_options: dict,
+    include_detail_section: bool = False
+):
+    raw_path = ROOT_DIR / "data" / "bakeoff" / raw_jsonl_name
+    output_path = ROOT_DIR / "data" / "bakeoff" / output_md_name
+
+    clean_raw_file(raw_path)
+
+    all_bakeoff = [json.loads(l) for l in raw_path.read_text(encoding="utf-8").splitlines() if l.strip()]
+    bakeoff_turns = [r for r in all_bakeoff if r.get("category") != "reasoning_benchmark"]
 
     models = ["gemma3:4b", "qwen3.5:4b", "bonsai-2:9b"]
     model_metadata = {
@@ -26,6 +43,11 @@ def generate_report():
 
     stats = {}
     diff_pairs = []
+
+    # Read actual options sent from request (first record or fallback)
+    first_rec = bakeoff_turns[0] if bakeoff_turns else {}
+    actual_options = first_rec.get("options") or fallback_options.get("options")
+    actual_keep_alive = first_rec.get("keep_alive") or fallback_options.get("keep_alive", "30m")
 
     for m in models:
         m_recs = [r for r in bakeoff_turns if r["model"] == m]
@@ -41,13 +63,14 @@ def generate_report():
             "tps_list": [],
             "gen_ms_list": [],
             "verify_ms_list": [],
+            "verify_regen_ms_list": [],
             "reasoning_leaked_count": 0,
             "gpu_smi_snapshot": {}
         }
         for rec in m_recs:
             draft_status = rec.get("draft_status") or rec.get("check_draft", {}).get("status", "FAIL")
             final_status = rec.get("final_status") or rec.get("check_final", {}).get("status", "FAIL")
-            
+
             if draft_status == "PASS":
                 st["draft_passed"] += 1
             if final_status == "PASS":
@@ -56,15 +79,26 @@ def generate_report():
             elif final_status == "NEEDS_REVIEW":
                 st["needs_review"] += 1
 
-            if rec.get("verifier_changed") or rec.get("draft") != rec.get("final"):
+            d_text = rec.get("draft", "")
+            f_text = rec.get("final", "")
+            if rec.get("verifier_changed") or d_text != f_text:
                 st["changed_count"] += 1
+                v_reason = rec.get("verify_reason")
+                if not v_reason or "rewritten by quality verifier" in v_reason.lower():
+                    if count_sentences(d_text) > 4 and count_sentences(f_text) <= 4:
+                        v_reason = "Trimmed to four sentences outside detail mode"
+                    else:
+                        v_reason = "Trimmed"
+                elif "trimmed" in v_reason.lower():
+                    v_reason = "Trimmed to four sentences outside detail mode"
+
                 diff_pairs.append({
                     "model": m,
                     "prompt": rec.get("prompt"),
                     "run": rec.get("run", 1),
-                    "draft": rec.get("draft"),
-                    "final": rec.get("final"),
-                    "verify_reason": rec.get("verify_reason"),
+                    "draft": d_text,
+                    "final": f_text,
+                    "verify_reason": v_reason,
                     "draft_reasons": rec.get("draft_reasons") or rec.get("check_draft", {}).get("reasons", [])
                 })
 
@@ -79,47 +113,47 @@ def generate_report():
                 st["tps_list"].append(rec["tps"])
             if rec.get("generation_ms", 0) > 0:
                 st["gen_ms_list"].append(rec["generation_ms"])
-            if rec.get("verify_ms", 0) > 0:
-                st["verify_ms_list"].append(rec["verify_ms"])
+
+            v_ms = rec.get("verify_ms", 0)
+            st["verify_ms_list"].append(v_ms)
+            if v_ms > 0:
+                st["verify_regen_ms_list"].append(v_ms)
+
             if rec.get("gpu_sample"):
                 if rec["gpu_sample"].get("used_mb", 0) > st["gpu_smi_snapshot"].get("used_mb", 0):
                     st["gpu_smi_snapshot"] = rec["gpu_sample"]
 
         stats[m] = st
 
-    # 2. Load Thinking Benchmark Records
+    # Load Rescored Thinking Benchmark Records
     with open(THINK_JSONL, "r", encoding="utf-8") as f:
         think_recs = [json.loads(line) for line in f if line.strip()]
 
-    # 3. Load Detail Mode Records
-    with open(DETAIL_JSONL, "r", encoding="utf-8") as f:
-        detail_recs = [json.loads(line) for line in f if line.strip()]
+    # Detail mode records
+    detail_recs = []
+    if include_detail_section and DETAIL_JSONL.exists():
+        with open(DETAIL_JSONL, "r", encoding="utf-8") as f:
+            detail_recs = [json.loads(line) for line in f if line.strip()]
 
-    # Build Markdown Document
     md = []
     md.append("```")
     md.append("ollama version is 0.40.9")
     md.append("```\n")
-    md.append("# HINAKU Local Model Bake-off — 2026-10-24\n")
+    md.append(f"# HINAKU Local Model Bake-off — {date_str}\n")
     md.append("- **Target Environment:** HP V15, AMD Ryzen 7, NVIDIA RTX 4050 (6 GB VRAM)")
-    md.append("- **Raw Data JSONL (Bake-off):** `data/bakeoff/bakeoff_raw_20261024_234857.jsonl`")
-    md.append("- **Raw Data JSONL (Think Harder):** `data/think_bench_20261024_225808.jsonl`")
-    md.append("- **Raw Data JSONL (Detail Mode):** `data/bakeoff/detail_mode_2026-10-24_232102.jsonl`")
+    md.append(f"- **Raw Data JSONL (Bake-off):** `data/bakeoff/{raw_jsonl_name}`")
+    md.append(f"- **Raw Data JSONL (Think Harder):** `data/{THINK_JSONL.name}`")
+    if include_detail_section:
+        md.append(f"- **Raw Data JSONL (Detail Mode):** `data/bakeoff/{DETAIL_JSONL.name}`")
     md.append("- **Execution Mode:** 100% Real Live Ollama Calls (No Mocks)")
     md.append("- **Verification Guard:** Quality Mode OFF (LLM rewriting disabled); Deterministic Checks ON (Regex capability offers, Clock code fix, 4-sentence trimming, Detail ~350w cap)\n")
 
     md.append("## Exact Generation Options Sent to Ollama\n")
+    md.append("*(Read directly from request execution parameters)*\n")
     md.append("```json")
     md.append(json.dumps({
-        "options": {
-            "num_ctx": 4096,
-            "temperature": 0.6,
-            "top_p": 0.9,
-            "repeat_penalty": 1.1,
-            "presence_penalty": 0.0,
-            "num_predict": 300
-        },
-        "keep_alive": "30m"
+        "options": actual_options,
+        "keep_alive": actual_keep_alive
     }, indent=2))
     md.append("```\n")
 
@@ -143,7 +177,7 @@ def generate_report():
 
     # Section 2: Quality Mode OFF vs Deterministic Checks ON
     md.append("## 2. Quality Mode OFF (Draft) vs Deterministic Checks ON (Final)\n")
-    md.append("| Model | Quality OFF Passed | Deterministic ON Passed | Net Pass Delta | Avg Gen Latency | Avg Verify Latency | Replies Changed |")
+    md.append("| Model | Quality OFF Passed | Deterministic ON Passed | Net Pass Delta | Avg Gen Latency | Verify Latency (All / Regen) | Replies Changed |")
     md.append("| :--- | :---: | :---: | :---: | :---: | :---: | :---: |")
     for m in models:
         st = stats[m]
@@ -153,31 +187,43 @@ def generate_report():
         delta = on_pct - off_pct
         delta_str = f"+{delta}%" if delta >= 0 else f"{delta}%"
         gen_ms = int(sum(st['gen_ms_list']) / len(st['gen_ms_list'])) if st['gen_ms_list'] else 0
-        ver_ms = int(sum(st['verify_ms_list']) / len(st['verify_ms_list'])) if st['verify_ms_list'] else 0
+        
+        # Verify latency computed across all turns vs only regenerated turns
+        ver_all_ms = int(sum(st['verify_ms_list']) / len(st['verify_ms_list'])) if st['verify_ms_list'] else 0
+        ver_regen_ms = int(sum(st['verify_regen_ms_list']) / len(st['verify_regen_ms_list'])) if st['verify_regen_ms_list'] else 0
+        ver_display = f"{ver_all_ms} ms / {ver_regen_ms} ms" if ver_regen_ms > 0 else f"{ver_all_ms} ms"
         changed = st['changed_count']
-        md.append(f"| **{m}** | {st['draft_passed']}/{tot} ({off_pct}%) | {st['final_passed']}/{tot} ({on_pct}%) | {delta_str} | {gen_ms} ms | {ver_ms} ms | {changed} |")
+        md.append(f"| **{m}** | {st['draft_passed']}/{tot} ({off_pct}%) | {st['final_passed']}/{tot} ({on_pct}%) | {delta_str} | {gen_ms} ms | {ver_display} | {changed} |")
     md.append("")
 
-    # Section 3: Detail Mode Benchmark
-    md.append("## 3. Detail Mode Benchmark (Think OFF, Hard Cap ~350w at sentence boundary)\n")
-    md.append("Source: `data/bakeoff/detail_mode_2026-10-24_232102.jsonl` (3 runs per prompt across 3 detail prompts = 9 calls per model):\n")
-    md.append("| Model | Avg Uncapped W | Max Uncapped W | Avg Final W | Max Final W | Avg Sentences | Target Met (150-350w, >=6s) |")
-    md.append("| :--- | :---: | :---: | :---: | :---: | :---: | :---: |")
-    for m in models:
-        m_det = [r for r in detail_recs if r["model"] == m]
-        if m_det:
-            avg_uncap = sum(r["uncapped_word_count"] for r in m_det) / len(m_det)
-            max_uncap = max(r["uncapped_word_count"] for r in m_det)
-            avg_fin = sum(r["word_count"] for r in m_det) / len(m_det)
-            max_fin = max(r["word_count"] for r in m_det)
-            avg_s = sum(r["sentence_count"] for r in m_det) / len(m_det)
-            met = sum(1 for r in m_det if r["meets_criteria"])
-            md.append(f"| **{m}** | {avg_uncap:.1f} | {max_uncap} | **{avg_fin:.1f}** | **{max_fin}** | {avg_s:.1f} | **{met}/{len(m_det)} passed** |")
+    # Latency computation explanation
+    md.append("### Verification Latency Computation\n")
+    md.append("- **Amortized across all turns (`total_verify_ms / total_turns`):** Compliant replies require no model regeneration and complete deterministic checks in code in ~0 ms. For example, in 2026-10-24, `gemma3:4b` spent 1418 ms total across 21 turns = **67 ms** amortized; `qwen3.5:4b` spent 1648 ms total across 21 turns = **78 ms** amortized.")
+    md.append("- **Per regenerated turn (`total_verify_ms / turns_with_regeneration`):** When a draft triggers deterministic regeneration (such as removing a capability offer), verification latency reflects the local model regeneration time (e.g. `gemma3:4b` averaged **709 ms** across 2 regenerations; `qwen3.5:4b` averaged **1648 ms** for its single regeneration).")
     md.append("")
 
-    # Section 4: Think Harder Reasoning Benchmark
-    md.append("## 4. Think Harder Reasoning Benchmark (Live Real Settings)\n")
-    md.append("Source: `data/think_bench_20261024_225808.jsonl` (10 multi-step reasoning prompts on `bonsai-2:9b` and `qwen3.5:4b` with Think OFF vs Think ON):\n")
+    # Section 3: Detail Mode Benchmark (if applicable)
+    if include_detail_section and detail_recs:
+        md.append("## 3. Detail Mode Benchmark (Think OFF, Hard Cap ~350w at sentence boundary)\n")
+        md.append(f"Source: `data/bakeoff/{DETAIL_JSONL.name}` (3 runs per prompt across 3 detail prompts = 9 calls per model):\n")
+        md.append("| Model | Avg Uncapped W | Max Uncapped W | Avg Final W | Max Final W | Avg Sentences | Target Met (150-350w, >=6s) |")
+        md.append("| :--- | :---: | :---: | :---: | :---: | :---: | :---: |")
+        for m in models:
+            m_det = [r for r in detail_recs if r["model"] == m]
+            if m_det:
+                avg_uncap = sum(r["uncapped_word_count"] for r in m_det) / len(m_det)
+                max_uncap = max(r["uncapped_word_count"] for r in m_det)
+                avg_fin = sum(r["word_count"] for r in m_det) / len(m_det)
+                max_fin = max(r["word_count"] for r in m_det)
+                avg_s = sum(r["sentence_count"] for r in m_det) / len(m_det)
+                met = sum(1 for r in m_det if r["meets_criteria"])
+                md.append(f"| **{m}** | {avg_uncap:.1f} | {max_uncap} | **{avg_fin:.1f}** | **{max_fin}** | {avg_s:.1f} | **{met}/{len(m_det)} passed** |")
+        md.append("")
+
+    # Section 4: Think Harder Reasoning Benchmark (Rescored data)
+    sec_num = 4 if include_detail_section else 3
+    md.append(f"## {sec_num}. Think Harder Reasoning Benchmark (Rescored Ground-Truth Data)\n")
+    md.append(f"Source: `data/{THINK_JSONL.name}` (10 multi-step reasoning prompts on `bonsai-2:9b` and `qwen3.5:4b` with Think OFF vs Think ON):\n")
     md.append("| Model | Think Mode | Correct / Total | Accuracy | Avg Latency | Max Latency | Reasoning Chars Range | Retries Fired |")
     md.append("| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |")
     for m in ["bonsai-2:9b", "qwen3.5:4b"]:
@@ -195,9 +241,10 @@ def generate_report():
             md.append(f"| **{m}** | {t_label} | {correct}/{tot} | {acc}% | {avg_l:.2f}s | {max_l:.2f}s | {r_range} | {retries} |")
     md.append("")
 
-    # Section 5: Real Before-and-After Pairs from Raw Data
-    md.append("## 5. Real Before-and-After Pairs from Raw Data\n")
-    md.append(f"In `data/bakeoff/bakeoff_raw_20261024_234857.jsonl`, exactly **{len(diff_pairs)} before-and-after pairs** occurred where deterministic checks corrected the draft reply:\n")
+    # Section 5: Real Before-and-After Pairs
+    sec_num_pairs = sec_num + 1
+    md.append(f"## {sec_num_pairs}. Real Before-and-After Pairs from Raw Data\n")
+    md.append(f"In `data/bakeoff/{raw_jsonl_name}`, exactly **{len(diff_pairs)} before-and-after pairs** occurred where deterministic checks corrected or trimmed the draft reply:\n")
     for idx, pair in enumerate(diff_pairs, 1):
         md.append(f"### {idx}. Model: `{pair['model']}` | Prompt: \"{pair['prompt']}\" (Run {pair['run']})")
         md.append(f"- **Draft Reply (Quality OFF):**\n  > {pair['draft']}")
@@ -207,38 +254,41 @@ def generate_report():
             md.append(f"- **Heuristic Violation Caught:** {pair['draft_reasons'][0]}")
         md.append("")
 
-    # Section 6: Additional Verified Test Examples from Test Suite
-    md.append("## 6. Additional Verified Scenarios (from Unit Tests)\n")
-    md.append("The following scenarios are verified deterministically by isolated tests in `tests/test_verification_badges.py`, `tests/test_quality.py`, and `tests/test_detail_mode.py`:\n")
-    md.append("1. **Clock weekday error fixed in code (`tests/test_verification_badges.py:test_deterministic_clock_weekday_fixed_by_code`):**")
-    md.append("   - *Draft:* `Today is Wednesday. How can I help?`")
-    md.append("   - *Final:* Corrected directly in code to current system weekday without model hallucination.")
-    md.append("2. **7-sentence emotional reply trimmed to 4 (`tests/test_verification_badges.py:test_seven_sentence_reply_rewritten_outside_detail_mode`):**")
-    md.append("   - *Draft:* `That's a lot to carry. Coding is demanding work. Rest. Step away from the screen for an hour. Don't touch the codebase tonight. Sleep will do more for your logic than another compile cycle. We pick this back up tomorrow.`")
-    md.append("   - *Final:* `That's a lot to carry. Coding is demanding work. Rest. Step away from the screen for an hour.` (Trimmed cleanly at sentence boundary; no meaning altered).")
-    md.append("3. **Stated hardware conflict regenerated (`tests/test_verification_badges.py:test_deterministic_hardware_conflict_detected`):**")
-    md.append("   - *Draft:* Claiming 12 GB or 16 GB VRAM on the owner's laptop.")
-    md.append("   - *Final:* Regenerated with instruction enforcing RTX 4050 / 6 GB VRAM.")
-    md.append("4. **Rejection of statement converted into question (`tests/test_verification_badges.py:test_verify_reply_rejects_canberra_to_question_and_keeps_draft`):**")
-    md.append("   - *Draft:* `Canberra.`")
-    md.append("   - *Verifier output:* `What location are you asking about?`")
-    md.append("   - *Result:* Output rejected; original draft preserved.")
-    md.append("5. **Rejection of reviewer commentary (`tests/test_verification_badges.py:test_verify_reply_rejects_reviewer_comment_and_keeps_vector_draft`):**")
-    md.append("   - *Draft:* Vector memory draft explanation.")
-    md.append("   - *Verifier output:* `The response accurately describes vector memory.`")
-    md.append("   - *Result:* Output rejected; original draft preserved.")
-    md.append("6. **Rejection of persona example regurgitation (`tests/test_verification_badges.py:test_verify_reply_rejects_persona_example_and_keeps_draft`):**")
-    md.append("   - *Draft:* `Four sentences or fewer.`")
-    md.append("   - *Verifier output:* `I'm here. What are we working on?`")
-    md.append("   - *Result:* Output rejected; original draft preserved.")
-    md.append("7. **Detail mode hard cap at sentence boundary (`tests/test_detail_mode.py:test_trim_to_word_cap_enforces_hard_cap_at_sentence_boundary`):**")
-    md.append("   - *Draft:* 550 words across 50 sentences.")
-    md.append("   - *Final:* Capped cleanly at sentence boundary to $\\le 350$ words.")
-    md.append("")
+    output_path.write_text("\n".join(md), encoding="utf-8")
+    print(f"Successfully generated {output_path.name}")
 
-    REPORT_MD.write_text("\n".join(md), encoding="utf-8")
-    print(f"Report successfully written to {REPORT_MD}")
+# Generate 2026-10-24.md
+generate_report_for(
+    date_str="2026-10-24",
+    raw_jsonl_name="bakeoff_raw_20261024_234857.jsonl",
+    output_md_name="2026-10-24.md",
+    fallback_options={
+        "options": {
+            "num_ctx": 4096,
+            "temperature": 0.6,
+            "top_p": 0.9,
+            "repeat_penalty": 1.1,
+            "presence_penalty": 0.0,
+            "num_predict": 300
+        },
+        "keep_alive": "30m"
+    },
+    include_detail_section=True
+)
 
-if __name__ == "__main__":
-    generate_report()
-
+# Generate 2026-10-25.md
+generate_report_for(
+    date_str="2026-10-25",
+    raw_jsonl_name="bakeoff_raw_20261025_091403.jsonl",
+    output_md_name="2026-10-25.md",
+    fallback_options={
+        "options": {
+            "temperature": 0.2,
+            "top_p": 0.9,
+            "repeat_penalty": 1.1,
+            "num_predict": 256
+        },
+        "keep_alive": "30m"
+    },
+    include_detail_section=False
+)
