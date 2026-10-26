@@ -43,6 +43,12 @@ class DatasetCurator:
         exclude_api = settings.curation_exclude_api_answers
 
         with self.history_manager._get_connection() as conn:
+            # Check for attachments to exclude attachment conversations from curation
+            has_att_table = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='attachments'").fetchone()
+            att_conv_ids = set()
+            if has_att_table:
+                att_conv_ids = {r[0] for r in conn.execute("SELECT DISTINCT conversation_id FROM attachments").fetchall()}
+
             query = """
                 SELECT i.id, i.conversation_id, i.message_id, i.user_prompt, i.answer,
                        i.model, i.backend, i.feedback, i.edited_answer, i.created_at,
@@ -60,6 +66,9 @@ class DatasetCurator:
 
         candidates = []
         for row in rows:
+            # Drop if conversation contains attachments (strict privacy rule)
+            if row["conversation_id"] in att_conv_ids:
+                continue
             r = dict(row)
 
             # Drop if conversation was deleted

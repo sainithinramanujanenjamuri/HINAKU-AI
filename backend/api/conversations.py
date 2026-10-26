@@ -3,10 +3,12 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from backend.config import get_settings
 from backend.history import ChatHistoryManager
+from backend.attachments import AttachmentManager
 
 router = APIRouter()
 settings = get_settings()
 history_manager = ChatHistoryManager(db_path=settings.sqlite_path)
+attachment_manager = AttachmentManager()
 
 class CreateConversationRequest(BaseModel):
     title: Optional[str] = "New conversation"
@@ -55,4 +57,6 @@ async def delete_conversation(conv_id: str):
     deleted = history_manager.delete_conversation(conv_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Conversation not found")
+    # Cascading hard delete of all attachments and vectors
+    attachment_manager.delete_conversation_attachments(conv_id)
     return {"status": "deleted", "id": conv_id}

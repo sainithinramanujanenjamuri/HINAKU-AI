@@ -14,6 +14,7 @@ from backend.models.router import ModelRouter
 from backend.persona import PersonaManager
 from backend.history import ChatHistoryManager, trim_history
 from backend.memory import MemoryStorage, MemoryExtractor, MemoryManager
+from backend.api.attachments import attachment_manager
 from backend.quality import (
     verify_reply,
     count_sentences,
@@ -461,12 +462,16 @@ async def chat_endpoint(req: ChatRequest, response: Response):
 
     is_detail = bool(req.detailed) or is_detail_request(latest_user_text)
 
+    # Check for document attachments (forces local model)
+    has_attachments = attachment_manager.has_attachments(conv_id)
+
     # Identify target backend for memory retrieval privacy rule
     router_decision = model_router.decide_backend(
         latest_user_text,
         is_private=is_private,
         last_backend=last_backend,
-        is_detail=is_detail
+        is_detail=is_detail,
+        has_attachments=has_attachments
     )
     is_api = (router_decision.target_backend == "api")
 
@@ -489,6 +494,10 @@ async def chat_endpoint(req: ChatRequest, response: Response):
     system_parts = [persona_text, clock_context]
     if memory_context:
         system_parts.append(memory_context)
+    if has_attachments:
+        doc_context = attachment_manager.get_document_prompt_context(conv_id, latest_user_text)
+        if doc_context:
+            system_parts.append(doc_context)
     if is_despair:
         helpline_lines = [f"{h.get('name')}: {h.get('number')}" for h in settings.helpline_numbers if h.get('name') and h.get('number')]
         hl_info = f" Available helplines: {'; '.join(helpline_lines)}." if helpline_lines else " No external helplines are configured."
@@ -576,7 +585,8 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                 override_model=target_model,
                 think=use_think,
                 options=target_opts,
-                is_detail=is_detail
+                is_detail=is_detail,
+                has_attachments=has_attachments
             ):
                 if event.get("type") == "error":
                     encountered_error = event
@@ -688,7 +698,7 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                     memory_ms=memory_ms
                 )
                 # Background memory extraction after 5s idle using LOCAL model (never API)
-                if not is_private and settings.memory_enabled and settings.memory_extract_after_each_turn:
+                if not is_private and not has_attachments and settings.memory_enabled and settings.memory_extract_after_each_turn:
                     memory_manager.schedule_extraction(
                         conversation_id=conv_id,
                         user_message=latest_user_text,
@@ -745,7 +755,8 @@ async def chat_endpoint(req: ChatRequest, response: Response):
             override_model=target_model,
             think=use_think,
             options=target_opts,
-            is_detail=is_detail
+            is_detail=is_detail,
+            has_attachments=has_attachments
         ):
             if event.get("type") == "error":
                 encountered_error = event
@@ -817,7 +828,7 @@ async def chat_endpoint(req: ChatRequest, response: Response):
             memory_ms=memory_ms
         )
         if final_reply.strip():
-            if not is_private and settings.memory_enabled and settings.memory_extract_after_each_turn:
+            if not is_private and not has_attachments and settings.memory_enabled and settings.memory_extract_after_each_turn:
                 memory_manager.schedule_extraction(
                     conversation_id=conv_id,
                     user_message=latest_user_text,

@@ -130,6 +130,16 @@ class Settings:
         return int(self.local_options.get("num_ctx", 4096))
 
     @property
+    def data_dir(self) -> Path:
+        return self.sqlite_path.parent
+
+    @property
+    def uploads_dir(self) -> Path:
+        d = self.data_dir / "uploads"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    @property
     def sqlite_path(self) -> Path:
         import os, tempfile
         env_override = os.getenv("HINAKU_DB_PATH")
@@ -198,6 +208,10 @@ class Settings:
         return self.api.get("send_personal_context", False)
 
     @property
+    def chroma_dir(self) -> Path:
+        return self.chroma_path
+
+    @property
     def chroma_path(self) -> Path:
         import os, tempfile
         env_override = os.getenv("HINAKU_CHROMA_PATH")
@@ -231,6 +245,10 @@ class Settings:
     @property
     def memory_min_similarity(self) -> float:
         return float(self.memory.get("min_similarity", 0.46))
+
+    @property
+    def embedding_model(self) -> str:
+        return self.memory_embedding_model
 
     @property
     def memory_embedding_model(self) -> str:

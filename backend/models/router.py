@@ -232,8 +232,18 @@ class ModelRouter:
         user_prompt: str,
         is_private: bool = False,
         last_backend: Optional[str] = None,
-        is_detail: bool = False
+        is_detail: bool = False,
+        has_attachments: bool = False
     ) -> RouterDecision:
+        # Strict privacy: conversations with attachments are locked to local model under all modes
+        if has_attachments:
+            return RouterDecision(
+                target_backend="local",
+                target_model=self.local_adapter.default_model,
+                fallback_allowed=False,
+                notice="Attachment present: locked to local model."
+            )
+
         # Private chats NEVER use API
         if is_private:
             return RouterDecision(
@@ -362,9 +372,16 @@ class ModelRouter:
         override_model: Optional[str] = None,
         think: Optional[bool] = None,
         options: Optional[Dict[str, Any]] = None,
-        is_detail: bool = False
+        is_detail: bool = False,
+        has_attachments: bool = False
     ) -> AsyncGenerator[Dict[str, Any], None]:
-        decision = self.decide_backend(user_prompt, is_private=is_private, last_backend=last_backend, is_detail=is_detail)
+        decision = self.decide_backend(
+            user_prompt,
+            is_private=is_private,
+            last_backend=last_backend,
+            is_detail=is_detail,
+            has_attachments=has_attachments
+        )
         active_backend = decision.target_backend
         active_model = override_model if (override_model and active_backend == "local") else decision.target_model
         notice = decision.notice
