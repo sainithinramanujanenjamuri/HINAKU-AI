@@ -166,3 +166,88 @@ def test_eval_golden_contains_emotional_support():
     assert "emotional-support-04" in ids
     assert "emotional-support-06" in ids
 
+
+def test_one_fact_per_memory_and_faithful_wording():
+    """
+    Verifies that compound user messages extract exactly one fact per memory
+    with faithful wording and proper punctuation.
+    """
+    from backend.memory.extractor import MemoryExtractor
+    extractor = MemoryExtractor(local_adapter=None, storage=None)
+    
+    # 1. Test user message: "my favorite fruit is mango and I live in Seattle"
+    facts = extractor.parse_extracted_text(
+        "my favorite fruit is mango and I live in Seattle",
+        user_message="my favorite fruit is mango and I live in Seattle"
+    )
+    assert facts == ["Favorite fruit is mango.", "Lives in Seattle."]
+
+    # 2. Test bullet-separated output from model
+    bullet_facts = extractor.parse_extracted_text(
+        "- Favorite fruit is mango.\n- Lives in Seattle.",
+        user_message="my favorite fruit is mango and I live in Seattle"
+    )
+    assert bullet_facts == ["Favorite fruit is mango.", "Lives in Seattle."]
+
+    # 3. Test compound sentence from model
+    compound_facts = extractor.parse_extracted_text(
+        "Favorite fruit is mango and lives in Seattle",
+        user_message="my favorite fruit is mango and I live in Seattle"
+    )
+    assert compound_facts == ["Favorite fruit is mango.", "Lives in Seattle."]
+
+
+def test_pending_memory_extractions_sqlite_persistence(tmp_path):
+    """
+    Verifies that pending memory extractions are persisted in SQLite (pending_memory_extractions)
+    and successfully recovered across simulated application restarts.
+    """
+    from backend.memory.storage import MemoryStorage
+    from backend.memory.manager import MemoryManager
+
+    db_path = tmp_path / "test_pending.db"
+    chroma_path = tmp_path / "chroma_pending"
+
+    def fake_embed(_model, texts):
+        return [[0.1] * 64 for _ in texts]
+
+    # Session 1: Enqueue an extraction
+    storage1 = MemoryStorage(
+        db_path=db_path,
+        chroma_path=chroma_path,
+        embedding_model="test",
+        embedding_dims=64,
+        custom_embedder=fake_embed
+    )
+    mgr1 = MemoryManager(storage=storage1, extractor=None, enabled=True, idle_delay_seconds=60)
+    mgr1.schedule_extraction(
+        conversation_id="conv-persistent-1",
+        user_message="my favorite fruit is mango and I live in Seattle",
+        assistant_message="Understood.",
+        is_private=False
+    )
+
+    assert len(mgr1._pending_extractions) == 1
+    db_items = storage1.get_pending_extractions()
+    assert len(db_items) == 1
+    assert db_items[0]["conversation_id"] == "conv-persistent-1"
+    assert db_items[0]["user_message"] == "my favorite fruit is mango and I live in Seattle"
+
+    # Session 2 (Simulated App Restart):
+    storage2 = MemoryStorage(
+        db_path=db_path,
+        chroma_path=chroma_path,
+        embedding_model="test",
+        embedding_dims=64,
+        custom_embedder=fake_embed
+    )
+    mgr2 = MemoryManager(storage=storage2, extractor=None, enabled=True, idle_delay_seconds=60)
+    assert len(mgr2._pending_extractions) == 1
+    recovered = mgr2._pending_extractions[0]
+    assert recovered["user_message"] == "my favorite fruit is mango and I live in Seattle"
+    assert recovered["conversation_id"] == "conv-persistent-1"
+
+    # Completion deletes the pending item
+    storage2.delete_pending_extraction(recovered["id"])
+    assert len(storage2.get_pending_extractions()) == 0
+

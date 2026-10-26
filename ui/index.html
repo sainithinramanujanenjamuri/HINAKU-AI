@@ -122,7 +122,7 @@
       <!-- Composer Dock -->
       <div class="composer-dock">
         <div class="composer-card">
-          <!-- Active mode removable chips -->
+          <!-- Active mode removable chips & staged attachments -->
           <div class="composer-active-chips" id="composer-active-chips">
             <div class="active-chip hidden" id="chip-think-harder">
               <span>🧠 Think harder</span>
@@ -132,6 +132,7 @@
               <span>📄 Detailed</span>
               <span class="active-chip-remove" id="remove-chip-detailed">×</span>
             </div>
+            <div id="composer-attachment-chips" class="composer-attachment-chips"></div>
           </div>
 
           <!-- Input row -->
@@ -165,15 +166,15 @@
                   <span>📄 Detailed response</span>
                   <span id="menu-detailed-check"></span>
                 </button>
-                <button class="dropdown-item" disabled>
-                  <span>📎 Attach files</span>
-                  <span class="badge-coming-soon">coming soon</span>
+                <button class="dropdown-item" id="menu-attach-files">
+                  <span>📎 Files and images</span>
                 </button>
                 <button class="dropdown-item" disabled>
                   <span>⚡ Agent skills</span>
                   <span class="badge-coming-soon">coming soon</span>
                 </button>
               </div>
+              <input type="file" id="composer-file-input" multiple accept=".txt,.md,.markdown,.csv,.json,.py,.js,.html,.css,.yaml,.yml,.docx,.pdf,.png,.jpg,.jpeg,.webp" style="display: none;">
 
               <!-- Privacy Chip in composer -->
               <div id="composer-privacy-chip" class="status-chip privacy-chip-standard" title="Change privacy mode">
@@ -250,12 +251,19 @@
         </div>
         <div class="context-tabs-nav">
           <button class="context-tab-btn active" data-tab="memory">Memory</button>
+          <button class="context-tab-btn" data-tab="files">Files</button>
           <button class="context-tab-btn" data-tab="details">Details</button>
         </div>
         <div class="context-tab-content" id="context-tab-memory">
           <div class="context-card">
             <span class="context-card-title">Active Memories Injected</span>
             <div id="context-memory-list" class="context-card-value">No memories injected in this turn.</div>
+          </div>
+        </div>
+        <div class="context-tab-content hidden" id="context-tab-files">
+          <div class="context-card">
+            <span class="context-card-title">Attached Documents</span>
+            <div id="context-files-list" class="context-card-value">No documents attached to this chat.</div>
           </div>
         </div>
         <div class="context-tab-content hidden" id="context-tab-details">

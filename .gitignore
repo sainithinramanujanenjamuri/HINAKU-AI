@@ -4,6 +4,7 @@
 # Private data and large artifacts
 tools/
 .temp_smoke/
+tests/real_samples/
 data/*
 !data/bakeoff/
 !data/measure/

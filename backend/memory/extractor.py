@@ -16,11 +16,57 @@ Strict Rules:
 4. NEVER store mood, mental-state, or health statements (e.g., "feels low and lost", "has anxiety", "takes medication", "is depressed").
 5. NEVER store temporary states or fleeting moods (e.g., "tired after a long coding session", "hungry", "busy today", "sleepy").
 6. Anything with a time reference ("today", "this week", "tomorrow", "yesterday", "now", "currently") is NOT a memory.
-7. Write every memory in third person with plain wording, beginning with a verb or attribute (e.g., "Wants to build an LLM", "Cooks for himself", "Uses a laptop with an RTX 4050", "Favorite code editor is VS Code"). Never use first-person pronouns ("I", "my", "me", "myself").
-8. Resolve pronouns from the conversation ("it" becomes the named thing, e.g. "Wants to open source the LLM model", NOT "Wants to open source it"). If an entity cannot be resolved, do not output that memory.
-9. Do NOT store the owner's message word for word.
-10. If the owner did not state any durable facts or preferences about themselves, output exactly: NONE.
-11. Multiple values for an attribute from one statement (e.g. multiple colors, hobbies, tools, languages) MUST be stored as ONE memory with plural wording (e.g., "Favorite colors are black, red, and blue", NOT "Favorite color is black" + "Favorite color is red"). Never split multiple values into one memory per value."""
+7. Enforce ONE FACT PER MEMORY with faithful wording. Output each distinct fact on its own separate line (bullet point or line). Never combine multiple distinct facts into a single sentence.
+   Example:
+   User: "my favorite fruit is mango and I live in Seattle"
+   Extraction:
+   - Favorite fruit is mango.
+   - Lives in Seattle.
+8. Write every memory in third person with plain wording, beginning with a verb or attribute (e.g., "Favorite fruit is mango.", "Lives in Seattle.", "Wants to build an LLM.", "Uses a laptop with an RTX 4050."). Every memory must end with a period. Never use first-person pronouns ("I", "my", "me", "myself").
+9. Resolve pronouns from the conversation ("it" becomes the named thing). If an entity cannot be resolved, do not output that memory.
+10. Do NOT store the owner's message word for word.
+11. If the owner did not state any durable facts or preferences about themselves, output exactly: NONE.
+12. Multiple values for an attribute from one statement (e.g. multiple colors: "red and blue") MUST be stored as ONE memory with plural wording ("Favorite colors are red and blue"). But distinct attributes (e.g. fruit and city) must ALWAYS be separate lines."""
+
+def split_compound_facts(text: str) -> List[str]:
+    """
+    Splits compound statements into distinct facts so that each memory contains
+    exactly one fact with faithful wording.
+    E.g.:
+    'Favorite fruit is mango and lives in Seattle'
+    -> ['Favorite fruit is mango', 'Lives in Seattle']
+    """
+    raw_parts = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        for part in line.split(";"):
+            part = part.strip()
+            if part:
+                raw_parts.append(part)
+
+    parts = []
+    compound_pattern = re.compile(
+        r"\s+and\s+(?=(?:i\s+live|i\s+work|i\s+code|i\s+use|i\s+prefer|i\s+like|i\s+want|lives|works|codes|uses|prefers|likes|favorite|favourite|plans|hopes|wants|is|has)\b)",
+        re.IGNORECASE
+    )
+    for part in raw_parts:
+        sentences = re.split(r"(?<=[.!?])\s+(?=[A-Z])", part)
+        for s in sentences:
+            s = s.strip()
+            if not s:
+                continue
+            subs = compound_pattern.split(s)
+            if len(subs) > 1:
+                for sub in subs:
+                    sub = sub.strip().rstrip(".")
+                    if sub:
+                        parts.append(sub + ".")
+            else:
+                parts.append(s)
+
+    return parts
 
 def extract_attribute_key(text: str) -> Optional[str]:
     """
@@ -141,8 +187,9 @@ class MemoryExtractor:
         and consolidating multi-value facts.
         """
         facts = []
-        for line in text.splitlines():
-            cleaned = line.strip()
+        raw_items = split_compound_facts(text)
+        for raw in raw_items:
+            cleaned = raw.strip()
             # Strip markdown list markers and quotes
             cleaned = re.sub(r"^(?:[-*+]|\d+\.)\s*", "", cleaned).strip()
             cleaned = cleaned.strip("\"'")
@@ -169,6 +216,7 @@ class MemoryExtractor:
                 logger.info(f"Dropped invalid memory candidate '{cleaned}': {rej_reason}")
                 continue
 
+            processed_fact = processed_fact[0].upper() + processed_fact[1:]
             facts.append(processed_fact)
 
         # Consolidate multiple values into one memory with plural wording

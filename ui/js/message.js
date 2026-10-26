@@ -1,12 +1,62 @@
 import { formatMarkdown } from "/static/js/markdown.js";
 
+export function getFileIcon(filename = "") {
+  const ext = filename.split(".").pop().toLowerCase();
+  if (["png", "jpg", "jpeg", "webp", "gif"].includes(ext)) return "🖼️";
+  if (["pdf"].includes(ext)) return "📕";
+  if (["docx", "doc"].includes(ext)) return "📘";
+  if (["csv", "json"].includes(ext)) return "📊";
+  if (["py", "js", "html", "css", "yaml", "yml"].includes(ext)) return "💻";
+  return "📄";
+}
+
+export function formatFileSize(bytes = 0) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 /**
  * Creates and returns a user message element.
- * Pattern: Soft tinted bubble, Show more fold for long inputs, hover timestamp & copy/edit.
+ * Pattern: Soft tinted bubble, attachments grid, Show more fold for long inputs, hover timestamp & copy/edit.
  */
-export function createUserMessageElement(content, timestamp = null, onEdit = null) {
+export function createUserMessageElement(content, timestamp = null, onEdit = null, attachments = []) {
   const row = document.createElement("div");
   row.className = "message-wrapper user-row";
+
+  // Attachment cards above the text bubble
+  if (attachments && attachments.length > 0) {
+    const attGrid = document.createElement("div");
+    attGrid.className = "user-attachments-grid";
+    attachments.forEach(att => {
+      const card = document.createElement("div");
+      card.className = "user-attachment-card";
+
+      const icon = document.createElement("span");
+      icon.className = "att-card-icon";
+      icon.textContent = getFileIcon(att.filename || att.name);
+
+      const info = document.createElement("div");
+      info.className = "att-card-info";
+
+      const name = document.createElement("span");
+      name.className = "att-card-name";
+      name.textContent = att.filename || att.name || "Attachment";
+      name.title = att.filename || att.name || "";
+
+      const size = document.createElement("span");
+      size.className = "att-card-size";
+      const sz = att.size || att.size_bytes;
+      size.textContent = sz ? formatFileSize(sz) : (att.file_type || "file");
+
+      info.appendChild(name);
+      info.appendChild(size);
+      card.appendChild(icon);
+      card.appendChild(info);
+      attGrid.appendChild(card);
+    });
+    row.appendChild(attGrid);
+  }
 
   const bubble = document.createElement("div");
   bubble.className = "user-bubble";
@@ -270,5 +320,32 @@ function formatTime(isoStr) {
   } catch (e) {
     return "";
   }
+}
+
+/**
+ * Renders citation chips below assistant message body.
+ * Clicking a chip opens the right Context & Details drawer to the Files tab.
+ */
+export function renderCitationChips(container, citations, onCitationClick) {
+  if (!citations || citations.length === 0 || !container) return;
+  const existing = container.querySelector(".citation-chips-row");
+  if (existing) existing.remove();
+
+  const row = document.createElement("div");
+  row.className = "citation-chips-row";
+
+  citations.forEach(cit => {
+    const chip = document.createElement("button");
+    chip.className = "citation-chip";
+    const pStr = cit.page ? ` (p. ${cit.page})` : "";
+    chip.innerHTML = `<span class="cit-icon">📄</span> <span class="cit-file">${cit.file}${pStr}</span>`;
+    chip.onclick = (e) => {
+      e.stopPropagation();
+      if (onCitationClick) onCitationClick(cit);
+    };
+    row.appendChild(chip);
+  });
+
+  container.appendChild(row);
 }
 

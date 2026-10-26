@@ -20,8 +20,8 @@ from backend.config import ROOT_DIR
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     import asyncio
-    from backend.models.prewarm import prewarm_local_models
-    asyncio.create_task(prewarm_local_models())
+    import backend.models.prewarm as prewarm_module
+    asyncio.create_task(prewarm_module.prewarm_local_models())
     yield
 
 app = FastAPI(title="HINAKU API", version="0.1.0", lifespan=lifespan)

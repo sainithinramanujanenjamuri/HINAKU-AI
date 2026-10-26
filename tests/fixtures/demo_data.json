@@ -34,13 +34,29 @@
       "pinned": 1,
       "created_at": "2026-10-25T14:30:00Z",
       "updated_at": "2026-10-25T14:30:00Z",
+      "attachments": [
+        {
+          "id": "demo-att-1",
+          "filename": "quantum_architecture_memo.pdf",
+          "size_bytes": 142850,
+          "file_type": "pdf",
+          "token_count": 820
+        }
+      ],
       "messages": [
         {
           "id": "msg-1-1",
           "conversation_id": "demo-conv-1",
           "role": "user",
           "content": "Compare surface codes and bosonic cat codes for fault-tolerant computing on small footprints.",
-          "created_at": "2026-10-25T14:30:05Z"
+          "created_at": "2026-10-25T14:30:05Z",
+          "attachments": [
+            {
+              "filename": "quantum_architecture_memo.pdf",
+              "size_bytes": 142850,
+              "file_type": "pdf"
+            }
+          ]
         },
         {
           "id": "msg-1-2",
@@ -49,6 +65,12 @@
           "content": "Surface codes offer an established 2D layout with local 2-qubit stabilizers, but demand thousands of physical qubits per logical qubit.\n\nBosonic cat codes leverage infinite-dimensional Hilbert spaces in superconducting microwave cavities to autonomously correct bit flips via two-photon dissipation, leaving only phase flips for discrete outer layers. For a 6 GB local laptop workstation simulation, cat codes drastically reduce hardware state overhead.",
           "model": "bonsai-2:9b",
           "backend": "local",
+          "citations": [
+            {
+              "file": "quantum_architecture_memo.pdf",
+              "page": 3
+            }
+          ],
           "created_at": "2026-10-25T14:30:18Z",
           "interaction_id": "demo-int-1",
           "feedback": "up",

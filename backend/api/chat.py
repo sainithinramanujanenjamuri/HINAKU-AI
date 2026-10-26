@@ -127,6 +127,7 @@ class ChatResponse(BaseModel):
     is_private: bool = False
     latency_breakdown: Optional[Dict[str, int]] = None
     options: Optional[Dict[str, Any]] = None
+    citations: Optional[List[Dict[str, Any]]] = None
 
 @router.get("/info")
 async def get_info():
@@ -666,6 +667,9 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                 }
                 yield f"data: {json.dumps(corr_payload)}\n\n"
 
+            from backend.attachments.citations import strip_wrapper_tags_and_extract_citations
+            final_reply, doc_citations = strip_wrapper_tags_and_extract_citations(final_reply)
+
             latency_breakdown = {
                 "generation_ms": gen_ms,
                 "verify_ms": verify_ms,
@@ -721,7 +725,8 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                     "detailed_used": is_detail,
                     "hit_token_limit": was_cut,
                     "latency_breakdown": latency_breakdown,
-                    "final_reply": final_reply
+                    "final_reply": final_reply,
+                    "citations": doc_citations
                 }
                 yield f"data: {json.dumps(done_payload)}\n\n"
 
@@ -798,6 +803,9 @@ async def chat_endpoint(req: ChatRequest, response: Response):
             settings=settings,
             messages_for_regen=trimmed_messages
         )
+
+        from backend.attachments.citations import strip_wrapper_tags_and_extract_citations
+        final_reply, doc_citations = strip_wrapper_tags_and_extract_citations(final_reply)
 
         latency_breakdown = {
             "generation_ms": gen_ms,

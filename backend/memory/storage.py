@@ -120,6 +120,15 @@ class MemoryStorage:
                     deleted INTEGER DEFAULT 0
                 );
                 CREATE INDEX IF NOT EXISTS idx_memories_deleted ON memories (deleted, updated_at DESC);
+
+                CREATE TABLE IF NOT EXISTS pending_memory_extractions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    conversation_id TEXT NOT NULL,
+                    user_message TEXT NOT NULL,
+                    assistant_message TEXT NOT NULL,
+                    is_private INTEGER NOT NULL DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
             """)
 
     def _init_chroma(self):
@@ -453,3 +462,56 @@ class MemoryStorage:
             logger.error(f"Error resetting Chroma on clear_all: {e}")
 
         return count
+
+    def add_pending_extraction(
+        self,
+        conversation_id: str,
+        user_message: str,
+        assistant_message: str,
+        is_private: bool = False
+    ) -> int:
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO pending_memory_extractions 
+                (conversation_id, user_message, assistant_message, is_private)
+                VALUES (?, ?, ?, ?)
+                """,
+                (conversation_id, user_message, assistant_message, 1 if is_private else 0)
+            )
+            conn.commit()
+            return cursor.lastrowid
+
+    def get_pending_extractions(self) -> List[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT id, conversation_id, user_message, assistant_message, is_private, created_at
+                FROM pending_memory_extractions
+                ORDER BY id ASC
+                """
+            )
+            rows = cursor.fetchall()
+            return [
+                {
+                    "id": r[0],
+                    "conversation_id": r[1],
+                    "user_message": r[2],
+                    "assistant_message": r[3],
+                    "is_private": bool(r[4]),
+                    "created_at": r[5]
+                }
+                for r in rows
+            ]
+
+    def delete_pending_extraction(self, extraction_id: int):
+        with self._get_connection() as conn:
+            conn.execute("DELETE FROM pending_memory_extractions WHERE id = ?", (extraction_id,))
+            conn.commit()
+
+    def clear_pending_extractions(self):
+        with self._get_connection() as conn:
+            conn.execute("DELETE FROM pending_memory_extractions")
+            conn.commit()

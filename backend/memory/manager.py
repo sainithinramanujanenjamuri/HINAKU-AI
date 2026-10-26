@@ -27,8 +27,16 @@ class MemoryManager:
         self.min_similarity = min_similarity
         self.idle_delay_seconds = idle_delay_seconds
 
-        # 5-second idle debounce queue
+        # 5-second idle debounce queue persisted in SQLite
         self._pending_extractions: List[Dict[str, Any]] = []
+        try:
+            db_pending = self.storage.get_pending_extractions()
+            if db_pending:
+                self._pending_extractions = db_pending
+                logger.info(f"Loaded {len(db_pending)} pending memory extractions from database.")
+        except Exception as e:
+            logger.warning(f"Could not load pending memory extractions: {e}")
+
         self._idle_task: Optional[asyncio.Task] = None
         self._chat_active: bool = False
 
@@ -96,13 +104,26 @@ class MemoryManager:
     ):
         """
         Enqueues an exchange for memory extraction and (re)starts the 5-second idle timer.
+        Persists into pending_memory_extractions SQLite table across app restarts.
         """
         if not self.enabled:
             return
         if is_private and not self.learn_from_private_chats:
             return
 
+        db_id = None
+        try:
+            db_id = self.storage.add_pending_extraction(
+                conversation_id=conversation_id,
+                user_message=user_message,
+                assistant_message=assistant_message,
+                is_private=is_private
+            )
+        except Exception as e:
+            logger.error(f"Failed to persist pending extraction to SQLite: {e}")
+
         item = {
+            "id": db_id,
             "conversation_id": conversation_id,
             "user_message": user_message,
             "assistant_message": assistant_message,
@@ -128,7 +149,7 @@ class MemoryManager:
                 return
 
             while self._pending_extractions and not self._chat_active:
-                item = self._pending_extractions.pop(0)
+                item = self._pending_extractions[0]
                 try:
                     await self.extract_and_store(
                         conversation_id=item["conversation_id"],
@@ -138,6 +159,14 @@ class MemoryManager:
                     )
                 except Exception as e:
                     logger.error(f"Error in deferred memory extraction: {e}")
+                finally:
+                    if self._pending_extractions and self._pending_extractions[0] is item:
+                        self._pending_extractions.pop(0)
+                    if item.get("id"):
+                        try:
+                            self.storage.delete_pending_extraction(item["id"])
+                        except Exception as e:
+                            logger.error(f"Failed to delete pending extraction {item.get('id')} from SQLite: {e}")
         except asyncio.CancelledError:
             pass
 

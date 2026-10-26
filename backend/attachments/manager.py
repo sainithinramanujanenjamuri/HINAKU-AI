@@ -151,3 +151,4 @@ class AttachmentManager:
             return ""
 
         return "\n\n" + DOCUMENT_PROMPT_WRAPPER.format(content=raw_doc_context)
+

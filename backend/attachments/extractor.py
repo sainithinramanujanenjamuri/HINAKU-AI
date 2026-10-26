@@ -38,7 +38,11 @@ def extract_text_from_docx(content: bytes) -> List[DocumentPage]:
         if "word/document.xml" not in zf.namelist():
             return []
         doc_xml = zf.read("word/document.xml")
-    
+
+    # Protection against entity expansion / billion-laughs XML attacks
+    if b"<!ENTITY" in doc_xml or b"<!DOCTYPE" in doc_xml:
+        raise ValueError("XML entity expansion / DTD is prohibited for security.")
+
     root = ET.fromstring(doc_xml)
     # XML namespace for WordprocessingML
     ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
@@ -68,10 +72,15 @@ def extract_text_from_pdf(content: bytes, max_pages: int = 50) -> List[DocumentP
     extracted_text_blocks = []
     for match in stream_pattern.finditer(content):
         raw_stream = match.group(1)
-        # Try zlib inflate
+        # Try zlib inflate with decompression safety limits
         decompressed = None
         try:
-            decompressed = zlib.decompress(raw_stream)
+            decompressor = zlib.decompressobj()
+            decompressed = decompressor.decompress(raw_stream, max_length=5 * 1024 * 1024)
+            if decompressor.unconsumed_tail:
+                continue
+            if len(decompressed) / max(1, len(raw_stream)) > 100:
+                continue
         except Exception:
             # Try raw stream if uncompressed
             if b"BT" in raw_stream and b"ET" in raw_stream:

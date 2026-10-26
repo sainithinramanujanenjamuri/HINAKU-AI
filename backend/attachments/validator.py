@@ -20,6 +20,9 @@ from typing import BinaryIO, Optional, Set, Tuple
 
 MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024  # 20 MB
 MAX_FILES_PER_MESSAGE = 5
+MAX_DECOMPRESSED_BYTES = 50 * 1024 * 1024  # 50 MB
+MAX_ZIP_ENTRIES = 500
+MAX_EXPANSION_RATIO = 100
 MIN_FREE_DISK_HEADROOM_BYTES = 2 * 1024 * 1024 * 1024  # 2 GB
 
 # Supported extensions
@@ -120,12 +123,24 @@ def detect_and_validate_content(filename: str, content: bytes) -> str:
             import io
             import zipfile
             with zipfile.ZipFile(io.BytesIO(content)) as zf:
+                entries = zf.infolist()
+                if len(entries) > MAX_ZIP_ENTRIES:
+                    raise AttachmentValidationError(f"Archive exceeds maximum allowed entries ({len(entries)} > {MAX_ZIP_ENTRIES}).")
+
+                total_uncompressed = sum(e.file_size for e in entries)
+                if total_uncompressed > MAX_DECOMPRESSED_BYTES:
+                    raise AttachmentValidationError(f"Decompressed size exceeds 50 MB limit ({total_uncompressed / (1024*1024):.1f} MB).")
+
+                compressed_size = len(content)
+                ratio = total_uncompressed / max(1, compressed_size)
+                if ratio > MAX_EXPANSION_RATIO:
+                    raise AttachmentValidationError(f"Zip bomb detected: compression ratio {ratio:.1f}:1 exceeds safety limit of {MAX_EXPANSION_RATIO}:1.")
+
                 names = zf.namelist()
-                # Check for Word document content
                 is_word = any(n.startswith("word/") for n in names) and "[Content_Types].xml" in names
                 if not is_word:
                     raise AttachmentValidationError("Generic ZIP archives are not permitted. Only DOCX documents are allowed.")
-                # Check for macro projects
+
                 for name in names:
                     if "vbaproject.bin" in name.lower() or name.lower().endswith((".vba", ".bas", ".cls")):
                         raise AttachmentValidationError("Macro-enabled documents (.docm / VBA) are strictly rejected for security.")

@@ -22,6 +22,9 @@ router = APIRouter(prefix="/api/conversations", tags=["attachments"])
 # Global shared attachment manager
 attachment_manager = AttachmentManager()
 
+def get_attachment_manager() -> AttachmentManager:
+    return attachment_manager
+
 class FileUploadPayload(BaseModel):
     filename: str
     content_base64: str
@@ -61,7 +64,8 @@ async def upload_attachments(
             except Exception as e:
                 raise AttachmentValidationError(f"Invalid base64 payload: {e}")
 
-            record = attachment_manager.process_and_save_upload(
+            mgr = get_attachment_manager()
+            record = mgr.process_and_save_upload(
                 conversation_id=conversation_id,
                 filename=file_item.filename or "attachment",
                 content_bytes=content,
@@ -92,8 +96,9 @@ async def upload_attachments(
 
 @router.get("/{conversation_id}/attachments")
 async def list_attachments(conversation_id: str):
-    attachments = attachment_manager.list_attachments(conversation_id)
-    usage = attachment_manager.get_total_storage_usage()
+    mgr = get_attachment_manager()
+    attachments = mgr.list_attachments(conversation_id)
+    usage = mgr.get_total_storage_usage()
     return {
         "conversation_id": conversation_id,
         "attachments": attachments,
@@ -103,7 +108,8 @@ async def list_attachments(conversation_id: str):
 
 @router.delete("/{conversation_id}/attachments/{attachment_id}")
 async def delete_attachment(conversation_id: str, attachment_id: str):
-    success = attachment_manager.delete_attachment(attachment_id)
+    mgr = get_attachment_manager()
+    success = mgr.delete_attachment(attachment_id)
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -114,3 +120,4 @@ async def delete_attachment(conversation_id: str, attachment_id: str):
         "conversation_id": conversation_id,
         "attachment_id": attachment_id
     }
+

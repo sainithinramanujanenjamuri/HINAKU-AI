@@ -26,7 +26,7 @@ class ThinkingFilter:
     from streaming chunk tokens and strips leading meta-commentary so internal reasoning
     never reaches the UI.
     """
-    def __init__(self, tags: Tuple[str, ...] = ("think", "thought"), strip_meta: bool = True):
+    def __init__(self, tags: Tuple[str, ...] = ("think", "thought", "document_reference"), strip_meta: bool = True):
         self.tags = tags
         self.strip_meta = strip_meta
         self.in_thinking = False

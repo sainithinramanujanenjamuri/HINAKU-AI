@@ -49,6 +49,15 @@ async def demo_get_conversation(conv_id: str):
             return c
     raise HTTPException(status_code=404, detail="Demo conversation not found")
 
+@router.get("/conversations/{conv_id}/attachments")
+async def demo_get_conversation_attachments(conv_id: str):
+    data = _load_demo_data()
+    for c in data.get("conversations", []):
+        if c["id"] == conv_id:
+            atts = c.get("attachments", [])
+            return {"conversation_id": conv_id, "count": len(atts), "attachments": atts}
+    return {"conversation_id": conv_id, "count": 0, "attachments": []}
+
 @router.get("/memories")
 async def demo_memories():
     data = _load_demo_data()

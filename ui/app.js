@@ -1,5 +1,5 @@
 import { groupConversationsByDate, getPrivacyChipInfo, formatModelDisplayName } from "/static/js/utils.js";
-import { createUserMessageElement, createAssistantMessageElement, updateMetaRow } from "/static/js/message.js";
+import { createUserMessageElement, createAssistantMessageElement, updateMetaRow, renderCitationChips, formatFileSize, getFileIcon } from "/static/js/message.js";
 import { attachCodeBlockCopyHandlers, formatMarkdown } from "/static/js/markdown.js";
 import { renderMemoryPage, renderRatingsPage, renderDatasetPage, renderSettingsPage } from "/static/js/pages.js";
 
@@ -17,7 +17,8 @@ const state = {
   theme: "dark",
   isDemoMode: false,
   isApiLoggedByProvider: false,
-  activeMessages: []
+  activeMessages: [],
+  stagedAttachments: []
 };
 
 // DOM references
@@ -91,6 +92,9 @@ function initDomReferences() {
     composerPlusMenu: document.getElementById("composer-plus-menu"),
     menuToggleThink: document.getElementById("menu-toggle-think"),
     menuToggleDetailed: document.getElementById("menu-toggle-detailed"),
+    menuAttachFiles: document.getElementById("menu-attach-files"),
+    composerFileInput: document.getElementById("composer-file-input"),
+    composerAttachmentChips: document.getElementById("composer-attachment-chips"),
     menuThinkCheck: document.getElementById("menu-think-check"),
     menuDetailedCheck: document.getElementById("menu-detailed-check"),
     chipThinkHarder: document.getElementById("chip-think-harder"),
@@ -111,8 +115,10 @@ function initDomReferences() {
     contextPanelToggleBtn: document.getElementById("context-panel-toggle-btn"),
     contextPanelCloseBtn: document.getElementById("context-panel-close-btn"),
     contextTabMemory: document.getElementById("context-tab-memory"),
+    contextTabFiles: document.getElementById("context-tab-files"),
     contextTabDetails: document.getElementById("context-tab-details"),
     contextMemoryList: document.getElementById("context-memory-list"),
+    contextFilesList: document.getElementById("context-files-list"),
     contextRouteMode: document.getElementById("context-route-mode"),
     fullPageView: document.getElementById("full-page-view"),
     pageBackBtn: document.getElementById("page-back-btn"),
@@ -164,6 +170,47 @@ function setupEventListeners() {
     state.detailed = !state.detailed;
     updateModeChips();
     dom.composerPlusMenu?.classList.add("hidden");
+  });
+
+  // Files and images menu item
+  dom.menuAttachFiles?.addEventListener("click", () => {
+    dom.composerPlusMenu?.classList.add("hidden");
+    dom.composerFileInput?.click();
+  });
+
+  dom.composerFileInput?.addEventListener("change", (e) => {
+    handleFilesSelected(e.target.files);
+    dom.composerFileInput.value = "";
+  });
+
+  // Drag and drop onto composer and chat area
+  const composerCard = document.querySelector(".composer-card");
+  window.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    dom.chatViewport?.classList.add("drag-over");
+    composerCard?.classList.add("drag-over");
+  });
+  window.addEventListener("dragleave", (e) => {
+    if (e.clientX <= 0 || e.clientY <= 0 || e.clientX >= window.innerWidth || e.clientY >= window.innerHeight) {
+      dom.chatViewport?.classList.remove("drag-over");
+      composerCard?.classList.remove("drag-over");
+    }
+  });
+  window.addEventListener("drop", (e) => {
+    e.preventDefault();
+    dom.chatViewport?.classList.remove("drag-over");
+    composerCard?.classList.remove("drag-over");
+    if (e.dataTransfer && e.dataTransfer.files.length > 0) {
+      handleFilesSelected(e.dataTransfer.files);
+    }
+  });
+
+  // Clipboard paste files/images
+  window.addEventListener("paste", (e) => {
+    if (e.clipboardData && e.clipboardData.files.length > 0) {
+      e.preventDefault();
+      handleFilesSelected(e.clipboardData.files);
+    }
   });
 
   // Removable chips
@@ -247,12 +294,11 @@ function setupEventListeners() {
       document.querySelectorAll(".context-tab-btn").forEach(b => b.classList.remove("active"));
       btn.classList.add("active");
       const tab = btn.dataset.tab;
-      if (tab === "memory") {
-        dom.contextTabMemory?.classList.remove("hidden");
-        dom.contextTabDetails?.classList.add("hidden");
-      } else {
-        dom.contextTabMemory?.classList.add("hidden");
-        dom.contextTabDetails?.classList.remove("hidden");
+      dom.contextTabMemory?.classList.toggle("hidden", tab !== "memory");
+      dom.contextTabFiles?.classList.toggle("hidden", tab !== "files");
+      dom.contextTabDetails?.classList.toggle("hidden", tab !== "details");
+      if (tab === "files") {
+        loadConversationFiles();
       }
     });
   });
@@ -477,6 +523,9 @@ function filterConversations(query) {
 function startNewChat() {
   state.currentConversationId = null;
   state.activeMessages = [];
+  state.stagedAttachments = [];
+  renderStagedAttachmentChips();
+  if (dom.contextFilesList) dom.contextFilesList.textContent = "No documents attached to this chat.";
   if (dom.chatTitle) dom.chatTitle.value = "New chat";
   if (dom.emptyStateView) {
     dom.emptyStateView.classList.remove("hidden");
@@ -513,6 +562,7 @@ async function selectConversation(id) {
     console.error("Failed to load conversation details:", err);
   }
 
+  loadConversationFiles();
   renderConversationsList(state.conversations);
 }
 
@@ -534,7 +584,7 @@ function renderConversationMessages(messages) {
           dom.promptInput.value = text;
           dom.promptInput.focus();
         }
-      });
+      }, msg.attachments || []);
       dom.messagesContainer.appendChild(userEl);
     } else {
       const { row } = createAssistantMessageElement({
@@ -554,6 +604,9 @@ function renderConversationMessages(messages) {
         onRetry: () => handleRetryMessage(msg),
         onContinue: () => handleContinueMessage()
       });
+      if (msg.citations && msg.citations.length > 0) {
+        renderCitationChips(row, msg.citations, (cit) => openContextPanelTab("files", cit.file));
+      }
       dom.messagesContainer.appendChild(row);
       attachCodeBlockCopyHandlers(row);
     }
@@ -661,9 +714,112 @@ async function confirmDeleteConversation(convId) {
   }
 }
 
+function handleFilesSelected(files) {
+  if (!files || files.length === 0) return;
+  const newFiles = Array.from(files);
+  if (state.stagedAttachments.length + newFiles.length > 5) {
+    showNotice("Maximum 5 files per message permitted.");
+    return;
+  }
+
+  newFiles.forEach(file => {
+    if (file.size > 20 * 1024 * 1024) {
+      showNotice(`File "${file.name}" exceeds the 20 MB size limit.`);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      state.stagedAttachments.push({
+        filename: file.name,
+        size: file.size,
+        type: file.type || "application/octet-stream",
+        b64: e.target.result
+      });
+      renderStagedAttachmentChips();
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderStagedAttachmentChips() {
+  if (!dom.composerAttachmentChips) return;
+  dom.composerAttachmentChips.innerHTML = "";
+  state.stagedAttachments.forEach((att, idx) => {
+    const chip = document.createElement("div");
+    chip.className = "composer-att-chip";
+    chip.innerHTML = `
+      <span>${getFileIcon(att.filename)}</span>
+      <span>${att.filename} (${formatFileSize(att.size)})</span>
+      <span class="composer-att-chip-remove" title="Remove attachment">×</span>
+    `;
+    chip.querySelector(".composer-att-chip-remove").onclick = () => {
+      state.stagedAttachments.splice(idx, 1);
+      renderStagedAttachmentChips();
+    };
+    dom.composerAttachmentChips.appendChild(chip);
+  });
+}
+
+async function loadConversationFiles() {
+  if (!dom.contextFilesList) return;
+  if (!state.currentConversationId) {
+    dom.contextFilesList.textContent = "No documents attached to this chat.";
+    return;
+  }
+  try {
+    const endpoint = state.isDemoMode 
+      ? `/api/demo/conversations/${state.currentConversationId}/attachments`
+      : `/api/conversations/${state.currentConversationId}/attachments`;
+    const res = await fetch(endpoint);
+    if (res.ok) {
+      const data = await res.json();
+      if (!data.attachments || data.attachments.length === 0) {
+        dom.contextFilesList.textContent = "No documents attached to this chat.";
+        return;
+      }
+      dom.contextFilesList.innerHTML = "";
+      data.attachments.forEach(att => {
+        const item = document.createElement("div");
+        item.className = "context-file-item";
+        item.style.cssText = "padding: 8px 0; border-bottom: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 4px;";
+        item.innerHTML = `
+          <div style="display: flex; align-items: center; gap: 8px; font-weight: 500;">
+            <span>${getFileIcon(att.filename)}</span>
+            <span style="word-break: break-all;">${att.filename}</span>
+          </div>
+          <div style="font-size: 11.5px; color: var(--text-tertiary);">
+            ${formatFileSize(att.size_bytes)} · ~${att.token_count || 0} tokens · ${(att.file_type || "file").toUpperCase()}
+          </div>
+        `;
+        dom.contextFilesList.appendChild(item);
+      });
+    }
+  } catch (e) {
+    console.warn("Failed loading conversation attachments:", e);
+  }
+}
+
+function openContextPanelTab(tabName, highlightFilename = null) {
+  if (!dom.contextPanel) return;
+  dom.contextPanel.classList.remove("collapsed");
+  document.querySelectorAll(".context-tab-btn").forEach(b => {
+    b.classList.toggle("active", b.dataset.tab === tabName);
+  });
+  dom.contextTabMemory?.classList.toggle("hidden", tabName !== "memory");
+  dom.contextTabFiles?.classList.toggle("hidden", tabName !== "files");
+  dom.contextTabDetails?.classList.toggle("hidden", tabName !== "details");
+  if (tabName === "files") {
+    loadConversationFiles();
+  }
+}
+
 async function handleSendMessage(overrideText = null) {
   const text = (overrideText || dom.promptInput?.value || "").trim();
-  if (!text || state.isGenerating) return;
+  if ((!text && state.stagedAttachments.length === 0) || state.isGenerating) return;
+
+  const filesToUpload = [...state.stagedAttachments];
+  state.stagedAttachments = [];
+  renderStagedAttachmentChips();
 
   if (dom.promptInput) {
     dom.promptInput.value = "";
@@ -674,8 +830,8 @@ async function handleSendMessage(overrideText = null) {
   dom.emptyStateView?.classList.add("hidden");
   dom.messagesContainer?.classList.remove("hidden");
 
-  // Render User Message
-  const userEl = createUserMessageElement(text, new Date().toISOString());
+  // Render User Message with attachment cards
+  const userEl = createUserMessageElement(text || "(Sent attachments)", new Date().toISOString(), null, filesToUpload);
   dom.messagesContainer.appendChild(userEl);
   scrollToBottom();
 
@@ -691,6 +847,7 @@ async function handleSendMessage(overrideText = null) {
   let verifyStatus = null;
   let verifyReason = null;
   let hitTokenLimit = false;
+  let docCitations = [];
   let startTime = Date.now();
 
   const { row: assistantRow, body: assistantBody, metaRow } = createAssistantMessageElement({
@@ -705,11 +862,17 @@ async function handleSendMessage(overrideText = null) {
   state.abortController = new AbortController();
 
   if (state.isDemoMode) {
-    // In demo mode, emulate fast streaming response cleanly
     setTimeout(() => {
-      assistantText = "This is a demonstration response generated locally in UI demo mode. Surface codes and cat codes offer contrasting trade-offs in quantum architecture.";
+      assistantText = filesToUpload.length > 0 
+        ? "I have analyzed the attached document. The configuration parameters and technical architecture are verified offline under local model routing."
+        : "This is a demonstration response generated locally in UI demo mode. Surface codes and cat codes offer contrasting trade-offs in quantum architecture.";
       assistantBody.innerHTML = formatMarkdown(assistantText);
       attachCodeBlockCopyHandlers(assistantBody);
+      if (filesToUpload.length > 0) {
+        renderCitationChips(assistantRow, filesToUpload.map(f => ({ file: f.filename, page: 1 })), (cit) => {
+          openContextPanelTab("files", cit.file);
+        });
+      }
       updateMetaRow(metaRow, {
         model: state.activeModel,
         backend: "local",
@@ -724,12 +887,41 @@ async function handleSendMessage(overrideText = null) {
   }
 
   try {
+    // If there are files to upload, persist them via attachment API first
+    if (filesToUpload.length > 0) {
+      if (!state.currentConversationId) {
+        const createRes = await fetch("/api/conversations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: (text || filesToUpload[0].filename).slice(0, 36) })
+        });
+        if (createRes.ok) {
+          const conv = await createRes.json();
+          state.currentConversationId = conv.id;
+        }
+      }
+      if (state.currentConversationId) {
+        await fetch(`/api/conversations/${state.currentConversationId}/attachments`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            files: filesToUpload.map(f => ({
+              filename: f.filename,
+              content_base64: f.b64,
+              mime_type: f.type
+            }))
+          })
+        });
+        loadConversationFiles();
+      }
+    }
+
     const isPrivate = state.privacyMode === "private";
     const res = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        messages: [{ role: "user", content: text }],
+        messages: [{ role: "user", content: text || "Please analyze the attached document." }],
         conversation_id: state.currentConversationId,
         is_private: isPrivate,
         model: state.activeModel,
@@ -793,6 +985,9 @@ async function handleSendMessage(overrideText = null) {
           if (parsed.verify_status) verifyStatus = parsed.verify_status;
           if (parsed.verify_reason) verifyReason = parsed.verify_reason;
           if (parsed.hit_token_limit !== undefined) hitTokenLimit = Boolean(parsed.hit_token_limit);
+          if (parsed.citations && parsed.citations.length > 0) {
+            docCitations = parsed.citations;
+          }
 
           if (parsed.chunk) {
             assistantText += parsed.chunk;
@@ -819,6 +1014,12 @@ async function handleSendMessage(overrideText = null) {
     const workedSeconds = Math.max(1, Math.round((Date.now() - startTime) / 1000));
     assistantBody.innerHTML = formatMarkdown(assistantText);
     attachCodeBlockCopyHandlers(assistantBody);
+
+    if (docCitations && docCitations.length > 0) {
+      renderCitationChips(assistantRow, docCitations, (cit) => {
+        openContextPanelTab("files", cit.file);
+      });
+    }
 
     updateMetaRow(metaRow, {
       model: state.activeModel,

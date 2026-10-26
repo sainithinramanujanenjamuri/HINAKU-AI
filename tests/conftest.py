@@ -108,6 +108,19 @@ def isolate_test_database(request, tmp_path, monkeypatch):
     monkeypatch.setattr(chat_module, "memory_extractor", test_memory_extractor)
     monkeypatch.setattr(chat_module, "memory_manager", test_memory_manager)
 
+    # Isolate attachment storage and manager
+    from backend.attachments import AttachmentStorage, AttachmentManager
+    test_uploads = tmp_path / "test_uploads"
+    test_att_storage = AttachmentStorage(
+        db_path=test_db,
+        uploads_dir=test_uploads,
+        chroma_dir=test_chroma / "attachments",
+        embed_fn=lambda texts: [[0.1] * 128 for _ in texts]
+    )
+    test_att_manager = AttachmentManager(storage=test_att_storage)
+    import backend.api.attachments as att_module
+    monkeypatch.setattr(att_module, "attachment_manager", test_att_manager)
+
     if "prewarm" not in request.node.name:
         import backend.models.prewarm as prewarm_mod
         async def _mock_prewarm():

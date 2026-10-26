@@ -116,20 +116,32 @@ class AttachmentStorage:
             data=body,
             headers={"Content-Type": "application/json"}
         )
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            raw = data.get("embeddings", [])
-            log_ollama_call(
-                call_type="document_embeddings",
-                model=model,
-                num_ctx=shared["options"]["num_ctx"],
-                keep_alive=shared["keep_alive"],
-                options={"num_ctx": shared["options"]["num_ctx"]},
-                load_duration_ns=data.get("load_duration", 0),
-                total_duration_ns=data.get("total_duration", 0),
-                extra_info=f"embedded {len(texts)} doc chunks"
-            )
-            return [l2_normalize(e) for e in raw]
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                raw = data.get("embeddings", [])
+                log_ollama_call(
+                    call_type="document_embeddings",
+                    model=model,
+                    num_ctx=shared["options"]["num_ctx"],
+                    keep_alive=shared["keep_alive"],
+                    options={"num_ctx": shared["options"]["num_ctx"]},
+                    load_duration_ns=data.get("load_duration", 0),
+                    total_duration_ns=data.get("total_duration", 0),
+                    extra_info=f"embedded {len(texts)} doc chunks"
+                )
+                return [l2_normalize(e) for e in raw]
+        except Exception as e:
+            logger.warning(f"Default embedder failed to call Ollama: {e}. Falling back to deterministic offline vectors.")
+            import hashlib
+            out = []
+            for t in texts:
+                vec = [0.0] * 128
+                for w in t.split():
+                    h = int(hashlib.md5(w.encode()).hexdigest(), 16) % 128
+                    vec[h] += 1.0
+                out.append(l2_normalize(vec))
+            return out
 
     def save_attachment(
         self,
