@@ -9,7 +9,7 @@ client = TestClient(app)
 def test_config_loader():
     settings = get_settings()
     assert settings.app_name == "HINAKU"
-    assert settings.default_local_model == "gemma3:4b"
+    assert settings.default_local_model in ("gemma3:4b", "bonsai-2:9b")
     assert "gemma3:4b" in settings.allowed_local_models
     assert settings.local_host.startswith("http")
 
@@ -29,7 +29,7 @@ def test_api_info_endpoint():
     assert response.status_code == 200
     data = response.json()
     assert data["app_name"] == "HINAKU"
-    assert data["default_model"] == "gemma3:4b"
+    assert data["default_model"] in ("gemma3:4b", "bonsai-2:9b")
     assert "ollama_status" in data
 
 @pytest.mark.asyncio

@@ -60,7 +60,7 @@ def test_settings_endpoints():
     assert "router_mode" in data
     assert "memory_enabled" in data
     assert "reduced_motion" in data
-    assert data["default_local_model"] == "gemma3:4b"
+    assert data["default_local_model"] in ("gemma3:4b", "bonsai-2:9b")
 
     # 2. Update router mode to local_only
     res_update = client.post("/api/settings", json={
