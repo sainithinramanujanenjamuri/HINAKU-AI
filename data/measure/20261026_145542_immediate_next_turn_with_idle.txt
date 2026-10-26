@@ -1,0 +1,18 @@
+COMMAND: venv\Scripts\python.exe scripts/measure_immediate_turn.py
+TIMESTAMP: 2026-10-26T14:55:42.556049
+=== Test: Sending Next Message Immediately After Reply (with 5s Idle Debounce) ===
+
+[Turn 1] Prompt: Hi, my favorite fruit is mango and I live in Seattle.
+[Turn 1] TTFT: 0.843s | Total: 3.103s
+[Turn 1] Reply preview: That's a great combination! Mangoes are incredibly sweet and...
+[Turn 1 Finished] Pending extraction items: 1, idle timer active: True
+
+[Turn 2 - IMMEDIATE after 50ms] Prompt: What is 12 + 15?
+[Turn 2 Arrival] Pending extraction items: 1, idle timer cancelled: True
+[Turn 2 - IMMEDIATE] TTFT: 0.748s | Total: 0.774s
+[Turn 2] Reply preview: 12 + 15 = 27...
+[Turn 2 Finished] Pending extraction items: 2, idle countdown running...
+
+Waiting 6.0s for idle countdown to trigger background memory extraction...
+[Idle window complete] Pending extraction items left: 0
+Extracted memory verified in storage: ['Wants to eat mangoes; Lives in Seattle.']

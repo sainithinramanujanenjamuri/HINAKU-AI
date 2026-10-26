@@ -1,0 +1,15 @@
+COMMAND: python scripts/measure_immediate_turn.py
+TIMESTAMP: 2026-10-26T14:51:43.299172
+=== Test: Sending Next Message Immediately After Reply ===
+
+[Turn 1] Prompt: Hi, my favorite fruit is mango and I live in Seattle.
+[Turn 1] TTFT: 0.981s | Total: 3.603s
+[Turn 1] Reply preview: That's a great combination! Mangoes are incredibly popular i...
+
+Launching background memory extraction task for Turn 1...
+
+[Turn 2 - IMMEDIATE] Prompt: What is 12 + 15?
+[Turn 2 - IMMEDIATE] TTFT: 6.821s | Total: 6.822s
+[Turn 2] Reply preview: **27**...
+
+Background extraction task finished.

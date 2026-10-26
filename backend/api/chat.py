@@ -168,6 +168,8 @@ async def chat_endpoint(req: ChatRequest, response: Response):
     if not req.messages:
         raise HTTPException(status_code=400, detail="Messages list cannot be empty")
 
+    memory_manager.notify_user_message_received()
+
     persona_state = persona_manager.get_persona()
 
     # Determine or create conversation
@@ -685,17 +687,15 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                     think_ms=0,
                     memory_ms=memory_ms
                 )
-                # Background memory extraction using LOCAL model (never API)
+                # Background memory extraction after 5s idle using LOCAL model (never API)
                 if not is_private and settings.memory_enabled and settings.memory_extract_after_each_turn:
-                    import asyncio
-                    asyncio.create_task(
-                        memory_manager.extract_and_store(
-                            conversation_id=conv_id,
-                            user_message=latest_user_text,
-                            assistant_message=final_reply,
-                            is_private=is_private
-                        )
+                    memory_manager.schedule_extraction(
+                        conversation_id=conv_id,
+                        user_message=latest_user_text,
+                        assistant_message=final_reply,
+                        is_private=is_private
                     )
+                memory_manager.notify_chat_completed()
 
                 done_payload = {
                     "type": "done",
@@ -818,15 +818,13 @@ async def chat_endpoint(req: ChatRequest, response: Response):
         )
         if final_reply.strip():
             if not is_private and settings.memory_enabled and settings.memory_extract_after_each_turn:
-                import asyncio
-                asyncio.create_task(
-                    memory_manager.extract_and_store(
-                        conversation_id=conv_id,
-                        user_message=latest_user_text,
-                        assistant_message=final_reply,
-                        is_private=is_private
-                    )
+                memory_manager.schedule_extraction(
+                    conversation_id=conv_id,
+                    user_message=latest_user_text,
+                    assistant_message=final_reply,
+                    is_private=is_private
                 )
+        memory_manager.notify_chat_completed()
         return ChatResponse(
             role="assistant",
             content=final_reply,

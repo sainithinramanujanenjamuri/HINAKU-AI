@@ -40,7 +40,7 @@ router:
 local:
   provider: ollama
   host: http://localhost:11434
-  default_model: bonsai-2:9b      # Q4 fits 6 GB VRAM
+  default_model: bonsai-2:9b      # Q2_0 fits 6 GB VRAM
   keep_alive: "30m"             # keep model in VRAM
   allowed_models:               # larger ones run slower (partial CPU offload)
     - gemma3:4b
@@ -53,10 +53,9 @@ local:
   max_context_tokens: 2500
   think: false
   quality_mode: false
-  think_harder_num_predict: 5000
-  think_num_predict: 5000
+  think_num_predict: 3000
   detail_num_predict: 900
-  think_harder_timeout_seconds: 60
+  think_harder_timeout_seconds: 90
   hard_timeout_seconds: 120
   supports_think:
     - qwen3.5:4b

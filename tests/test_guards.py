@@ -227,6 +227,6 @@ def test_educational_stock_query_still_routes_to_model(monkeypatch):
 
 def test_default_model_and_keep_alive_settings():
     s = get_settings()
-    assert s.default_local_model in ("gemma3:4b", "bonsai-2:9b")
+    assert s.default_local_model == "bonsai-2:9b"
     assert s.local_keep_alive == "30m"
 

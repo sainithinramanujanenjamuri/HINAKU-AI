@@ -6,6 +6,7 @@ tools/
 .temp_smoke/
 data/*
 !data/bakeoff/
+!data/measure/
 models/
 logs/
 !backend/models/

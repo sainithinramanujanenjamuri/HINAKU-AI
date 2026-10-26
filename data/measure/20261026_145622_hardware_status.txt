@@ -1,0 +1,30 @@
+COMMAND: ollama ps && nvidia-smi
+TIMESTAMP: 2026-10-26T14:56:22.711049
+
+=== ollama ps ===
+NAME                    ID              SIZE      PROCESSOR    CONTEXT    RUNNER      UNTIL               
+bonsai-2:9b             c8b5462f8688    2.8 GB    100% GPU     4096       llamacpp    29 minutes from now    
+qwen3-embedding:0.6b    ac6da0dfba84    719 MB    100% GPU     512        llamacpp    4 minutes from now
+
+=== nvidia-smi ===
+Mon Oct 26 14:56:22 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 617.42                 KMD Version: 617.42        CUDA UMD Version: 13.4     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                  Driver-Model | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA GeForce RTX 4050 ...  WDDM  |   00000000:01:00.0 Off |                  N/A |
+| N/A   49C    P8              1W /   50W |    4246MiB /   6141MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|    0   N/A  N/A           28452      C   ...a\lib\ollama\llama-server.exe      N/A      |
+|    0   N/A  N/A           38804      C   ...a\lib\ollama\llama-server.exe      N/A      |
++-----------------------------------------------------------------------------------------+

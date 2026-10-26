@@ -9,7 +9,7 @@ from scripts.train_smoke import check_export_tools
 
 def test_shared_llm_settings():
     llm = get_shared_llm_settings()
-    assert llm["model"] in ("gemma3:4b", "bonsai-2:9b")
+    assert llm["model"] == "bonsai-2:9b"
     assert llm["keep_alive"] == "30m"
     assert llm["options"]["num_ctx"] == 4096
     assert llm["options"]["temperature"] == 0.6
