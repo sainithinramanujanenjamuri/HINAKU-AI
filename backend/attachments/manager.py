@@ -25,6 +25,7 @@ from .validator import (
 from .extractor import (
     extract_text_from_docx,
     extract_text_from_file,
+    extract_text_from_html,
     extract_text_from_pdf,
     validate_and_inspect_image
 )
@@ -100,13 +101,13 @@ class AttachmentManager:
         sections = []
 
         if file_type == "text":
-            pages = extract_text_from_file(content_bytes)
+            if safe_name.lower().endswith((".html", ".htm")):
+                pages = extract_text_from_html(content_bytes)
+            else:
+                pages = extract_text_from_file(content_bytes)
             extracted_text = "\n\n".join(p.text for p in pages if p.text)
             chunks = chunk_document_pages("temp", safe_name, pages)
-            if "<h1" in extracted_text.lower() or "<h2" in extracted_text.lower():
-                _, sections = extract_outline_from_html(extracted_text)
-            else:
-                _, sections = extract_outline_from_pages(pages, safe_name)
+            _, sections = extract_outline_from_pages(pages, safe_name)
         elif file_type == "docx":
             pages = extract_text_from_docx(content_bytes)
             extracted_text = "\n\n".join(p.text for p in pages if p.text)

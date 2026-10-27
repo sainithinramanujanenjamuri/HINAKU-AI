@@ -1,0 +1,52 @@
+TIMESTAMP: 2026-10-27T12:19:45.237026+00:00
+SECTION: Topic 3 — Privacy, Fairness, Accountability, Transparency (FAT*) in AI Context
+FLAGGED ITEM: Collecting
+REASON: Term 'Collecting' was not found in section text or full document.
+SOURCE TEXT SNIPPET:
+FAT*
+ = four mutually reinforcing properties of trustworthy AI:
+10/27/26, 1:09 PM
+file:///D:/HINAKU-AI/tests/real_samples/Security,%20Ethics%20&%20Regulations%20in%20AI%20-%20Midterm%20Notes.html
+2
+/
+14
+
+Letter
+Property
+Meaning
+P
+Privacy
+Protect personal data, control inappropriate inference
+F
+Fairness
+Manage harmful bias and unjustified disparities
+A
+Accountability
+Assign responsibility, audit de...
+================================================================================
+TIMESTAMP: 2026-10-27T12:19:45.239168+00:00
+SECTION: Topic 3 — Privacy, Fairness, Accountability, Transparency (FAT*) in AI Context
+FLAGGED ITEM: Storing
+REASON: Term 'Storing' was not found in section text or full document.
+SOURCE TEXT SNIPPET:
+FAT*
+ = four mutually reinforcing properties of trustworthy AI:
+10/27/26, 1:09 PM
+file:///D:/HINAKU-AI/tests/real_samples/Security,%20Ethics%20&%20Regulations%20in%20AI%20-%20Midterm%20Notes.html
+2
+/
+14
+
+Letter
+Property
+Meaning
+P
+Privacy
+Protect personal data, control inappropriate inference
+F
+Fairness
+Manage harmful bias and unjustified disparities
+A
+Accountability
+Assign responsibility, audit de...
+================================================================================

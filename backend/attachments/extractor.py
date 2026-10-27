@@ -9,6 +9,8 @@ Text and content extraction for attachments:
 - Images: PIL Image metadata verification
 """
 
+import html
+from html.parser import HTMLParser
 import io
 import re
 import xml.etree.ElementTree as ET
@@ -23,12 +25,94 @@ class DocumentPage:
         self.text = text.strip()
 
 def extract_text_from_file(content: bytes) -> List[DocumentPage]:
-    """Extract plain text from txt, md, csv, json, code, html files."""
+    """Extract plain text from txt, md, csv, json, code files."""
     try:
         text = content.decode("utf-8")
     except UnicodeDecodeError:
         text = content.decode("latin-1", errors="replace")
     return [DocumentPage(page_number=1, text=text)]
+
+class SafeHTMLTextExtractor(HTMLParser):
+    """
+    Standard-library HTML-to-text converter:
+    - Drops script, style, noscript, head, iframe elements
+    - Drops hidden elements (display:none, visibility:hidden, hidden attribute, zero font size)
+    - Formats headings (#, ##, etc.) for outline extraction
+    - Correctly handles HTML5 void tags without end tags
+    - Treats output strictly as untrusted user text
+    """
+    IGNORE_TAGS = {"script", "style", "noscript", "head", "iframe", "object", "embed"}
+    VOID_TAGS = {"meta", "link", "img", "br", "hr", "input", "base", "area", "col", "source", "track", "wbr"}
+
+    def __init__(self):
+        super().__init__()
+        self.text_parts = []
+        self.ignore_stack = []
+
+    def _is_hidden(self, attrs):
+        for k, v in attrs:
+            if k == "hidden":
+                return True
+            if k == "style" and v:
+                v_clean = v.lower().replace(" ", "")
+                if any(rule in v_clean for rule in ("display:none", "visibility:hidden", "font-size:0", "opacity:0")):
+                    return True
+        return False
+
+    def handle_starttag(self, tag, attrs):
+        tag = tag.lower()
+        if self.ignore_stack:
+            if tag not in self.VOID_TAGS:
+                self.ignore_stack.append(tag)
+            return
+
+        if tag in self.IGNORE_TAGS or self._is_hidden(attrs):
+            if tag not in self.VOID_TAGS:
+                self.ignore_stack.append(tag)
+            return
+
+        if tag in {"h1", "h2", "h3", "h4", "h5", "h6"}:
+            level = int(tag[1])
+            self.text_parts.append("\n\n" + "#" * level + " ")
+        elif tag in {"p", "div", "section", "article", "tr"}:
+            self.text_parts.append("\n\n")
+        elif tag == "li":
+            self.text_parts.append("\n* ")
+        elif tag == "br":
+            self.text_parts.append("\n")
+        elif tag in {"td", "th"}:
+            self.text_parts.append(" | ")
+
+    def handle_endtag(self, tag):
+        tag = tag.lower()
+        if self.ignore_stack:
+            if tag in self.ignore_stack:
+                while self.ignore_stack:
+                    popped = self.ignore_stack.pop()
+                    if popped == tag:
+                        break
+            return
+        if tag in {"h1", "h2", "h3", "h4", "h5", "h6"}:
+            self.text_parts.append("\n\n")
+
+    def handle_data(self, data):
+        if not self.ignore_stack and data:
+            self.text_parts.append(data)
+
+def extract_text_from_html(content: bytes) -> List[DocumentPage]:
+    """Extract structured, sanitised plain text from HTML content."""
+    try:
+        raw_html = content.decode("utf-8")
+    except UnicodeDecodeError:
+        raw_html = content.decode("latin-1", errors="replace")
+
+    parser = SafeHTMLTextExtractor()
+    parser.feed(raw_html)
+    raw_text = "".join(parser.text_parts)
+    unescaped = html.unescape(raw_text)
+    cleaned = re.sub(r"\n{3,}", "\n\n", unescaped).strip()
+    return [DocumentPage(page_number=1, text=cleaned)]
+
 
 def extract_text_from_docx(content: bytes) -> List[DocumentPage]:
     """

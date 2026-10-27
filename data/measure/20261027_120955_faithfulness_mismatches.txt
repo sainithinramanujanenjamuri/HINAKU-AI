@@ -1,0 +1,18 @@
+TIMESTAMP: 2026-10-27T12:09:55.931283+00:00
+SECTION: Topic 2 — AI System Lifecycle and Associated Risks
+FLAGGED ITEM: AI System Lifecycle Stages
+REASON: Term 'AI System Lifecycle Stages' was not found in section text or full document.
+SOURCE TEXT SNIPPET:
+7 lifecycle stages
+ (iterative, not "finished" at deployment):
+1. 
+Inception/Scoping
+ – define purpose, users, success criteria; identify stakeholders; risk tolerance &
+accountability. Risks: wrong problem framing, automation bias, unclear ownership.
+2. 
+Design & Development
+ – data + model + supply chain. Risks: poisoning, bias, privacy, IP.
+3. 
+Verification & Validation
+ – functional, performanc...
+================================================================================

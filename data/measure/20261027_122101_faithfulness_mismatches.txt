@@ -1,0 +1,22 @@
+TIMESTAMP: 2026-10-27T12:21:01.723812+00:00
+SECTION: Topic 6 — Inference and Extraction Attacks: Stealing Secrets
+FLAGGED ITEM: Threat Severity & Confidence Scores
+REASON: Term 'Threat Severity & Confidence Scores' was not found in section text or full document.
+SOURCE TEXT SNIPPET:
+Inference
+ = derive hidden facts from outputs. 
+Extraction
+ = recover model/data secrets. Both threaten
+privacy and IP
+.
+The "Secret" surface:
+ Training data (personal/confidential records), Model (parameters/behavior), API
+(predictions/confidence), Logs (prompts/context/outputs).
+Attack taxonomy (NIST AI 100-2e2025):
+Attack
+Goal
+Membership inference
+Was a sample in training?
+Attribute inference
+I...
+================================================================================

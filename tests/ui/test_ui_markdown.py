@@ -57,6 +57,12 @@ def parse_markdown_python_replica(text: str) -> str:
             out.append("<hr>")
             continue
 
+        # Action buttons pass-through
+        if re.match(r'^\s*<(?:div class="walkthrough-actions-row"|/div|button class="walkthrough-action-btn[^"]*"[^>]*>.*</button>)\s*$', line):
+            close_lists()
+            out.append(line)
+            continue
+
         # Headings: # to ######
         hm = re.match(r"^(#{1,6})\s+(.*)$", line)
         if hm:
@@ -134,6 +140,22 @@ def test_markdown_rendering_on_walkthrough_data():
     assert "<h3>1. Defining Games &amp; Play</h3>" in html
     assert "<strong>goal-oriented system</strong>" in html
     assert "<hr>" in html
+
+
+def test_walkthrough_action_buttons_render_cleanly():
+    """Validates that Continue to Unit and Study Aid action buttons are rendered as real buttons."""
+    button_markup = (
+        "**Unit 1 Complete.**\n\n"
+        '<div class="walkthrough-actions-row">\n'
+        '  <button class="walkthrough-action-btn" data-prompt="explain unit 2">Continue to Unit 2 →</button>\n'
+        '  <button class="walkthrough-action-btn highlight" data-prompt="explain the study aids">Explain All Study Aids →</button>\n'
+        '</div>'
+    )
+    rendered = parse_markdown_python_replica(button_markup)
+    assert '<button class="walkthrough-action-btn" data-prompt="explain unit 2">Continue to Unit 2 →</button>' in rendered
+    assert '<button class="walkthrough-action-btn highlight" data-prompt="explain the study aids">Explain All Study Aids →</button>' in rendered
+    assert "&lt;button" not in rendered
+
 
 
 def test_ui_javascript_imports_and_exports_integrity():

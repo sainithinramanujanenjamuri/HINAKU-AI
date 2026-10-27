@@ -28,7 +28,7 @@ MIN_FREE_DISK_HEADROOM_BYTES = 2 * 1024 * 1024 * 1024  # 2 GB
 # Supported extensions
 TEXT_EXTENSIONS: Set[str] = {
     ".txt", ".md", ".csv", ".json", ".xml", ".yaml", ".yml",
-    ".py", ".js", ".ts", ".jsx", ".tsx", ".html", ".css",
+    ".py", ".js", ".ts", ".jsx", ".tsx", ".html", ".htm", ".css",
     ".c", ".cpp", ".h", ".hpp", ".rs", ".go", ".java", ".sh",
     ".sql", ".ini", ".cfg", ".toml", ".log"
 }

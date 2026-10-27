@@ -62,6 +62,17 @@
     - Pauses background training when the owner is actively using the laptop (keyboard/mouse idle detection) or when running on battery power.
     - Generates detailed Markdown and JSON reports stored in `logs/reports/` and visible in the UI.
 
+11. **Document Understanding & Study Walkthrough (Phase 2 & 2b)**
+    - Multi-format ingestion: PDF, DOCX, TXT, MD, CSV, JSON, code, and HTML (`.html`, `.htm`).
+    - Safe HTML extraction using stdlib `html.parser`, stripping `<script>`, `<style>`, `<noscript>`, and elements hidden via `hidden`, `display:none`, `visibility:hidden`, `font-size:0`, or `opacity:0`.
+    - Automated outline extraction at upload (units, topics, page ranges, token counts) stored in SQLite `attachment_sections`.
+    - Code-level intent routing: overview queries ("explain this", "study guide", "walk me through") trigger sequential unit walkthroughs with rolling progress estimates.
+    - Study style enforcement in code: short explanation, `*Example (analogous)*:`, and `Exam-Oriented Key Takeaways` (2 bullets). Missing components trigger targeted single-pass addendums without re-generating whole topics.
+    - Automatic count consistency validation ("N phases/types/pillars" compared against bullet counts).
+    - False-positive-free faithfulness grounding verifying named concepts across the source document.
+    - Interactive UI action buttons ("Continue to Unit 2", study-aid prompts) executing subsequent sections directly in chat.
+
+
 ---
 
 ## Target Environment

@@ -1,0 +1,26 @@
+COMMAND: python scripts/measure_faithfulness_precision.py
+TIMESTAMP: 2026-10-27T16:52:11.991676
+================================================================================
+FAITHFULNESS CHECK PRECISION & FALSE POSITIVE EVALUATION ON REAL SAMPLES
+================================================================================
+
+Document: Game Mechanics, Design & Development - Midterm Notes for Units 1 and 2.pdf
+Title: Game Mechanics, Design & Development — Midterm Notes (Units 1 & 2)
+Total Sections: 29
+Tested Named Items: 11
+Flagged Mismatches: 0
+False-Positive Rate: 0.00%
+
+Document: Security, Ethics & Regulations in AI - Midterm Notes.pdf
+Title: Security, Ethics & Regulations in AI — Midterm Study Notes
+Total Sections: 17
+Tested Named Items: 17
+Flagged Mismatches: 0
+False-Positive Rate: 0.00%
+
+================================================================================
+OVERALL SUMMARY ACROSS SAMPLES
+Total Named Items Tested: 28
+Total False Positives: 0
+Overall False-Positive Rate: 0.00%
+================================================================================

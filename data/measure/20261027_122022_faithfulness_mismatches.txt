@@ -1,0 +1,12 @@
+TIMESTAMP: 2026-10-27T12:20:22.093743+00:00
+SECTION: Topic 4 — Evolving Threat Landscape: Adversarial AI
+FLAGGED ITEM: Defense-in-Depth Strategy
+REASON: Term 'Defense-in-Depth Strategy' was not found in section text or full document.
+SOURCE TEXT SNIPPET:
+Adversarial ML
+ = deliberate manipulation of AI/ML by motivated attackers (attacker → target
+[data/model/app] → goal [change behavior/extract info] → impact [safety/privacy/integrity/availability]).
+Threat landscape evolution:
+ Classical cyber → ML-specific (poisoning/evasion/extraction) → GenAI/LLM
+(prompt injection/leakage) → Agentic AI (excessive agency) → Supply chain → Socio-technical (over-t...
+================================================================================

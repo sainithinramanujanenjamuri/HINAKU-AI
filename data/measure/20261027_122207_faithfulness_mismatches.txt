@@ -1,0 +1,15 @@
+TIMESTAMP: 2026-10-27T12:22:07.562585+00:00
+SECTION: Topic 8 — LLM and RAG Vulnerabilities: Data Poisoning, Supply Chain, Vector DB Issues
+FLAGGED ITEM: Vector DB Weaknesses
+REASON: Term 'Vector DB Weaknesses' was not found in section text or full document.
+SOURCE TEXT SNIPPET:
+Why RAG changes the threat model:
+ LLM is no longer the only component to protect — external
+documents, embedding models, vector stores, and retrieval logic all matter. Trust boundaries exist at Data
+→ Access → Context → Output stages (Security lens: 
+C·I·A
+).
+RAG pipeline:
+ Source docs → Chunk + Embed → Vector Store → Retrieval + ACL → LLM + Response. Each
+boundary needs provenance, authorization...
+================================================================================

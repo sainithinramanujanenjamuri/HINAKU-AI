@@ -280,6 +280,17 @@ function setupEventListeners() {
 
   dom.scrollBottomBtn?.addEventListener("click", scrollToBottom);
 
+  // Action buttons inside walkthrough messages (e.g. Continue to Unit, Study Aids)
+  dom.chatViewport?.addEventListener("click", (e) => {
+    const btn = e.target.closest(".walkthrough-action-btn");
+    if (!btn) return;
+    const promptText = btn.dataset.prompt;
+    if (promptText && dom.promptInput) {
+      dom.promptInput.value = promptText;
+      handleSendMessage();
+    }
+  });
+
   // Context panel toggle
   dom.contextPanelToggleBtn?.addEventListener("click", () => {
     dom.contextPanel?.classList.toggle("collapsed");

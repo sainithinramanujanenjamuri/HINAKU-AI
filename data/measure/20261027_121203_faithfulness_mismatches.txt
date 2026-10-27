@@ -1,0 +1,87 @@
+TIMESTAMP: 2026-10-27T12:12:03.650507+00:00
+SECTION: Topic 9 — Frameworks for Understanding AI Threats: MITRE ATLAS
+FLAGGED ITEM: What is ATLAS?
+REASON: Term 'What is ATLAS?' was not found in section text or full document.
+SOURCE TEXT SNIPPET:
+ATLAS
+ = 
+A
+dversarial 
+T
+hreat 
+L
+andscape for 
+A
+rtificial-Intelligence 
+S
+ystems — a living knowledge base of
+adversary tactics/techniques against AI-enabled systems, modeled after and 
+complementary to MITRE
+ATT&CK
+.
+ATT&CK
+ → enterprise/traditional cyber behavior.
+ATLAS
+ → AI-enabled threat behavior.
+Both together give full-system threat-informed defense.
+10/27/26, 1:09 PM
+file:///D:/HINAKU-A...
+================================================================================
+TIMESTAMP: 2026-10-27T12:12:03.662393+00:00
+SECTION: Topic 9 — Frameworks for Understanding AI Threats: MITRE ATLAS
+FLAGGED ITEM: The ATLAS Matrix
+REASON: Term 'The ATLAS Matrix' was not found in section text or full document.
+SOURCE TEXT SNIPPET:
+ATLAS
+ = 
+A
+dversarial 
+T
+hreat 
+L
+andscape for 
+A
+rtificial-Intelligence 
+S
+ystems — a living knowledge base of
+adversary tactics/techniques against AI-enabled systems, modeled after and 
+complementary to MITRE
+ATT&CK
+.
+ATT&CK
+ → enterprise/traditional cyber behavior.
+ATLAS
+ → AI-enabled threat behavior.
+Both together give full-system threat-informed defense.
+10/27/26, 1:09 PM
+file:///D:/HINAKU-A...
+================================================================================
+TIMESTAMP: 2026-10-27T12:12:03.685347+00:00
+SECTION: Topic 9 — Frameworks for Understanding AI Threats: MITRE ATLAS
+FLAGGED ITEM: Using ATLAS for Defense
+REASON: Term 'Using ATLAS for Defense' was not found in section text or full document.
+SOURCE TEXT SNIPPET:
+ATLAS
+ = 
+A
+dversarial 
+T
+hreat 
+L
+andscape for 
+A
+rtificial-Intelligence 
+S
+ystems — a living knowledge base of
+adversary tactics/techniques against AI-enabled systems, modeled after and 
+complementary to MITRE
+ATT&CK
+.
+ATT&CK
+ → enterprise/traditional cyber behavior.
+ATLAS
+ → AI-enabled threat behavior.
+Both together give full-system threat-informed defense.
+10/27/26, 1:09 PM
+file:///D:/HINAKU-A...
+================================================================================

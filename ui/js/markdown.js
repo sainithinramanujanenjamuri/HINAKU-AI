@@ -67,6 +67,13 @@ export function parseOfflineMarkdown(text) {
       continue;
     }
 
+    // Interactive action buttons pass-through (Continue to Unit / Study aids)
+    if (/^\s*<(?:div class="walkthrough-actions-row"|\/div|button class="walkthrough-action-btn[^"]*"[^>]*>.*<\/button>)\s*$/.test(line)) {
+      closeLists();
+      out += line;
+      continue;
+    }
+
     // Headings: # to ######
     const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
     if (headingMatch) {

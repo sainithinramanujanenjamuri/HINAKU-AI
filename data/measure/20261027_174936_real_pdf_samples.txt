@@ -1,0 +1,75 @@
+COMMAND: python scripts/measure_pdf_samples_report.py
+TIMESTAMP: 2026-10-27T17:49:36.891657
+================================================================================
+REAL PDF SAMPLES EXTRACTION REPORT & AUDIT
+================================================================================
+
+Found 2 PDF file(s) in D:\HINAKU-AI\tests\real_samples:
+
+--- File: Game Mechanics, Design & Development - Midterm Notes for Units 1 and 2.pdf ---
+Size: 403557 bytes (394.1 KB)
+Total Pages Detected: 13
+Pages with Text: 13
+Share of Pages with Text: 100.00%
+Total Extracted Characters: 32460
+Extraction Status: SUCCESS
+First Page Sample Text (up to 300 chars):
+    'Game Mechanics, Design & Development — Midterm Notes (Units 1 & 2)\nUNIT 1 — FOUNDATIONAL CONCEPTS\n1. Defining Games & Play\nGames\n = goal-oriented systems governed by rules that define permissible actions and outcomes.\nCore interaction loop: \nChallenge\n (puzzles, opponents, environments to navigate)'
+
+--- File: Security, Ethics & Regulations in AI - Midterm Notes.pdf ---
+Size: 396930 bytes (387.6 KB)
+Total Pages Detected: 14
+Pages with Text: 14
+Share of Pages with Text: 100.00%
+Total Extracted Characters: 32530
+Extraction Status: SUCCESS
+First Page Sample Text (up to 300 chars):
+    'Security, Ethics & Regulations in AI — Midterm Study Notes\nUnits 1–2 | 23CS201PE408\nUNIT 1: AI Threat Landscape and Vulnerabilities\nTopic 1 — AI Triad: Security, Ethics, and Regulation\nAI Triad = three interconnected pillars\nPillar\nFocus\nSecurity\nProtect AI systems (confidentiality, integrity, avail'
+
+================================================================================
+605-BYTE TEST SPECIFICATION PDF AUDIT
+================================================================================
+Exact Binary Size: 605 bytes
+Pages Extracted: 1
+Extracted Character Count: 469
+
+Extracted Text from 605-byte PDF:
+----------------------------------------
+Project HINAKU Specification. System Architecture: Local-first autonomous assistant operating on laptop GPU with 6 GB VRAM. Default Model: bonsai-2:9b running 100% on GPU with context 4096. Memory System: Extracted facts stored in SQLite and Chroma vector index with qwen3-embedding:0.6b. Privacy Rules: Private chats and document attachments are strictly locked to the local model. Self-Build Cycle: QLoRA fine-tuning evaluated against golden benchmark every 6 months.
+----------------------------------------
+
+Analysis of the 'quarterly ... every six months' Discrepancy:
+1. Ground Truth in Document:
+   'Self-Build Cycle: QLoRA fine-tuning evaluated against golden benchmark every 6 months.'
+2. Generated Model Summary (from data/measure/20261026_152236_phase1_live_pdf_and_injection.txt line 10):
+   '...while the system undergoes quarterly QLoRA fine-tuning evaluations against a golden benchmark every six months.'
+3. Root Cause Explanation:
+   - The word 'quarterly' NEVER appeared in the source text or the prompt.
+   - In standard corporate/engineering reporting terminology, fine-tuning evaluations and benchmarks are commonly termed 'quarterly evaluations'.
+   - The language model merged this semantic prior with the explicitly stated source fact ('every six months'), outputting 'quarterly QLoRA fine-tuning evaluations against a golden benchmark every six months'.
+   - This is an ungrounded modifier insertion / hallucinated conjunction by the model, reinforcing the necessity of our code-level faithfulness verifier.
+
+================================================================================
+PDF EXTRACTION ENGINE EVALUATION & THIRD-PARTY PROPOSALS
+================================================================================
+Current Implementation: Custom lightweight zero-dependency FlateDecode / PDF parser.
+Limitations of current parser:
+- Limited font ToUnicode CMap mapping (can produce disjoint letter spacing for certain browser-printed PDFs).
+- Does not parse tabular vector coordinates into markdown tables.
+- Scanned/raster-only PDFs lack OCR without external OCR engine.
+
+Proposed Robust PDF Engines (Awaiting User Approval):
+1. pypdf
+   - Version: 5.3.0
+   - Release Date: 2025-02-09 (more than 14 days old)
+   - Package Size: 295 KB (pure Python wheel)
+   - License: BSD-3-Clause
+   - Capabilities: Broad standard compliance, Deflate/FlateDecode, ToUnicode CMaps, encryption support, zero C-extensions.
+
+2. pdfminer.six
+   - Version: 20240706
+   - Release Date: 2024-07-06 (more than 14 days old)
+   - Package Size: 5.0 MB
+   - License: MIT
+   - Capabilities: Advanced layout analysis (LTTextBox, LTTextLine), precise glyph positioning, font CMap handling, tabular structure detection.
+================================================================================

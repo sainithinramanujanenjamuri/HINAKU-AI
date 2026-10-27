@@ -1,0 +1,54 @@
+TIMESTAMP: 2026-10-27T12:20:36.799714+00:00
+SECTION: Topic 5 — Evasion & Poisoning Attacks
+FLAGGED ITEM: Threat Spectrum & Domains
+REASON: Term 'Threat Spectrum & Domains' was not found in section text or full document.
+SOURCE TEXT SNIPPET:
+Core distinction — WHEN the attacker intervenes:
+Evasion
+Poisoning
+When
+Inference-time
+Training/fine-tuning time
+Target
+Input
+Learning process
+Persistence
+Often per-input
+Can persist in the model
+Security property
+Integrity (mainly)
+Integrity
+Defense
+Robustness/testing
+Provenance/validation
+Evasion:
+ clean input → strategically manipulated → same deployed model → different (attacker-useful)
+predic...
+================================================================================
+TIMESTAMP: 2026-10-27T12:20:36.803954+00:00
+SECTION: Topic 5 — Evasion & Poisoning Attacks
+FLAGGED ITEM: Poisoning Types & Backdoors
+REASON: Term 'Poisoning Types & Backdoors' was not found in section text or full document.
+SOURCE TEXT SNIPPET:
+Core distinction — WHEN the attacker intervenes:
+Evasion
+Poisoning
+When
+Inference-time
+Training/fine-tuning time
+Target
+Input
+Learning process
+Persistence
+Often per-input
+Can persist in the model
+Security property
+Integrity (mainly)
+Integrity
+Defense
+Robustness/testing
+Provenance/validation
+Evasion:
+ clean input → strategically manipulated → same deployed model → different (attacker-useful)
+predic...
+================================================================================

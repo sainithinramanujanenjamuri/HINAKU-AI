@@ -1,0 +1,36 @@
+TIMESTAMP: 2026-10-27T11:20:17.683329+00:00
+SECTION: Topic 9
+FLAGGED ITEM: Adversarial Threat Landscape for Artificial-Intelligence Systems
+REASON: Term 'Adversarial Threat Landscape for Artificial-Intelligence Systems' was not found in section text or full document.
+SOURCE TEXT SNIPPET:
+Security, Ethics & Regulations in AI — Midterm Study Notes
+Units 1–2 | 23CS201PE408
+UNIT 1: AI Threat Landscape and Vulnerabilities
+Topic 1 — AI Triad: Security, Ethics, and Regulation
+AI Triad = three interconnected pillars
+Pillar
+Focus
+Security
+Protect AI systems (confidentiality, integrity, availability, trustworthiness)
+Ethics
+Responsible AI (fairness, accountability, transparency, privacy)
+Re...
+================================================================================
+TIMESTAMP: 2026-10-27T11:20:17.683849+00:00
+SECTION: Topic 9
+FLAGGED ITEM: MITRE ATT&CK
+REASON: Term 'MITRE ATT&CK' was not found in section text or full document.
+SOURCE TEXT SNIPPET:
+Security, Ethics & Regulations in AI — Midterm Study Notes
+Units 1–2 | 23CS201PE408
+UNIT 1: AI Threat Landscape and Vulnerabilities
+Topic 1 — AI Triad: Security, Ethics, and Regulation
+AI Triad = three interconnected pillars
+Pillar
+Focus
+Security
+Protect AI systems (confidentiality, integrity, availability, trustworthiness)
+Ethics
+Responsible AI (fairness, accountability, transparency, privacy)
+Re...
+================================================================================
