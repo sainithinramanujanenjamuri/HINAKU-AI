@@ -19,21 +19,31 @@ export function formatMarkdown(text) {
   return wrapCodeBlocks(html);
 }
 
-function parseOfflineMarkdown(text) {
-  // Simple, offline-safe markdown parser for dark desktop assistant
+export function parseOfflineMarkdown(text) {
+  // Offline-safe markdown parser supporting headers, rules, lists, and inline styles
   let out = "";
   const lines = text.split("\n");
   let inCode = false;
   let codeLang = "";
   let codeBuffer = [];
-  let inList = false;
+  let inUl = false;
+  let inOl = false;
+  let inTable = false;
+
+  function closeLists() {
+    if (inUl) { out += "</ul>"; inUl = false; }
+    if (inOl) { out += "</ol>"; inOl = false; }
+    if (inTable) { out += "</tbody></table>"; inTable = false; }
+  }
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const codeMatch = line.match(/^```([a-zA-Z0-9_-]*)/);
+    const rawLine = lines[i];
+    const line = rawLine.trimEnd();
 
+    // Code blocks: ```python ... ```
+    const codeMatch = line.match(/^```([a-zA-Z0-9_-]*)/);
     if (codeMatch && !inCode) {
-      if (inList) { out += "</ul>"; inList = false; }
+      closeLists();
       inCode = true;
       codeLang = codeMatch[1] || "text";
       codeBuffer = [];
@@ -46,24 +56,58 @@ function parseOfflineMarkdown(text) {
     }
 
     if (inCode) {
-      codeBuffer.push(line);
+      codeBuffer.push(rawLine);
       continue;
     }
 
-    // List item
-    const listMatch = line.match(/^[-*+]\s+(.*)/);
-    if (listMatch) {
-      if (!inList) { out += "<ul>"; inList = true; }
-      out += `<li>${formatInline(listMatch[1])}</li>`;
+    // Horizontal rule: --- or *** or ___ (at least 3 characters)
+    if (/^\s*([*\-_])\s*(?:\1\s*){2,}$/.test(line)) {
+      closeLists();
+      out += "<hr>";
       continue;
-    } else if (inList) {
-      out += "</ul>";
-      inList = false;
     }
 
-    // Empty line -> paragraph break
+    // Headings: # to ######
+    const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
+    if (headingMatch) {
+      closeLists();
+      const level = headingMatch[1].length;
+      const content = formatInline(headingMatch[2].trim());
+      out += `<h${level}>${content}</h${level}>`;
+      continue;
+    }
+
+    // Blockquote: > quote
+    const quoteMatch = line.match(/^>\s*(.*)$/);
+    if (quoteMatch) {
+      closeLists();
+      out += `<blockquote><p>${formatInline(quoteMatch[1])}</p></blockquote>`;
+      continue;
+    }
+
+    // Unordered list item: - or * or +
+    const ulMatch = line.match(/^[\s]*[-*+]\s+(.*)$/);
+    if (ulMatch) {
+      if (inOl) { out += "</ol>"; inOl = false; }
+      if (!inUl) { out += "<ul>"; inUl = true; }
+      out += `<li>${formatInline(ulMatch[1])}</li>`;
+      continue;
+    }
+
+    // Ordered list item: 1. 2. etc.
+    const olMatch = line.match(/^[\s]*\d+\.\s+(.*)$/);
+    if (olMatch) {
+      if (inUl) { out += "</ul>"; inUl = false; }
+      if (!inOl) { out += "<ol>"; inOl = true; }
+      out += `<li>${formatInline(olMatch[1])}</li>`;
+      continue;
+    }
+
+    // Non-list line
+    closeLists();
+
+    // Empty line
     if (!line.trim()) {
-      out += "<br>";
       continue;
     }
 
@@ -74,64 +118,60 @@ function parseOfflineMarkdown(text) {
     const escaped = codeBuffer.join("\n").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     out += `<pre><code class="language-${codeLang}">${escaped}</code></pre>`;
   }
-  if (inList) {
-    out += "</ul>";
-  }
+  closeLists();
 
   return out;
 }
 
-function formatInline(str) {
+export function formatInline(str) {
   return str
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
     .replace(/`([^`]+)`/g, "<code>$1</code>")
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*([^*]+)\*/g, "<em>$1</em>");
+    .replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, "<em>$1</em>");
 }
 
 function wrapCodeBlocks(html) {
+  if (typeof document === "undefined") return html;
   const temp = document.createElement("div");
   temp.innerHTML = html;
 
   const preBlocks = temp.querySelectorAll("pre");
   preBlocks.forEach(pre => {
     const code = pre.querySelector("code");
-    let lang = "code";
-    if (code) {
-      const cls = Array.from(code.classList).find(c => c.startsWith("language-"));
-      if (cls) lang = cls.replace("language-", "");
-    }
+    if (!code) return;
+
+    let lang = "text";
+    code.classList.forEach(cls => {
+      if (cls.startsWith("language-")) {
+        lang = cls.replace("language-", "");
+      }
+    });
 
     const header = document.createElement("div");
-    header.className = "code-header-bar";
-    header.innerHTML = `
-      <span>${lang}</span>
-      <button class="copy-code-btn" type="button">📋 Copy</button>
-    `;
+    header.className = "code-block-header";
 
-    pre.insertBefore(header, pre.firstChild);
+    const langSpan = document.createElement("span");
+    langSpan.className = "code-lang-label";
+    langSpan.textContent = lang;
+
+    const copyBtn = document.createElement("button");
+    copyBtn.className = "code-copy-btn";
+    copyBtn.textContent = "Copy";
+    copyBtn.onclick = () => {
+      navigator.clipboard.writeText(code.textContent).then(() => {
+        copyBtn.textContent = "Copied!";
+        setTimeout(() => (copyBtn.textContent = "Copy"), 2000);
+      });
+    };
+
+    header.appendChild(langSpan);
+    header.appendChild(copyBtn);
+    pre.insertBefore(header, code);
   });
 
   return temp.innerHTML;
 }
-
-export function attachCodeBlockCopyHandlers(container) {
-  if (!container) return;
-  const buttons = container.querySelectorAll(".copy-code-btn");
-  buttons.forEach(btn => {
-    btn.onclick = (e) => {
-      e.stopPropagation();
-      const pre = btn.closest("pre");
-      if (!pre) return;
-      const codeEl = pre.querySelector("code");
-      const textToCopy = codeEl ? codeEl.innerText : pre.innerText;
-      navigator.clipboard.writeText(textToCopy).then(() => {
-        btn.textContent = "✓ Copied";
-        setTimeout(() => (btn.textContent = "📋 Copy"), 2000);
-      });
-    };
-  });
-}
-

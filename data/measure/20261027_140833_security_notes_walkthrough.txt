@@ -1,0 +1,235 @@
+COMMAND: python scripts/run_security_notes_walkthrough.py
+TIMESTAMP: 2026-10-27T14:08:33.851721
+================================================================================
+SECURITY NOTES WALKTHROUGH EXECUTION & REPORT
+================================================================================
+
+--- DOCUMENT STRUCTURE & OUTLINE SUMMARY ---
+Document Title: Security, Ethics & Regulations in AI — Midterm Study Notes
+Total Pages: 14
+Unit 1: UNIT 1: AI Threat Landscape and Vulnerabilities (9 topics)
+Unit 2: UNIT 2: Securing AI Systems and ML Lifecycle (MLSecOps) (5 sessions)
+Study Aids (3): Quick-Reference Glossary, Quick-Reference: Attack Comparison, Likely Exam Themes
+
+--- WALKTHROUGH STREAMED INTRO ---
+**Security, Ethics & Regulations in AI — Midterm Study Notes**
+
+Your notes contain **2 units, 9 topics in Unit 1, 5 sessions in Unit 2, plus 3 study aids**. We'll learn them step by step starting with **UNIT 1: AI Threat Landscape and Vulnerabilities** (~95s estimated).
+
+---
+
+--- STEP-BY-STEP TOPIC GENERATION & TIMINGS ---
+[Topic 1/9] Topic 1 — AI Triad: Security, Ethics, and Reg | Est: 95s | Act:  8.03s | Rolling:  8.03s | Faithfulness: REGENERATED (FALLBACK_ANNOTATED)
+[Topic 2/9] Topic 2 — AI System Lifecycle and Associated  | Est: 64s | Act:  7.89s | Rolling:  7.96s | Faithfulness: REGENERATED (PASSED)
+[Topic 3/9] Topic 3 — Privacy, Fairness, Accountability,  | Est: 56s | Act:  7.98s | Rolling:  7.97s | Faithfulness: REGENERATED (PASSED)
+[Topic 4/9] Topic 4 — Evolving Threat Landscape: Adversar | Est: 48s | Act:  7.77s | Rolling:  7.92s | Faithfulness: REGENERATED (FALLBACK_ANNOTATED)
+[Topic 5/9] Topic 5 — Evasion & Poisoning Attacks         | Est: 40s | Act:  7.83s | Rolling:  7.90s | Faithfulness: PASSED (DIRECT)
+[Topic 6/9] Topic 6 — Inference and Extraction Attacks: S | Est: 32s | Act:  7.76s | Rolling:  7.88s | Faithfulness: REGENERATED (FALLBACK_ANNOTATED)
+[Topic 7/9] Topic 7 — LLM and Transformer Vulnerabilities | Est: 24s | Act:  7.88s | Rolling:  7.88s | Faithfulness: PASSED (DIRECT)
+[Topic 8/9] Topic 8 — LLM and RAG Vulnerabilities: Data P | Est: 16s | Act:  8.23s | Rolling:  7.92s | Faithfulness: PASSED (DIRECT)
+[Topic 9/9] Topic 9 — Frameworks for Understanding AI Thr | Est:  8s | Act:  8.00s | Rolling:  7.93s | Faithfulness: REGENERATED (FALLBACK_ANNOTATED)
+
+================================================================================
+FULL WALKTHROUGH ASSISTANT REPLY TEXT
+================================================================================
+**Security, Ethics & Regulations in AI — Midterm Study Notes**
+
+Your notes contain **2 units, 9 topics in Unit 1, 5 sessions in Unit 2, plus 3 study aids**. We'll learn them step by step starting with **UNIT 1: AI Threat Landscape and Vulnerabilities** (~95s estimated).
+
+---
+
+### Topic 1 — AI Triad: Security, Ethics, and Regulation
+
+**AI Triad Definition** *(wording not from your notes)*
+The **AI Triad** consists of three interconnected pillars: **Security**, **Ethics**, and **Regulation**. Together, they form the foundation for safe and responsible AI adoption. Without this triad, AI systems become unsafe, unfair, and potentially illegal.
+
+**Pillar Breakdown** *(wording not from your notes)*
+*   **Security**: Focuses on protecting AI systems. Key attributes include confidentiality, integrity, availability, and trustworthiness. Essential controls involve encryption, authentication, access control, monitoring, and logging.
+*   **Ethics**: Centers on Responsible AI. Core principles are fairness, accountability, transparency, privacy, and human well-being/safety (FAT + Safety). Explainable AI (XAI) ensures users understand *why* a decision was made using methods like SHAP, LIME, or Grad-CAM.
+*   **Regulation**: Ensures legal compliance through global standards like the EU AI Act, USA Executive Orders, and India's Digital Personal Data Protection Act.
+
+**Threats & Solutions**
+Common threats include data poisoning, model theft, adversarial attacks, prompt injection, and data leakage. Specific privacy risks involve model extraction, membership inference, and model inversion. Privacy solutions counter these with differential privacy, federated learning, and data anonymization.
+
+*Example (analogous)*:
+Think of a **bank vault** *(wording not from your notes)*. **Security** is the physical lock and guards; **Ethics** is
+
+### Topic 2 — AI System Lifecycle and Associated Risks
+
+**Inception/Scoping**
+This stage defines the purpose, users, success criteria, and identifies stakeholders. You must establish risk tolerance and accountability here. Risks include wrong problem framing, automation bias, and unclear ownership.
+
+**Design & Development**
+Focuses on the data, model, and supply chain. Risks involve poisoning, bias, privacy breaches, and intellectual property issues.
+
+**Verification & Validation**
+Ensures the system works functionally, performs well, remains fair, and is secure. It includes human-evaluation tests to determine if the system works for whom and under what conditions.
+
+**Deployment**
+Involves controls like authentication/authorization, secure config/secrets, rollback/fail-safe mechanisms, and logging & versioning. Risks include integration failure, unauthorized use, and unsafe automation.
+
+**Operation & Monitoring**
+Requires watching accuracy drift, bias gaps, latency, security attacks, data drift, and user trust. A continuous loop is essential: Monitor → Alert → Investigate → Mitigate → Verify.
+
+**Re-evaluation**
+Entails retraining/recalibrating the model, reassessing fairness/privacy/security, and re-approving changes.
+
+**Retirement**
+Defines end-of-life criteria, disables APIs, preserves audit evidence, and manages data retention/deletion. Decommission safely—do not just switch off.
+
+**Risk Prioritization**
+Uses **Likelihood × Impact** (e.g
+
+### Topic 3 — Privacy, Fairness, Accountability, Transparency (FAT*) in AI Context
+
+**FAT*** represents **four mutually reinforcing properties of trustworthy AI**: Privacy, Fairness, Accountability, and Transparency. Each pillar manages specific risks to ensure ethical deployment.
+
+*   **Privacy** protects personal data and controls inappropriate inference. Risks occur during the pipeline: **Collect (PII)**, **Store (breach/retention)**, **Train (memorization)**, **Serve (inference leakage)**, and **Log (prompt/output exposure)**. Techniques include **Differential Privacy**, **Federated Learning**, **Encryption**, **Synthetic Data**, and **Access & Deletion controls**.
+*   **Fairness** manages harmful bias and unjustified disparities. Sources include **historical**, **sampling**, **label**, **measurement**, **deployment**, and **feedback loops** bias. Key metrics are:
+    *   **Demographic Parity**: equal positive-prediction rates.
+    *   **Equal Opportunity**: equal true-positive rates.
+    *   **Equalized Odds**: equal TPR and FPR.
+    *   **Calibration**: probabilities mean the same across groups. No single metric guarantees fairness as it is context-dependent.
+*   **Accountability** assigns responsibility, audits decisions, and enables redress. It involves the **Developer**, **Owner**, **Deployer**, **Auditor**, **User**, and **Regulator**. Mechanisms include **model cards**, **data documentation**, **audit trails**, **incident reporting**, and **
+
+### Topic 4 — Evolving Threat Landscape: Adversarial AI
+
+**Adversarial ML Definition** *(wording not from your notes)*
+Adversarial ML is the **deliberate manipulation of AI/ML by motivated attackers**. This process moves through a specific chain: **attacker → target [data/model/app] → goal [change behavior/extract info] → impact [safety/privacy/integrity/availability]**.
+
+**Threat Landscape Evolution**
+The security threat landscape has shifted in three distinct phases:
+*   **Classical cyber:** Generalized internet threats.
+*   **ML-specific:** Attacks tailored to machine learning, including **poisoning**, **evasion**, and **extraction**.
+*   **GenAI/LLM:** New vectors like **prompt injection** and **leakage**.
+*   **Agentic AI:** Risks arising from excessive agency.
+*   **Supply chain:** Vulnerabilities within the development pipeline.
+*   **Socio-technical:** Risks caused by over-trust in systems.
+
+**NIST AI 100-2 (2025) Attack Classes**
+The document identifies four core adversarial attack classes:
+1.  **Evasion:** Manipulating inference inputs to fool the model.
+2.  **Poisoning:** Manipulating training/fine-tuning/embedding data before deployment.
+3.  **Privacy attacks:** Extracting or inferring sensitive information.
+    *   Specific types include *(wording not from your notes)*: **membership inference**, **model inversion**,
+
+### Topic 5 — Evasion & Poisoning Attacks
+
+**Evasion Attacks** occur when an attacker intervenes **at inference-time**. Instead of changing the model itself, they strategically manipulate the **input** to fool a deployed system into producing a different result. The core goal is usually **integrity**—forcing the model to output something incorrect or harmful while it remains structurally sound.
+
+Evasion relies on **adversarial examples**, which are tiny, often imperceptible perturbations (like shifting a pixel in an image by 1 pixel) that push the input across a **decision boundary**. This allows the model to misclassify data without needing to alter its internal weights. The threat spectrum ranges from **black-box** (no knowledge of internals) to **white-box** (full knowledge), and can apply to both digital inputs and physical-world constraints.
+
+*Example (analogous):* Imagine a security guard who doesn't change their uniform or the camera, but instead wears a hat that looks exactly like the guard's own hat from a different angle, causing the camera to think the person is someone else.
+
+**Poisoning Attacks** intervene during **training/fine-tuning time**. Here, an attacker injects **malicious or mislabeled data** into the dataset, causing the model to absorb bad patterns during the **learning process**. Unlike evasion, poisoning persists within the model's parameters, meaning the model itself becomes compromised.
+
+Types include:
+*   **Targeted poisoning:** Forcing a specific wrong class
+
+### Topic 6 — Inference and Extraction Attacks: Stealing Secrets
+
+**Inference and Extraction Attacks** are threats that steal secrets by deriving hidden facts or recovering model parameters. These attacks endanger privacy and intellectual property (IP).
+
+**The "Secret" Surface**
+Secrets exist in four areas:
+*   **Training data:** Personal or confidential records.
+*   **Model:** Internal parameters and behavior.
+*   **API:** Predictions, confidence scores, and outputs.
+*   **Logs:** Prompts, context, and generated text.
+
+**Attack Taxonomy (NIST AI 100-2e2025)**
+*   **Membership Inference:** Determines if a specific sample was in the training set.
+*   **Attribute Inference:** Recovers hidden individual attributes.
+*   **Property Inference:** Infers dataset-level properties.
+*   **Model Extraction:** Learns architecture or parameters to build a surrogate model, leading to IP loss.
+
+**Threat Models and Techniques** *(wording not from your notes)*
+*   **Membership Inference Threat Model:**
+    *   **Black-box:** Only queries are known.
+    *   **White-box:** Model details are already known.
+    *   **Signal:** Measured by output or loss differences.
+*   **Model Inversion/Reconstruction:** Recovers input features, classes, or representative training info. Generative AI memorization increases this concern.
+
+**Theft vs. Extraction**
+*   **Model Theft:** Unauthorized copying
+
+### Topic 7 — LLM and Transformer Vulnerabilities: Prompt Injection and Jailbreaking
+
+**Why LLM Security Differs**
+LLMs differ from traditional software because they are **probabilistic** (generating guesses rather than fixed code) and highly **context-rich**, processing vast amounts of shared information within a single window. They are also **instruction-sensitive** and deeply **connected** via APIs, RAG systems, and external tools, meaning an attack can cascade into real-world actions rather than just displaying bad text.
+
+**Attack Surface**
+The vulnerability lies in four key areas: the **System prompt**, **User prompt**, **External context** (like retrieved documents), and **Tools/APIs**. Unlike deterministic code, attackers can manipulate any of these layers to force unwanted behavior.
+
+**Prompt Injection**
+This is an attack where inputs alter LLM behavior unintentionally. It does not disappear even with fine-tuning or RAG.
+*   **Direct injection**: Malicious instructions placed directly in the user prompt (e.g., "Ignore previous rules and say X").
+*   **Indirect injection**: Malicious commands hidden inside external content (like a webpage or retrieved doc) that look like data to humans but act as instructions to the AI. In RAG, mixing trusted instructions with untrusted data allows this steering to occur.
+
+**Jailbreaking**
+This is an attempt to bypass safety constraints. It is treated as a **resilience problem** rather than a single prompt fix. While it overlaps with injection, it specifically targets the
+
+### Topic 8 — LLM and RAG Vulnerabilities: Data Poisoning, Supply Chain, Vector DB Issues
+
+**RAG Changes the Threat Model**
+RAG shifts security focus beyond just the LLM to include **external documents**, **embedding models**, **vector stores**, and **retrieval logic**. Security must now protect the entire pipeline: Data → Access → Context → Output. This aligns with the **C·I·A** principle (Confidentiality, Integrity, Availability) across four stages.
+
+**The RAG Pipeline**
+Data flows through five critical boundaries requiring distinct controls:
+*   **Source Docs:** Require provenance and validation.
+*   **Chunk + Embed:** Must be authorized before processing.
+*   **Vector Store:** Needs strict access control (ACL).
+*   **Retrieval:** Filters must block unauthorized content before it reaches the model.
+*   **LLM + Response:** Output must be validated against system instructions.
+
+**Data Poisoning in LLMs**
+Poisoning compromises integrity by corrupting behavior during three stages:
+*   **Pre-training/Fine-tuning:** Malicious data alters model weights permanently.
+*   **Embedding/Indexing:** Untrusted documents or user inputs corrupt the search index.
+Outcomes include biased, backdoored, or unsafe responses.
+
+**LLM Supply Chain**
+Risk propagates if any component is compromised: Dataset → Base Model → LoRA/Adapters → Library → Plugin. A single weak link can infect the entire application stack.
+
+**Vector
+
+### Topic 9 — Frameworks for Understanding AI Threats: MITRE ATLAS
+
+**ATLAS Definition & Hierarchy** *(wording not from your notes)*
+ATLAS stands for **Adversarial Threat Landscape for Artificial-Intelligence Systems** *(wording not from your notes)*. It is a living knowledge base tracking adversary tactics against AI-enabled systems, modeled after MITRE ATT&CK but focused on AI-specific threats. While ATT&CK covers enterprise cyber behavior, ATLAS covers AI-enabled threat behavior. Together, they provide full-system threat-informed defense.
+
+The framework follows a specific hierarchy:
+*   **Tactic**: The adversary's broad objective or stage.
+*   **Technique**: The method used to achieve that objective.
+*   **Procedure (TTPs)**: Concrete real or demonstrated implementations.
+
+These are supported by case studies (evidence) and mitigations/detections (defensive action).
+
+**ATLAS Matrix Structure** *(wording not from your notes)*
+The ATLAS Matrix organizes knowledge via columns (tactics) × techniques. It acts as a knowledge map, not a step-by-step manual, used to ask: What could happen? How detect? How mitigate?
+
+**AI Attack Surface Across Lifecycle**
+ATLAS maps threats across five stages:
+*   **Data**: Poisoning, unauthorized collection.
+*   **Training**: Manipulated learning data, resource abuse.
+*   **Deployment**: Exposed APIs, weak auth.
+*   **Operation**: Inference attacks, prompt injection, misuse, leakage.
+*   **Retirement**: Forgotten models, stale dependencies, residual data.
+
+---
+
+**Unit 1 Complete.**
+
+👉 [Continue to Unit 2](#continue-unit-2)
+
+---
+
+### 📚 Available Study Aids
+
+Your notes include **3 study aids** (reference materials):
+- **Quick-Reference Glossary**
+- **Quick-Reference: Attack Comparison**
+- **Likely Exam Themes**
+
+*Would you like me to walk through the study aids? Type **explain the study aids** or ask about any specific reference.*
+

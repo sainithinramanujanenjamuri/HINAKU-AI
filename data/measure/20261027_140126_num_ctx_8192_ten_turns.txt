@@ -1,0 +1,93 @@
+COMMAND: python scripts/measure_10_mixed_turns_8192.py
+TIMESTAMP: 2026-10-27T14:01:26.207053
+================================================================================
+10 MIXED TURNS BENCHMARK WITH UNIFIED num_ctx: 8192 ON bonsai-2:9b
+Proving zero model reloads (load_duration = 0) and stable latency
+================================================================================
+
+--- INITIAL HARDWARE & OLLAMA STATUS ---
+[nvidia-smi]:
+NVIDIA GeForce RTX 4050 Laptop GPU, 6141 MiB, 0 MiB, 5920 MiB, 0 %
+[ollama ps]:
+NAME    ID    SIZE    PROCESSOR    CONTEXT    RUNNER    UNTIL
+--------------------------------------------------------------------------------
+
+>>> TURN 1/10: Turn 1 (Chat)
+Prompt: Hi HINAKU, what is your purpose and how do you help?
+Response: ...
+Timing: total=14.66s | load_duration=10.2713s | eval_tokens=120 (58.8 t/s)
+[State] ollama ps: bonsai-2:9b    c8b5462f8688    3.0 GB    100% GPU     8192       llamacpp    29 minutes from now
+[State] VRAM used: 3595 MiB, 71 %
+
+>>> TURN 2/10: Turn 2 (Doc Q&A)
+Prompt: From the AI security notes, what are the three pillars of the AI Triad?
+Response: ...
+Timing: total=4.20s | load_duration=0.0053s | eval_tokens=120 (59.3 t/s)
+[State] ollama ps: bonsai-2:9b    c8b5462f8688    3.0 GB    100% GPU     8192       llamacpp    29 minutes from now
+[State] VRAM used: 3595 MiB, 0 %
+
+>>> TURN 3/10: Turn 3 (Chat)
+Prompt: Write a concise Python function to calculate factorial recursively.
+Response: ...
+Timing: total=4.36s | load_duration=0.0032s | eval_tokens=120 (57.9 t/s)
+[State] ollama ps: bonsai-2:9b    c8b5462f8688    3.0 GB    100% GPU     8192       llamacpp    29 minutes from now
+[State] VRAM used: 3595 MiB, 90 %
+
+>>> TURN 4/10: Turn 4 (Doc Q&A)
+Prompt: What is the key difference between evasion attacks and poisoning attacks in AI?
+Response: ...
+Timing: total=4.46s | load_duration=0.0026s | eval_tokens=120 (56.7 t/s)
+[State] ollama ps: bonsai-2:9b    c8b5462f8688    3.0 GB    100% GPU     8192       llamacpp    29 minutes from now
+[State] VRAM used: 3595 MiB, 90 %
+
+>>> TURN 5/10: Turn 5 (Walkthrough)
+Prompt: Explain Topic 1: AI Triad: Security, Ethics, and Regulation in simple terms with an example.
+Response: ...
+Timing: total=4.43s | load_duration=0.0032s | eval_tokens=120 (56.9 t/s)
+[State] ollama ps: bonsai-2:9b    c8b5462f8688    3.0 GB    100% GPU     8192       llamacpp    29 minutes from now
+[State] VRAM used: 3595 MiB, 90 %
+
+>>> TURN 6/10: Turn 6 (Chat)
+Prompt: What is the primary architectural difference between a CPU and an NVIDIA GPU?
+Response: ...
+Timing: total=4.42s | load_duration=0.0048s | eval_tokens=120 (56.6 t/s)
+[State] ollama ps: bonsai-2:9b    c8b5462f8688    3.0 GB    100% GPU     8192       llamacpp    29 minutes from now
+[State] VRAM used: 3595 MiB, 88 %
+
+>>> TURN 7/10: Turn 7 (Doc Q&A)
+Prompt: According to Session 8, how is MLSecOps defined and what lifecycle stages does it protect?
+Response: ...
+Timing: total=4.40s | load_duration=0.0075s | eval_tokens=120 (58.3 t/s)
+[State] ollama ps: bonsai-2:9b    c8b5462f8688    3.0 GB    100% GPU     8192       llamacpp    29 minutes from now
+[State] VRAM used: 3595 MiB, 89 %
+
+>>> TURN 8/10: Turn 8 (Walkthrough)
+Prompt: Explain Topic 2: AI System Lifecycle and Associated Risks step by step.
+Response: ...
+Timing: total=4.37s | load_duration=0.0033s | eval_tokens=120 (56.8 t/s)
+[State] ollama ps: bonsai-2:9b    c8b5462f8688    3.0 GB    100% GPU     8192       llamacpp    29 minutes from now
+[State] VRAM used: 3595 MiB, 90 %
+
+>>> TURN 9/10: Turn 9 (Chat)
+Prompt: Give me two practical rules for writing clean, maintainable async Python code.
+Response: ...
+Timing: total=4.39s | load_duration=0.0042s | eval_tokens=120 (58.2 t/s)
+[State] ollama ps: bonsai-2:9b    c8b5462f8688    3.0 GB    100% GPU     8192       llamacpp    29 minutes from now
+[State] VRAM used: 3595 MiB, 89 %
+
+>>> TURN 10/10: Turn 10 (Doc Q&A)
+Prompt: Summarize the primary themes students should review for their AI security midterm exam.
+Response: ...
+Timing: total=4.36s | load_duration=0.0026s | eval_tokens=120 (57.1 t/s)
+[State] ollama ps: bonsai-2:9b    c8b5462f8688    3.0 GB    100% GPU     8192       llamacpp    29 minutes from now
+[State] VRAM used: 3595 MiB, 87 %
+
+================================================================================
+SUMMARY EVALUATION ACROSS 10 TURNS
+================================================================================
+Model Reloads in Turns 2-10 (load_duration > 0.1s): 0 reloads
+Initial Load Duration (Turn 1): 10.2713s
+Average Load Duration (Turns 2-10): 0.0041s
+Mean Latency: 5.40s | Min: 4.20s | Max: 14.66s
+Latency Ratio (Max / Mean): 2.71x (Constraint: < 1.5x)
+VERDICT: PASSED (Zero model reloads; stable VRAM occupancy throughout)

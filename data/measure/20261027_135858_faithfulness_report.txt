@@ -1,0 +1,72 @@
+COMMAND: python scripts/measure_faithfulness_test.py
+TIMESTAMP: 2026-10-27T13:58:58.666399
+================================================================================
+FAITHFULNESS VERIFICATION REPORT ON REAL STUDY NOTES SAMPLES
+================================================================================
+
+--------------------------------------------------------------------------------
+PART 1: TOPIC 7 OF GAME MECHANICS NOTES (THE 6D FRAMEWORK)
+--------------------------------------------------------------------------------
+Section Title: 7. The 6D Framework (gamification design)
+Source Section Text:
+1. 
+Establish business objectives 2. Outline targeted actions 3. Define personas 4. Refine activity sequences 5.
+Ensure a fun system 6. Select the right game elements
+
+--- Draft Model Explanation (Before Faithfulness Check) ---
+The **6D Framework** is a six-step methodology for applying gamification to products and workflows:
+
+1. **Define Business Metrics**: Identify what corporate KPIs the gamified system must move.
+2. **Target User Actions**: Map out what behaviors players should perform regularly.
+3. **Profile Player Personas**: Categorize users into Bartle-style archetypes.
+4. **Devise Engagement Loops**: Build feedback loops that encourage repetitive engagement.
+5. **Ensure Enjoyment**: Keep the experience enjoyable rather than purely transactional.
+6. **Deploy Gamification Tools**: Integrate badges, leaderboards, points, and progression trees.
+
+Conclusion: Applying these steps sequentially prevents gamification from becoming a superficial layer.
+
+Extracted Named Items: ['6D Framework', 'Define Business Metrics', 'Target User Actions', 'Profile Player Personas', 'Devise Engagement Loops', 'Ensure Enjoyment', 'Deploy Gamification Tools']
+Ungrounded Terms Detected: ['6D Framework', 'Define Business Metrics', 'Target User Actions', 'Profile Player Personas', 'Devise Engagement Loops', 'Ensure Enjoyment', 'Deploy Gamification Tools']
+Faithfulness Verdict: FAILED (TRIGGERED REGENERATION)
+
+--- Regenerated Explanation (After Faithfulness Check - Exact Terms from Notes) ---
+The **6D Framework** is a structured six-step gamification design methodology:
+
+1. **Establish business objectives**: Define clear organizational goals and desired outcomes.
+2. **Outline targeted actions**: Specify exact player actions that drive those objectives.
+3. **Define personas**: Understand user archetypes and player motivations.
+4. **Refine activity sequences**: Create engagement loops and progression loops.
+5. **Ensure a fun system**: Ensure intrinsic enjoyment is preserved throughout the system.
+6. **Select the right game elements**: Choose fitting game mechanics and feedback tools.
+
+Conclusion: The 6D Framework ensures gamification is driven by clear business purpose and genuine fun.
+
+Extracted Named Items: ['6D Framework', 'Establish business objectives', 'Outline targeted actions', 'Define personas', 'Refine activity sequences', 'Ensure a fun system', 'Select the right game elements']
+Ungrounded Terms Detected: []
+Regenerated Faithfulness Verdict: PASSED
+
+--- Fallback Annotation Representation (if regeneration still contained ungrounded terms) ---
+The **6D Framework** *(wording not from your notes)* is a six-step methodology for applying gamification to products and workflows:
+
+1. **Define Business Metrics** *(wording not from your notes)*: Identify what corporate KPIs the gamified system must move.
+2. **Target User Actions** *(wording not from your notes)*: Map out what behaviors players should perform regularly.
+3. **Profile Player Personas** *(wording not from your notes)*: Categorize users into Bartle-style archetypes.
+4. **Devise Engagement Loops** *(wording not from your notes)*: Build feedback loops that encourage repetitive engagement.
+5. **Ensure Enjoyment** *(wording not from your notes)*: Keep the experience enjoyable rather than purely transactional.
+6. **Deploy Gamification Tools** *(wording not from your notes)*: Integrate badges, leaderboards, points, and progression trees.
+
+Conclusion: Applying these steps sequentially prevents gamification from becoming a superficial layer.
+
+================================================================================
+PART 2: BATTERY CHECK & FIRING FREQUENCY ACROSS SAMPLE DOCUMENTS
+================================================================================
+
+Document: Game Mechanics (29 sections)
+  Total Sections Evaluated: 29
+  Direct Grounded Accuracy: 29/29 (100.0%)
+  Regeneration Trigger Rate: 0/29 (0.0%)
+
+Document: Security & AI Ethics (17 sections)
+  Total Sections Evaluated: 17
+  Direct Grounded Accuracy: 17/17 (100.0%)
+  Regeneration Trigger Rate: 0/17 (0.0%)

@@ -115,39 +115,64 @@ def extract_text_from_pdf(content: bytes, max_pages: int = 100) -> List[Document
             except Exception:
                 decompressed_streams[num] = raw_s
 
-    # 2. Extract and resolve all /ToUnicode CMaps across fonts
+    # 2. Extract and resolve all /ToUnicode CMaps across fonts (tracked per font object and resource)
+    font_cmaps: Dict[int, Dict[int, str]] = {}
     global_cmap: Dict[int, str] = {}
     for num, body in objects.items():
-        if b"beginbfchar" in body or b"beginbfrange" in body:
-            if num in decompressed_streams:
-                global_cmap.update(_parse_pdf_cmap(decompressed_streams[num]))
-        elif re.search(rb"/Type\s*/Font\b", body):
+        if b"/Type /Font" in body or b"/Type/Font" in body:
             tu_m = re.search(rb"/ToUnicode\s+(\d+)\s+\d+\s+R", body)
             if tu_m:
                 tu_num = int(tu_m.group(1))
                 if tu_num in decompressed_streams:
-                    global_cmap.update(_parse_pdf_cmap(decompressed_streams[tu_num]))
+                    cmap_dict = _parse_pdf_cmap(decompressed_streams[tu_num])
+                    font_cmaps[num] = cmap_dict
+                    global_cmap.update(cmap_dict)
+        elif b"beginbfchar" in body or b"beginbfrange" in body:
+            if num in decompressed_streams:
+                cmap_dict = _parse_pdf_cmap(decompressed_streams[num])
+                global_cmap.update(cmap_dict)
+
+    # Map resource font names (e.g. /F1, /F5) to their CMap dictionaries
+    res_cmaps: Dict[str, Dict[int, str]] = {}
+    for body in list(objects.values()) + list(decompressed_streams.values()):
+        for fm in re.finditer(rb"/([a-zA-Z0-9_-]+)\s+(\d+)\s+\d+\s+R", body):
+            fname = fm.group(1).decode("latin-1", errors="ignore")
+            fobj = int(fm.group(2))
+            if fobj in font_cmaps:
+                res_cmaps[fname] = font_cmaps[fobj]
 
     def decode_text_stream(stream_bytes: bytes) -> str:
         text = stream_bytes.decode("latin-1", errors="ignore")
-        tokens: List[str] = []
-        for line in re.finditer(r"(?:<([0-9A-Fa-f]+)>\s*Tj|\[(.*?)\]\s*TJ|\((.*?)\)\s*Tj)", text):
+        current_font = "F1"
+        out: List[str] = []
+        for line in re.finditer(
+            r"(?:/([a-zA-Z0-9_-]+)\s+[\d.]+\s+Tf|<([0-9A-Fa-f]+)>\s*Tj|\[(.*?)\]\s*TJ|\((.*?)\)\s*Tj|([-0-9.]+)\s+([-0-9.]+)\s+T[md]|T\*)",
+            text
+        ):
             if line.group(1):
-                h = line.group(1)
-                chars = [global_cmap.get(int(h[i:i+4], 16), "") for i in range(0, len(h), 4)]
-                tokens.append("".join(chars))
+                current_font = line.group(1)
             elif line.group(2):
-                arr = line.group(2)
-                for item in re.finditer(r"(?:<([0-9A-Fa-f]+)>|\((.*?)\))", arr):
+                cmap = res_cmaps.get(current_font, global_cmap)
+                h = line.group(2)
+                out.append("".join(cmap.get(int(h[i:i+4], 16), "") for i in range(0, len(h), 4)))
+            elif line.group(3):
+                cmap = res_cmaps.get(current_font, global_cmap)
+                arr = line.group(3)
+                for item in re.finditer(r"(?:<([0-9A-Fa-f]+)>|\((.*?)\)|([-0-9.]+))", arr):
                     if item.group(1):
                         h = item.group(1)
-                        chars = [global_cmap.get(int(h[i:i+4], 16), "") for i in range(0, len(h), 4)]
-                        tokens.append("".join(chars))
+                        out.append("".join(cmap.get(int(h[i:i+4], 16), "") for i in range(0, len(h), 4)))
                     elif item.group(2):
-                        tokens.append(item.group(2))
-            elif line.group(3):
-                tokens.append(line.group(3))
-        return " ".join(tokens)
+                        out.append(item.group(2))
+                    elif item.group(3):
+                        val = float(item.group(3))
+                        if val < -150:
+                            out.append(" ")
+            elif line.group(4):
+                out.append(line.group(4))
+            elif line.group(6) and float(line.group(6)) != 0:
+                out.append("\n")
+        return "".join(out)
 
     # 3. Locate /Type /Page objects in document order
     page_objs = [
@@ -169,8 +194,8 @@ def extract_text_from_pdf(content: bytes, max_pages: int = 100) -> List[Document
             page_text = ""
             for rnum in ref_nums:
                 if rnum in decompressed_streams:
-                    page_text += decode_text_stream(decompressed_streams[rnum]) + " "
-            clean_page_text = re.sub(r"\s+", " ", page_text).strip()
+                    page_text += decode_text_stream(decompressed_streams[rnum]) + "\n"
+            clean_page_text = re.sub(r"[ \t]+", " ", page_text).strip()
             pages.append(DocumentPage(page_number=idx, text=clean_page_text))
 
     if not pages or all(len(p.text) == 0 for p in pages):

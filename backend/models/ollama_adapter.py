@@ -30,7 +30,7 @@ class OllamaAdapter:
     async def check_health(self) -> Dict[str, bool]:
         url = f"{self.host}/api/tags"
         try:
-            async with httpx.AsyncClient(timeout=3.0) as client:
+            async with httpx.AsyncClient(timeout=8.0) as client:
                 res = await client.get(url)
                 if res.status_code == 200:
                     data = res.json()
@@ -49,7 +49,7 @@ class OllamaAdapter:
         target = model or self.default_model
         url = f"{self.host}/api/ps"
         try:
-            async with httpx.AsyncClient(timeout=3.0) as client:
+            async with httpx.AsyncClient(timeout=8.0) as client:
                 res = await client.get(url)
                 if res.status_code == 200:
                     data = res.json()

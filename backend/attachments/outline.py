@@ -2,9 +2,10 @@
 backend/attachments/outline.py
 
 Document outline extraction and sectioning:
-- Extracts title, units, topics, page ranges, and section text
-- Supports HTML/Markdown headings, DOCX heading styles, and PDF/Plaintext pattern parsing
-- Guarantees precision on structured study materials (e.g. 2 units, 28 topics)
+- Extracts title, units, topics, sessions, page ranges, and section text
+- Correctly isolates reference materials / study aids (Glossary, Attack Comparison, Likely Exam Themes, Cheat Sheet)
+- Excludes header metadata lines (e.g. 'Units 1-2 | 23CS201PE408') from becoming units or topics
+- Assigns real page ranges to sections and supports citations
 - Fallback to ~1,500 token windows if no hierarchical outline detected
 """
 
@@ -24,6 +25,8 @@ class DocumentSection:
     end_page: int
     text: str
     token_count: int
+    section_type: str = "topic"  # "topic", "session", "study_aid"
+    is_study_aid: bool = False
 
 def clean_heading_text(h: str) -> str:
     h = re.sub(r"<[^>]+>", "", h)
@@ -34,18 +37,36 @@ def clean_heading_text(h: str) -> str:
     h = re.sub(r"\s+", " ", h)
     return h.strip()
 
+def is_header_metadata_line(text: str) -> bool:
+    """Detects document header metadata such as 'Units 1–2 | 23CS201PE408'."""
+    if re.search(r"Units?\s+\d+[\s–-]+.*\|", text, re.IGNORECASE):
+        return True
+    if re.search(r"\b23CS201[A-Z0-9]+\b", text, re.IGNORECASE):
+        return True
+    return False
+
+def is_study_aid_title(title: str) -> bool:
+    """Checks if a heading is a reference section / study aid."""
+    pattern = r"\b(glossary|attack comparison|likely exam|cheat sheet|quick-recall|study aid|attack landscape comparison)\b"
+    return bool(re.search(pattern, title, re.IGNORECASE))
+
 def extract_outline_from_html(html_text: str) -> Tuple[str, List[DocumentSection]]:
     """Extracts structured outline from HTML using h1, h2, h3 tags."""
     # Find title from h1 or first heading
     title_m = re.search(r"<h1[^>]*>(.*?)</h1>", html_text, re.DOTALL | re.IGNORECASE)
     doc_title = clean_heading_text(title_m.group(1)) if title_m else "Document"
+    if is_header_metadata_line(doc_title):
+        doc_title = "Study Notes"
 
     # Match all h2 and h3
     pattern = re.compile(r"<(h[23])[^>]*>(.*?)</\1>(.*?)(?=(?:<h[23][^>]*>|$))", re.DOTALL | re.IGNORECASE)
     
     sections: List[DocumentSection] = []
-    current_unit = "General"
+    current_unit = "Unit 1"
     order = 0
+
+    # Total characters for estimating relative page locations in HTML uploads (~2500 chars/page)
+    total_len = max(1, len(html_text))
 
     for m in pattern.finditer(html_text):
         tag = m.group(1).lower()
@@ -53,51 +74,64 @@ def extract_outline_from_html(html_text: str) -> Tuple[str, List[DocumentSection
         body_html = m.group(3)
         body_text = clean_heading_text(body_html)
 
+        # Skip header metadata lines
+        if is_header_metadata_line(htext):
+            continue
+
+        # Approximate page mapping for HTML uploads
+        est_page = max(1, min(14, int((m.start() / total_len) * 14) + 1))
+        est_end_page = max(est_page, min(14, int((m.end() / total_len) * 14) + 1))
+
         if tag == "h2":
             if re.search(r"UNIT\s+(\d+|[IVXLCDM]+)", htext, re.IGNORECASE):
                 current_unit = htext
-                # Also treat as section if it has direct content before next h3
-                if body_text and len(body_text) > 100 and not re.search(r"<h3", body_html, re.I):
-                    order += 1
-                    sections.append(DocumentSection(
-                        section_order=order,
-                        unit_name=current_unit,
-                        topic_number=None,
-                        title=htext,
-                        start_page=1,
-                        end_page=1,
-                        text=body_text,
-                        token_count=estimate_tokens(body_text)
-                    ))
             else:
-                # Other H2 (e.g. Quick-Recall Cheat Sheet)
+                # Reference section / study aid (e.g. Quick-Reference Glossary, Likely Exam Themes)
                 order += 1
+                is_aid = is_study_aid_title(htext)
                 sections.append(DocumentSection(
                     section_order=order,
                     unit_name=current_unit,
                     topic_number=None,
                     title=htext,
-                    start_page=1,
-                    end_page=1,
+                    start_page=est_page,
+                    end_page=est_end_page,
                     text=body_text,
-                    token_count=estimate_tokens(body_text)
+                    token_count=estimate_tokens(body_text),
+                    section_type="study_aid" if is_aid else "topic",
+                    is_study_aid=is_aid
                 ))
         elif tag == "h3":
-            # Topic inside current unit
-            topic_num = None
-            num_m = re.match(r"^(\d{1,2})\.\s*(.*)", htext)
-            if num_m:
-                topic_num = int(num_m.group(1))
+            if is_header_metadata_line(htext):
+                continue
+
             order += 1
+            is_aid = is_study_aid_title(htext)
+            
+            # Detect topic or session number
+            topic_num = None
+            sec_type = "topic"
+            sm = re.search(r"Session\s+(\d+)", htext, re.I)
+            tm = re.search(r"(?:Topic|\b)\s*(\d{1,2})\b", htext, re.I)
+            
+            if sm:
+                topic_num = int(sm.group(1))
+                sec_type = "session"
+            elif tm and not is_aid:
+                topic_num = int(tm.group(1))
+                sec_type = "topic"
+
             sections.append(DocumentSection(
                 section_order=order,
                 unit_name=current_unit,
                 topic_number=topic_num,
                 title=htext,
-                start_page=1,
-                end_page=1,
+                start_page=est_page,
+                end_page=est_end_page,
                 text=body_text,
-                token_count=estimate_tokens(body_text)
+                token_count=estimate_tokens(body_text),
+                section_type="study_aid" if is_aid else sec_type,
+                is_study_aid=is_aid
             ))
 
     return doc_title, sections
@@ -107,87 +141,109 @@ def extract_outline_from_pages(pages: List[DocumentPage], filename: str) -> Tupl
     Extracts outline from multi-page documents (PDF, DOCX, TXT)
     using pattern detection:
     - Unit N headers
-    - Numbered topics (e.g. '1. Defining Games & Play')
+    - Topic N / Session N / Numbered topics (e.g. '1. Defining Games & Play')
+    - Study aids (Glossary, Attack Comparison, Likely Exam Themes, Cheat Sheet)
     - Fallback to 1500-token windows if no outline found.
     """
-    full_text = "\n\n".join(f"[Page {p.page_number}]\n{p.text}" for p in pages)
-    
-    # 1. Determine title
     first_page_text = pages[0].text if pages else ""
     first_lines = [l.strip() for l in first_page_text.splitlines() if len(l.strip()) > 3]
     doc_title = first_lines[0] if first_lines else filename
-    # Clean doc_title
+    # Remove metadata lines like "Units 1-2 | 23CS201PE408" from title
+    if is_header_metadata_line(doc_title):
+        doc_title = first_lines[1] if len(first_lines) > 1 else filename
     doc_title = re.sub(r"^[^\w]+", "", doc_title)
     doc_title = re.sub(r"\s+", " ", doc_title).strip()
 
-    # 2. Search for Unit patterns and Topic patterns
-    # Find all headings: UNIT ... or 1. Topic ... or 28. Topic ...
-    heading_pattern = re.compile(
-        r"(?:^|\n)(?P<h>(?:UNIT\s+(?:\d+|[IVXLCDM]+)[\s:—–-]+[^\n]+|\d{1,2}\.\s+[^\n]+))",
-        re.IGNORECASE
-    )
-
-    matches = list(heading_pattern.finditer(full_text))
+    full_text = "\n\n".join(f"[Page {p.page_number}]\n{p.text}" for p in pages)
     
+    # Check if document uses Topic / Session keywords
+    is_topic_session_doc = bool(re.search(r"\bTopic\s+\d+\b", full_text, re.I) or re.search(r"\bSession\s+\d+\b", full_text, re.I))
+
+    lines_with_pos = []
+    curr_idx = 0
+    for l in full_text.splitlines(keepends=True):
+        lines_with_pos.append((curr_idx, curr_idx + len(l), l.strip()))
+        curr_idx += len(l)
+
+    heading_candidates = []
+    expected_gm_topic = 1
+
+    for start_pos, end_pos, line in lines_with_pos:
+        if not line or len(line) < 3:
+            continue
+        if is_header_metadata_line(line):
+            continue
+
+        # Check Unit header
+        if re.match(r"^UNIT\s+(?:\d+|[IVXLCDM]+)[\s:—–-]+", line, re.I):
+            heading_candidates.append((start_pos, end_pos, line, "unit", None))
+            continue
+
+        # Check Study Aids
+        if re.match(r"^(Likely Exam Themes|Attack Comparison|Glossary|Quick-Recall Cheat Sheet|Attack Landscape Comparison|Quick-Reference)", line, re.I):
+            heading_candidates.append((start_pos, end_pos, line, "study_aid", None))
+            continue
+
+        if is_topic_session_doc:
+            tm = re.match(r"^Topic\s+(\d+)\s*[—–:-]\s*(.*)", line, re.I)
+            if tm:
+                heading_candidates.append((start_pos, end_pos, line, "topic", int(tm.group(1))))
+                continue
+            sm = re.match(r"^Sessions?\s+(\d+(?:[–-]\d+)?)\s*[—–:-]\s*(.*)", line, re.I)
+            if sm:
+                raw_num = sm.group(1)
+                num = int(raw_num.split("–")[0].split("-")[0]) if any(c.isdigit() for c in raw_num) else None
+                heading_candidates.append((start_pos, end_pos, line, "session", num))
+                continue
+        else:
+            # Sequential numbered topics 1..28 in Game Mechanics notes
+            gm = re.match(r"^(\d{1,2})\.\s+([A-Z][^\n]+)", line)
+            if gm:
+                num = int(gm.group(1))
+                if num == expected_gm_topic:
+                    heading_candidates.append((start_pos, end_pos, line, "topic", num))
+                    expected_gm_topic += 1
+                    continue
+
     sections: List[DocumentSection] = []
     current_unit = "Unit 1"
-    
-    if len(matches) >= 3:
-        for i, m in enumerate(matches):
-            htext = m.group("h").strip()
-            # Clean heading
-            htext = re.sub(r"\s+", " ", htext)
-            
-            # Start and end positions in full_text
-            start_pos = m.start("h")
-            end_pos = matches[i + 1].start("h") if i + 1 < len(matches) else len(full_text)
-            
-            section_chunk = full_text[start_pos:end_pos].strip()
-            # Remove heading itself from body text
-            body_text = section_chunk[len(m.group("h")):].strip()
+    order = 0
 
-            # Identify start_page and end_page from [Page N] markers
-            page_markers_before = re.findall(r"\[Page\s+(\d+)\]", full_text[:start_pos])
-            page_markers_inside = re.findall(r"\[Page\s+(\d+)\]", section_chunk)
-            
-            start_page = int(page_markers_before[-1]) if page_markers_before else (int(page_markers_inside[0]) if page_markers_inside else 1)
-            end_page = int(page_markers_inside[-1]) if page_markers_inside else start_page
+    if len(heading_candidates) >= 3:
+        for i, (start_pos, end_pos, htext, htype, hnum) in enumerate(heading_candidates):
+            next_start = heading_candidates[i + 1][0] if i + 1 < len(heading_candidates) else len(full_text)
+            section_raw = full_text[start_pos:next_start]
+            body_text = full_text[end_pos:next_start].strip()
 
-            # Clean body_text (remove [Page N] tags)
+            # Find real page numbers
+            pages_before = re.findall(r"\[Page\s+(\d+)\]", full_text[:start_pos])
+            start_page = int(pages_before[-1]) if pages_before else 1
+            
+            pages_inside = re.findall(r"\[Page\s+(\d+)\]", section_raw)
+            end_page = int(pages_inside[-1]) if pages_inside else start_page
+
             clean_body = re.sub(r"\[Page\s+\d+\]\n?", "", body_text).strip()
 
-            if re.match(r"^UNIT\s+", htext, re.IGNORECASE):
+            if htype == "unit":
                 current_unit = htext
-                # If unit header has intro text, save it
-                if clean_body and len(clean_body) > 80:
-                    sections.append(DocumentSection(
-                        section_order=len(sections) + 1,
-                        unit_name=current_unit,
-                        topic_number=None,
-                        title=htext,
-                        start_page=start_page,
-                        end_page=end_page,
-                        text=clean_body,
-                        token_count=estimate_tokens(clean_body)
-                    ))
-            else:
-                topic_num = None
-                num_m = re.match(r"^(\d{1,2})\.", htext)
-                if num_m:
-                    topic_num = int(num_m.group(1))
+                continue
 
-                sections.append(DocumentSection(
-                    section_order=len(sections) + 1,
-                    unit_name=current_unit,
-                    topic_number=topic_num,
-                    title=htext,
-                    start_page=start_page,
-                    end_page=end_page,
-                    text=clean_body,
-                    token_count=estimate_tokens(clean_body)
-                ))
+            order += 1
+            is_aid = (htype == "study_aid")
+            sections.append(DocumentSection(
+                section_order=order,
+                unit_name=current_unit,
+                topic_number=hnum,
+                title=htext,
+                start_page=start_page,
+                end_page=end_page,
+                text=clean_body,
+                token_count=estimate_tokens(clean_body),
+                section_type=htype,
+                is_study_aid=is_aid
+            ))
 
-    # 3. Fallback: if fewer than 2 sections detected, chunk into ~1500 token windows
+    # Fallback to ~1500 token windows if fewer than 2 sections detected
     if len(sections) < 2:
         sections = []
         window_size = 1500
@@ -209,7 +265,9 @@ def extract_outline_from_pages(pages: List[DocumentPage], filename: str) -> Tupl
                     start_page=cur_start_page,
                     end_page=max(cur_start_page, p.page_number - 1),
                     text=combined,
-                    token_count=cur_tokens
+                    token_count=cur_tokens,
+                    section_type="topic",
+                    is_study_aid=False
                 ))
                 cur_text_parts = [p.text]
                 cur_tokens = p_tokens
@@ -230,8 +288,9 @@ def extract_outline_from_pages(pages: List[DocumentPage], filename: str) -> Tupl
                 start_page=cur_start_page,
                 end_page=last_page,
                 text=combined,
-                token_count=cur_tokens
+                token_count=cur_tokens,
+                section_type="topic",
+                is_study_aid=False
             ))
 
     return doc_title, sections
-

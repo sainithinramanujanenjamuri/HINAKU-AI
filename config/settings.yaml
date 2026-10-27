@@ -77,14 +77,14 @@ local:
       repeat_penalty: 1.1
       presence_penalty: 0.0
       num_predict: 300
-      num_ctx: 4096
+      num_ctx: 8192
   options:
     temperature: 0.6
     top_p: 0.9
     repeat_penalty: 1.1
     presence_penalty: 0.0
     num_predict: 300
-    num_ctx: 4096
+    num_ctx: 8192
 
 api:
   provider: openai_compatible   # "openai_compatible" (or "openrouter", "openai") | "anthropic"

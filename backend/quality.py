@@ -622,6 +622,19 @@ async def perform_reply_verification(
             curr_text = llm_reply
             correction_reasons.append(llm_reason or "Minimal edit accepted by verifier")
 
+    # 6. General safeguard: no post-processing step may replace a streamed reply
+    # with one shorter than 60% of it, except guard replies.
+    if used_backend != "guard" and len(draft_reply) > 0:
+        if len(curr_text) < 0.60 * len(draft_reply):
+            # Allow intentional word-cap reduction in detail mode if draft exceeded 350 words
+            is_detail_cap_reduction = is_detail and len(re.findall(r"\b\w+\b", draft_reply)) > 350
+            if not is_detail_cap_reduction:
+                logger.warning(
+                    f"Post-processing safeguard rejected replacement: proposed length {len(curr_text)} "
+                    f"is shorter than 60% of original streamed draft ({len(draft_reply)}). Keeping original."
+                )
+                return draft_reply, True, verify_ms, "safeguard_kept_draft", "Shrinkage below 60% rejected"
+
     if correction_reasons:
         return curr_text, True, verify_ms, "corrected", "; ".join(correction_reasons)
     return curr_text, True, verify_ms, "verified", None

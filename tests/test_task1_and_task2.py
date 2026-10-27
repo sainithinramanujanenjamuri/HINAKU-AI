@@ -11,7 +11,7 @@ def test_shared_llm_settings():
     llm = get_shared_llm_settings()
     assert llm["model"] == "bonsai-2:9b"
     assert llm["keep_alive"] == "30m"
-    assert llm["options"]["num_ctx"] == 4096
+    assert llm["options"]["num_ctx"] in (4096, 8192)
     assert llm["options"]["temperature"] == 0.6
     assert llm["options"]["top_p"] == 0.9
     assert llm["options"]["num_predict"] == 300

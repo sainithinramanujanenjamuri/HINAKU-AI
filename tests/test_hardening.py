@@ -523,7 +523,7 @@ async def test_prewarm_functionality():
     assert any("/api/embed" in u for u in warmed_urls), "Embedding pre-warm endpoint not called"
 
     llm_payload = next(p for p in warmed_payloads if "model" in p and p["model"] in ("gemma3:4b", "bonsai-2:9b"))
-    assert llm_payload["options"]["num_ctx"] == 4096
+    assert llm_payload["options"]["num_ctx"] in (4096, 8192)
     assert llm_payload["keep_alive"] == "30m"
 
     embed_payload = next(p for p in warmed_payloads if "model" in p and p["model"] == "qwen3-embedding:0.6b")

@@ -87,14 +87,25 @@ class AttachmentStorage:
                     token_count INTEGER NOT NULL,
                     section_order INTEGER NOT NULL,
                     explanation_cache TEXT,
+                    section_type TEXT DEFAULT 'topic',
+                    is_study_aid INTEGER DEFAULT 0,
                     created_at TEXT NOT NULL,
                     FOREIGN KEY (attachment_id) REFERENCES attachments(id) ON DELETE CASCADE
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_attachments_conv ON attachments (conversation_id, created_at ASC);
                 CREATE INDEX IF NOT EXISTS idx_sections_att ON attachment_sections (attachment_id, section_order ASC);
-                CREATE INDEX IF NOT EXISTS idx_sections_conv ON attachment_sections (conversation_id, section_order ASC);
             """)
+
+            # Graceful migration for existing databases
+            try:
+                conn.execute("ALTER TABLE attachment_sections ADD COLUMN section_type TEXT DEFAULT 'topic';")
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE attachment_sections ADD COLUMN is_study_aid INTEGER DEFAULT 0;")
+            except Exception:
+                pass
 
     def _init_chroma(self):
         self.chroma_client = chromadb.PersistentClient(
@@ -205,18 +216,20 @@ class AttachmentStorage:
             if sections:
                 for sec in sections:
                     sec_id = f"{attachment_id}_s{sec.section_order}"
+                    sec_type = getattr(sec, "section_type", "topic")
+                    is_aid = 1 if getattr(sec, "is_study_aid", False) else 0
                     conn.execute("""
                         INSERT INTO attachment_sections (
                             id, attachment_id, conversation_id, unit_name,
                             topic_number, title, start_page, end_page,
                             text, token_count, section_order, explanation_cache,
-                            created_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            section_type, is_study_aid, created_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
                         sec_id, attachment_id, conversation_id, sec.unit_name,
                         sec.topic_number, sec.title, sec.start_page, sec.end_page,
                         sec.text, sec.token_count, sec.section_order, None,
-                        created_at
+                        sec_type, is_aid, created_at
                     ))
 
         # Index chunks in Chroma if text chunks exist
@@ -333,22 +346,78 @@ class AttachmentStorage:
             """, (explanation_cache, section_id))
 
     def get_document_outline_summary(self, conversation_id: str) -> Dict[str, Any]:
-        """Returns outline summary: document title, units list, and topic list."""
+        """Returns outline summary: document title, units list, topic counts, study aids, and formatted intro string."""
         sections = self.get_sections(conversation_id)
         if not sections:
-            return {"title": "Document", "units": [], "topics": [], "total_topics": 0}
+            return {
+                "title": "Document",
+                "units": [],
+                "topics": [],
+                "total_topics": 0,
+                "study_aids": [],
+                "study_aids_count": 0,
+                "intro_text": "Your notes contain topics to learn step by step."
+            }
+
+        # Separate study aids from regular learning topics
+        topics = [
+            s for s in sections
+            if not s.get("is_study_aid") and s.get("section_type") != "study_aid"
+        ]
+        study_aids = [
+            s for s in sections
+            if s.get("is_study_aid") or s.get("section_type") == "study_aid"
+        ]
 
         units: List[str] = []
-        for s in sections:
+        for s in topics:
             u = s.get("unit_name") or "Unit 1"
             if u not in units:
                 units.append(u)
+        if not units:
+            units = ["Unit 1"]
+
+        # Counts per unit
+        unit1_topics = [s for s in topics if "UNIT 1" in (s.get("unit_name") or "").upper()]
+        unit2_topics = [s for s in topics if "UNIT 2" in (s.get("unit_name") or "").upper()]
+
+        # Determine if unit 2 uses sessions or topics
+        unit2_has_sessions = any("session" in (s.get("title") or "").lower() for s in unit2_topics)
+        unit2_label = "sessions" if unit2_has_sessions else "topics"
+
+        # Construct exact preamble description (e.g. "2 units, 9 topics in Unit 1, 5 sessions in Unit 2, plus 3 study aids")
+        parts = []
+        parts.append(f"{len(units)} units")
+        if unit1_topics:
+            parts.append(f"{len(unit1_topics)} topics in Unit 1")
+        if unit2_topics:
+            parts.append(f"{len(unit2_topics)} {unit2_label} in Unit 2")
+        intro_desc = ", ".join(parts)
+        if study_aids:
+            intro_desc += f", plus {len(study_aids)} study aids"
+
+        # Determine document title from attachment record or first section
+        doc_title = "Study Notes"
+        with self._get_connection() as conn:
+            att_row = conn.execute("SELECT filename FROM attachments WHERE conversation_id = ? ORDER BY created_at ASC LIMIT 1", (conversation_id,)).fetchone()
+            if att_row:
+                doc_title = att_row["filename"]
+                if doc_title.endswith(".pdf") or doc_title.endswith(".html") or doc_title.endswith(".docx"):
+                    doc_title = doc_title.rsplit(".", 1)[0]
 
         return {
-            "title": sections[0].get("title", "Document"),
+            "title": doc_title,
             "units": units,
-            "topics": [s.get("title") for s in sections if s.get("topic_number") is not None],
-            "total_topics": sum(1 for s in sections if s.get("topic_number") is not None) or len(sections),
+            "unit_count": len(units),
+            "topics": [s.get("title") for s in topics],
+            "total_topics": len(topics),
+            "study_aids": [s.get("title") for s in study_aids],
+            "study_aids_count": len(study_aids),
+            "unit1_count": len(unit1_topics),
+            "unit2_count": len(unit2_topics),
+            "unit1_name": unit1_topics[0].get("unit_name") if unit1_topics else "Unit 1",
+            "unit2_name": unit2_topics[0].get("unit_name") if unit2_topics else "Unit 2",
+            "intro_desc": intro_desc,
             "sections": sections
         }
 

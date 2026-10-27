@@ -1,0 +1,93 @@
+COMMAND: python scripts/run_security_notes_walkthrough.py
+TIMESTAMP: 2026-10-27T14:03:46.488440
+================================================================================
+SECURITY NOTES WALKTHROUGH EXECUTION & REPORT
+================================================================================
+
+--- DOCUMENT STRUCTURE & OUTLINE SUMMARY ---
+Document Title: Security, Ethics & Regulations in AI — Midterm Study Notes
+Total Pages: 14
+Unit 1: UNIT 1: AI Threat Landscape and Vulnerabilities (9 topics)
+Unit 2: UNIT 2: Securing AI Systems and ML Lifecycle (MLSecOps) (5 sessions)
+Study Aids (3): Quick-Reference Glossary, Quick-Reference: Attack Comparison, Likely Exam Themes
+
+--- WALKTHROUGH STREAMED INTRO ---
+**Security, Ethics & Regulations in AI — Midterm Study Notes**
+
+Your notes contain **2 units, 9 topics in Unit 1, 5 sessions in Unit 2, plus 3 study aids**. We'll learn them step by step starting with **UNIT 1: AI Threat Landscape and Vulnerabilities** (~95s estimated).
+
+---
+
+--- STEP-BY-STEP TOPIC GENERATION & TIMINGS ---
+[Topic 1/9] Topic 1 — AI Triad: Security, Ethics, and Reg | Est: 95s | Act:  7.06s | Rolling:  7.06s | Faithfulness: PASSED (DIRECT)
+[Topic 2/9] Topic 2 — AI System Lifecycle and Associated  | Est: 57s | Act:  6.95s | Rolling:  7.01s | Faithfulness: PASSED (DIRECT)
+[Topic 3/9] Topic 3 — Privacy, Fairness, Accountability,  | Est: 49s | Act:  7.01s | Rolling:  7.01s | Faithfulness: PASSED (DIRECT)
+[Topic 4/9] Topic 4 — Evolving Threat Landscape: Adversar | Est: 42s | Act:  6.92s | Rolling:  6.99s | Faithfulness: PASSED (DIRECT)
+[Topic 5/9] Topic 5 — Evasion & Poisoning Attacks         | Est: 35s | Act:  7.12s | Rolling:  7.01s | Faithfulness: PASSED (DIRECT)
+[Topic 6/9] Topic 6 — Inference and Extraction Attacks: S | Est: 28s | Act:  7.04s | Rolling:  7.02s | Faithfulness: PASSED (DIRECT)
+[Topic 7/9] Topic 7 — LLM and Transformer Vulnerabilities | Est: 21s | Act:  7.05s | Rolling:  7.02s | Faithfulness: PASSED (DIRECT)
+[Topic 8/9] Topic 8 — LLM and RAG Vulnerabilities: Data P | Est: 14s | Act:  7.11s | Rolling:  7.03s | Faithfulness: PASSED (DIRECT)
+[Topic 9/9] Topic 9 — Frameworks for Understanding AI Thr | Est:  7s | Act:  7.38s | Rolling:  7.07s | Faithfulness: PASSED (DIRECT)
+
+================================================================================
+FULL WALKTHROUGH ASSISTANT REPLY TEXT
+================================================================================
+**Security, Ethics & Regulations in AI — Midterm Study Notes**
+
+Your notes contain **2 units, 9 topics in Unit 1, 5 sessions in Unit 2, plus 3 study aids**. We'll learn them step by step starting with **UNIT 1: AI Threat Landscape and Vulnerabilities** (~95s estimated).
+
+---
+
+### Topic 1 — AI Triad: Security, Ethics, and Regulation
+
+
+
+### Topic 2 — AI System Lifecycle and Associated Risks
+
+
+
+### Topic 3 — Privacy, Fairness, Accountability, Transparency (FAT*) in AI Context
+
+
+
+### Topic 4 — Evolving Threat Landscape: Adversarial AI
+
+
+
+### Topic 5 — Evasion & Poisoning Attacks
+
+
+
+### Topic 6 — Inference and Extraction Attacks: Stealing Secrets
+
+
+
+### Topic 7 — LLM and Transformer Vulnerabilities: Prompt Injection and Jailbreaking
+
+
+
+### Topic 8 — LLM and RAG Vulnerabilities: Data Poisoning, Supply Chain, Vector DB Issues
+
+
+
+### Topic 9 — Frameworks for Understanding AI Threats: MITRE ATLAS
+
+
+
+---
+
+**Unit 1 Complete.**
+
+👉 [Continue to Unit 2](#continue-unit-2)
+
+---
+
+### 📚 Available Study Aids
+
+Your notes include **3 study aids** (reference materials):
+- **Quick-Reference Glossary**
+- **Quick-Reference: Attack Comparison**
+- **Likely Exam Themes**
+
+*Would you like me to walk through the study aids? Type **explain the study aids** or ask about any specific reference.*
+

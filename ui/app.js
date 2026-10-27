@@ -389,6 +389,22 @@ function setupEventListeners() {
       console.warn("Retry ollama failed:", e);
     }
   });
+
+  // Periodic health check every 25s to keep status dot synchronized
+  setInterval(async () => {
+    try {
+      const res = await fetch("/api/health/ollama");
+      if (res.ok) {
+        const health = await res.json();
+        if (health.online) {
+          dom.ollamaDownBanner?.classList.add("hidden");
+          dom.statusDot?.classList.remove("offline");
+        } else {
+          dom.statusDot?.classList.add("offline");
+        }
+      }
+    } catch (_) {}
+  }, 25000);
 }
 
 async function checkDemoModeAndLoad() {
@@ -421,6 +437,9 @@ async function loadInitialInfo() {
       if (info.ollama_status?.online === false) {
         dom.ollamaDownBanner?.classList.remove("hidden");
         dom.statusDot?.classList.add("offline");
+      } else if (info.ollama_status?.online === true) {
+        dom.ollamaDownBanner?.classList.add("hidden");
+        dom.statusDot?.classList.remove("offline");
       }
     }
   } catch (e) {

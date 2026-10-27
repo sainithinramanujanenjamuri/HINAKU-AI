@@ -521,7 +521,7 @@ async def chat_endpoint(req: ChatRequest, response: Response):
 
     target_model = req.model if (req.model and req.model in settings.allowed_local_models) else settings.default_local_model
     target_opts = dict(settings.get_model_options(target_model))
-    if has_attachments and target_model == "bonsai-2:9b":
+    if target_model == "bonsai-2:9b":
         target_opts["num_ctx"] = 8192
     think_harder_used = False
     use_think = False
@@ -600,23 +600,33 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                 total_all_topics = summary.get("total_topics") or len(sections)
                 doc_title = summary.get("title") or "Study Notes"
                 unit_name = unit_sections[0].get("unit_name") if unit_sections else f"Unit {target_unit}"
+                intro_desc = summary.get("intro_desc") or f"{total_all_topics} main topics across {len(summary.get('units') or [1])} units"
+
+                # Rolling time estimate baseline: ~10.6 seconds per topic
+                rolling_sec_per_topic = 10.6
+                initial_est_seconds = round(rolling_sec_per_topic * len(unit_sections))
 
                 # 1. Deterministic structure preamble
                 intro_text = (
                     f"**{doc_title}**\n\n"
-                    f"Your notes contain **{total_all_topics} main topics** across {len(summary.get('units') or [1])} units. "
-                    f"We'll learn them step by step starting with **{unit_name}** (~{len(unit_sections)*3}s estimated).\n\n"
+                    f"Your notes contain **{intro_desc}**. "
+                    f"We'll learn them step by step starting with **{unit_name}** (~{initial_est_seconds}s estimated).\n\n"
                     "---\n"
                 )
                 accumulated_chunks.append(intro_text)
                 yield f"data: {json.dumps({'type': 'chunk', 'chunk': intro_text, 'backend': 'local', 'model': target_model, 'conversation_id': conv_id})}\n\n"
 
+                from backend.attachments.faithfulness import verify_explanation_faithfulness
+
                 # 2. Iterate topic by topic
                 for idx, sec in enumerate(unit_sections, 1):
                     sec_title = sec["title"]
                     topic_num = sec.get("topic_number") or idx
-                    progress_msg = f"Explaining topic {topic_num} of {total_all_topics}"
-                    yield f"data: {json.dumps({'type': 'walkthrough_progress', 'notice': progress_msg, 'current': topic_num, 'total': total_all_topics, 'topic': sec_title, 'conversation_id': conv_id})}\n\n"
+                    rem_topics = len(unit_sections) - (idx - 1)
+                    current_topic_estimate = round(rolling_sec_per_topic * rem_topics)
+
+                    progress_msg = f"Explaining topic {topic_num} of {total_all_topics} (~{current_topic_estimate}s remaining)"
+                    yield f"data: {json.dumps({'type': 'walkthrough_progress', 'notice': progress_msg, 'current': topic_num, 'total': total_all_topics, 'estimated_remaining_seconds': current_topic_estimate, 'topic': sec_title, 'conversation_id': conv_id})}\n\n"
 
                     # Check cache in SQLite
                     cached = sec.get("explanation_cache")
@@ -637,6 +647,7 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                         {"role": "user", "content": sec_user_prompt}
                     ]
 
+                    topic_t0 = time.perf_counter()
                     topic_accumulated = []
                     is_first_chunk = True
                     async for chunk_evt in local_adapter.stream_chat(
@@ -655,7 +666,46 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                             accumulated_chunks.append(c)
                             yield f"data: {json.dumps({'type': 'chunk', 'chunk': c, 'backend': 'local', 'model': target_model, 'conversation_id': conv_id})}\n\n"
 
+                    actual_duration_s = time.perf_counter() - topic_t0
+                    rolling_sec_per_topic = (rolling_sec_per_topic * (idx - 1) + actual_duration_s) / idx
+                    logger.info(
+                        f"[Walkthrough Timing] [Topic {topic_num}/{total_all_topics}] "
+                        f"Estimated: {current_topic_estimate}s | Actual: {actual_duration_s:.2f}s | "
+                        f"Rolling Avg: {rolling_sec_per_topic:.2f}s/topic"
+                    )
+
                     full_sec_explanation = "".join(topic_accumulated).strip()
+                    
+                    # 3. Faithfulness check in code
+                    is_faithful, missing_terms, checked_text = verify_explanation_faithfulness(full_sec_explanation, sec["text"])
+                    if not is_faithful:
+                        logger.info(f"Faithfulness check triggered for '{sec_title}': ungrounded terms {missing_terms}. Running single-pass regeneration.")
+                        regen_prompt = (
+                            f"{sec_user_prompt}\n\n"
+                            f"Important requirement: Use the exact terms and step names from the notes. "
+                            f"Do not substitute, invent, or generalize step names."
+                        )
+                        regen_msgs = [
+                            {"role": "system", "content": explainer_prompt},
+                            {"role": "user", "content": regen_prompt}
+                        ]
+                        regen_chunks = []
+                        async for c_evt in local_adapter.stream_chat(
+                            model=target_model,
+                            messages=regen_msgs,
+                            options=target_opts,
+                            think=False
+                        ):
+                            c_str = c_evt if isinstance(c_evt, str) else c_evt.get("chunk", "")
+                            if c_str:
+                                regen_chunks.append(c_str)
+                        regen_explanation = "".join(regen_chunks).strip()
+                        is_regen_faithful, missing_regen, final_annotated = verify_explanation_faithfulness(regen_explanation, sec["text"])
+                        if is_regen_faithful:
+                            full_sec_explanation = regen_explanation
+                        else:
+                            full_sec_explanation = final_annotated
+
                     if full_sec_explanation:
                         attachment_manager.update_section_cache(sec["id"], full_sec_explanation)
 
@@ -666,6 +716,20 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                     continue_block = f"\n\n---\n\n**Unit {target_unit} Complete.**\n\n👉 [Continue to Unit {next_unit}](#continue-unit-{next_unit})\n"
                     accumulated_chunks.append(continue_block)
                     yield f"data: {json.dumps({'type': 'chunk', 'chunk': continue_block, 'backend': 'local', 'model': target_model, 'conversation_id': conv_id})}\n\n"
+
+                # Offer study aids at the end of the walkthrough
+                study_aids = summary.get("study_aids") or []
+                if study_aids:
+                    aid_lines = [f"- **{aid}**" for aid in study_aids]
+                    aid_block = (
+                        f"\n\n---\n\n"
+                        f"### 📚 Available Study Aids\n\n"
+                        f"Your notes include **{len(study_aids)} study aids** (reference materials):\n"
+                        + "\n".join(aid_lines)
+                        + f"\n\n*Would you like me to walk through the study aids? Type **explain the study aids** or ask about any specific reference.*\n"
+                    )
+                    accumulated_chunks.append(aid_block)
+                    yield f"data: {json.dumps({'type': 'chunk', 'chunk': aid_block, 'backend': 'local', 'model': target_model, 'conversation_id': conv_id})}\n\n"
             else:
                 async for event in model_router.stream_chat(
                     trimmed_messages,
@@ -751,12 +815,20 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                 }
                 yield f"data: {json.dumps(fallback_chunk)}\n\n"
             elif final_reply != draft_reply:
-                corr_payload = {
-                    "type": "correction",
-                    "final_content": final_reply,
-                    "conversation_id": conv_id
-                }
-                yield f"data: {json.dumps(corr_payload)}\n\n"
+                # Safeguard: Never replace with reply shorter than 60% of streamed draft (except guards)
+                if used_backend != "guard" and len(final_reply) < 0.60 * len(draft_reply):
+                    logger.warning(
+                        f"Safeguard prevented correction: final length {len(final_reply)} is < 60% of "
+                        f"streamed draft ({len(draft_reply)}). Keeping original streamed draft."
+                    )
+                    final_reply = draft_reply
+                else:
+                    corr_payload = {
+                        "type": "correction",
+                        "final_content": final_reply,
+                        "conversation_id": conv_id
+                    }
+                    yield f"data: {json.dumps(corr_payload)}\n\n"
 
             from backend.attachments.citations import strip_wrapper_tags_and_extract_citations
             final_reply, doc_citations = strip_wrapper_tags_and_extract_citations(final_reply)

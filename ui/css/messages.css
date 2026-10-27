@@ -186,11 +186,22 @@
   margin-bottom: 0;
 }
 
-.assistant-body h1, .assistant-body h2, .assistant-body h3 {
+.assistant-body h1, .assistant-body h2, .assistant-body h3, .assistant-body h4 {
   margin-top: 16px;
   margin-bottom: 8px;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.assistant-body h1 { font-size: 1.25em; }
+.assistant-body h2 { font-size: 1.15em; }
+.assistant-body h3 { font-size: 1.05em; }
+.assistant-body h4 { font-size: 0.98em; }
+
+.assistant-body hr {
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+  margin: 16px 0;
 }
 
 .assistant-body ul, .assistant-body ol {

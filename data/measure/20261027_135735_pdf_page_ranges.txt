@@ -1,0 +1,76 @@
+COMMAND: python scripts/measure_pdf_page_ranges.py
+TIMESTAMP: 2026-10-27T13:57:35.148534
+================================================================================
+PDF SECTION PAGE RANGES MEASUREMENT (SAMPLE DOCUMENTS)
+================================================================================
+
+DOCUMENT: Game Mechanics, Design & Development - Midterm Notes for Units 1 and 2.pdf
+PARSED TITLE: Game Mechanics, Design & Development — Midterm Notes (Units 1 & 2)
+TOTAL PAGES: 13
+TOTAL SECTIONS: 29
+TOPICS IN UNIT 1: 17
+TOPICS/SESSIONS IN UNIT 2: 11
+STUDY AIDS: 1
+--------------------------------------------------------------------------------
+Order Type      Pages       Unit                  Title
+--------------------------------------------------------------------------------
+1     topic     p. 1        UNIT 1 — FOUNDATIONA  1. Defining Games & Play
+2     topic     p. 1        UNIT 1 — FOUNDATIONA  2. UI (User Interface) Design
+3     topic     p. 1        UNIT 1 — FOUNDATIONA  3. UX (User Experience) Design
+4     topic     pp. 1-2     UNIT 1 — FOUNDATIONA  4. Heuristic Evaluation
+5     topic     p. 2        UNIT 1 — FOUNDATIONA  5. Personas & Scenarios
+6     topic     pp. 2-3     UNIT 1 — FOUNDATIONA  6. MDA Framework (Mechanics – Dynamics – Aesthetics)
+7     topic     p. 3        UNIT 1 — FOUNDATIONA  7. The 6D Framework (gamification design)
+8     topic     p. 3        UNIT 1 — FOUNDATIONA  8. Player-Centered Design Framework
+9     topic     p. 3        UNIT 1 — FOUNDATIONA  9. Player Types
+10    topic     p. 3        UNIT 1 — FOUNDATIONA  10. Ten Game Design Rules
+11    topic     p. 3        UNIT 1 — FOUNDATIONA  11. Designer vs. Player Dynamic
+12    topic     pp. 3-4     UNIT 1 — FOUNDATIONA  12. Game History — Key Milestones
+13    topic     pp. 4-5     UNIT 1 — FOUNDATIONA  13. Game Genres
+14    topic     p. 5        UNIT 1 — FOUNDATIONA  14. Context of Games
+15    topic     pp. 5-6     UNIT 1 — FOUNDATIONA  15. Game Design & Development Process
+16    topic     pp. 6-7     UNIT 1 — FOUNDATIONA  16. Prototyping
+17    topic     p. 7        UNIT 1 — FOUNDATIONA  17. Playtesting
+18    topic     pp. 7-8     UNIT 2 — CORE MECHAN  18. Unity Transforms & Object Parenting
+19    topic     p. 8        UNIT 2 — CORE MECHAN  19. Internal Assets & Scripting Basics
+20    topic     p. 8        UNIT 2 — CORE MECHAN  20. Player Input & Control
+21    topic     pp. 8-9     UNIT 2 — CORE MECHAN  21. Combat / Action Game Mechanics Design
+22    topic     p. 9        UNIT 2 — CORE MECHAN  22. Puzzle Mechanics & Challenge Design
+23    topic     pp. 9-10    UNIT 2 — CORE MECHAN  23. Worked Example — The 15-Puzzle (Sliding Puzzle)
+24    topic     p. 10       UNIT 2 — CORE MECHAN  24. Game Economy Design — 7-Step Framework
+25    topic     p. 10       UNIT 2 — CORE MECHAN  25. Game Progression
+26    topic     pp. 10-11   UNIT 2 — CORE MECHAN  26. Game Balancing
+27    topic     p. 11       UNIT 2 — CORE MECHAN  27. Unity Scripting — C# Essentials
+28    topic     pp. 11-12   UNIT 2 — CORE MECHAN  28. Unity User Interface & UI Fundamentals
+29    study_aid pp. 12-13   UNIT 2 — CORE MECHAN  Quick-Recall Cheat Sheet
+
+DOCUMENT: Security, Ethics & Regulations in AI - Midterm Notes.pdf
+PARSED TITLE: Security, Ethics & Regulations in AI — Midterm Study Notes
+TOTAL PAGES: 14
+TOTAL SECTIONS: 20
+TOPICS IN UNIT 1: 9
+TOPICS/SESSIONS IN UNIT 2: 8
+STUDY AIDS: 3
+--------------------------------------------------------------------------------
+Order Type      Pages       Unit                  Title
+--------------------------------------------------------------------------------
+1     topic     pp. 1-2     UNIT 1: AI Threat La  Topic 1 — AI Triad: Security, Ethics, and Regulation
+2     topic     p. 2        UNIT 1: AI Threat La  Topic 2 — AI System Lifecycle and Associated Risks
+3     topic     pp. 2-3     UNIT 1: AI Threat La  Topic 3 — Privacy, Fairness, Accountability, Transparency (FAT*) in AI Context
+4     topic     pp. 3-4     UNIT 1: AI Threat La  Topic 4 — Evolving Threat Landscape: Adversarial AI
+5     topic     pp. 4-5     UNIT 1: AI Threat La  Topic 5 — Evasion & Poisoning Attacks
+6     topic     pp. 5-6     UNIT 1: AI Threat La  Topic 6 — Inference and Extraction Attacks: Stealing Secrets
+7     topic     p. 6        UNIT 1: AI Threat La  Topic 7 — LLM and Transformer Vulnerabilities: Prompt Injection and Jailbreaking
+8     topic     pp. 6-7     UNIT 1: AI Threat La  Topic 8 — LLM and RAG Vulnerabilities: Data Poisoning, Supply Chain, Vector DB Issues
+9     topic     pp. 7-8     UNIT 1: AI Threat La  Topic 9 — Frameworks for Understanding AI Threats: MITRE ATLAS
+10    session   pp. 8-9     UNIT 2: Securing AI   Session 8 — Introduction to MLSecOps
+11    session   pp. 9-10    UNIT 2: Securing AI   Session 9 — Secure Data Management and Provenance
+12    session   pp. 10-11   UNIT 2: Securing AI   Session 10 — Secure Model Development and Training
+13    session   p. 11       UNIT 2: Securing AI   Session 11 — Secure Deployment and Monitoring
+14    session   pp. 11-12   UNIT 2: Securing AI   Sessions 12–14 — End-to-End MLSecOps, AI Security Case Studies & Unit Review
+15    session   p. 12       UNIT 2: Securing AI   Session 12 (End-to-End MLSecOps):
+16    session   p. 12       UNIT 2: Securing AI   Session 13 (AI Security Case Studies):
+17    session   p. 12       UNIT 2: Securing AI   Session 14 (Review of Unit-II):
+18    study_aid pp. 12-13   UNIT 2: Securing AI   Quick-Reference Glossary
+19    study_aid p. 13       UNIT 2: Securing AI   Quick-Reference: Attack Comparison
+20    study_aid pp. 13-14   UNIT 2: Securing AI   Likely Exam Themes
