@@ -1,0 +1,69 @@
+================================================================================
+HINAKU CONTEXT WINDOW BENCHMARK: bonsai-2:9b (4096 vs 8192 num_ctx)
+Timestamp: 2026-10-27T11:01:23.694293
+Model: bonsai-2:9b
+================================================================================
+
+[TEST 1: num_ctx = 4096]
+Latency: 28.20 s | Tokens: 880 | Speed: 55.2 tok/s
+OLLAMA PS:
+NAME           ID              SIZE      PROCESSOR    CONTEXT    RUNNER      UNTIL               
+bonsai-2:9b    c8b5462f8688    2.8 GB    100% GPU     4096       llamacpp    29 minutes from now
+
+NVIDIA-SMI:
+Tue Oct 27 11:00:49 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 617.42                 KMD Version: 617.42        CUDA UMD Version: 13.4     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                  Driver-Model | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA GeForce RTX 4050 ...  WDDM  |   00000000:01:00.0 Off |                  N/A |
+| N/A   60C    P0             49W /   50W |    3463MiB /   6141MiB |     82%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|    0   N/A  N/A           13160      C   ...a\lib\ollama\llama-server.exe      N/A      |
++-----------------------------------------------------------------------------------------+
+
+
+[TEST 2: num_ctx = 8192]
+Latency: 31.71 s | Tokens: 973 | Speed: 54.3 tok/s
+Latency Ratio (8192 / 4096): 1.12x
+OLLAMA PS:
+NAME           ID              SIZE      PROCESSOR    CONTEXT    RUNNER      UNTIL               
+bonsai-2:9b    c8b5462f8688    3.0 GB    100% GPU     8192       llamacpp    29 minutes from now
+
+NVIDIA-SMI:
+Tue Oct 27 11:01:23 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 617.42                 KMD Version: 617.42        CUDA UMD Version: 13.4     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                  Driver-Model | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA GeForce RTX 4050 ...  WDDM  |   00000000:01:00.0 Off |                  N/A |
+| N/A   67C    P0             49W /   50W |    3595MiB /   6141MiB |     69%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|    0   N/A  N/A            6764      C   ...a\lib\ollama\llama-server.exe      N/A      |
++-----------------------------------------------------------------------------------------+
+
+================================================================================
+VERDICT: RAISE to 8192 for document turns
+- Stays 100% GPU offload: True
+- Latency under 2x multiplier (1.12x < 2.0x): True
+================================================================================

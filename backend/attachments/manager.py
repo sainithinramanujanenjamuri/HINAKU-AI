@@ -30,6 +30,7 @@ from .extractor import (
 )
 from .chunker import chunk_document_pages
 from .storage import AttachmentStorage
+from .outline import extract_outline_from_html, extract_outline_from_pages, DocumentSection
 
 logger = logging.getLogger("hinaku.attachments.manager")
 
@@ -92,27 +93,35 @@ class AttachmentManager:
         # 3. Content inspection and type validation
         file_type = detect_and_validate_content(safe_name, content_bytes)
 
-        # 4. Extract content and create chunks
+        # 4. Extract content, create chunks, and extract structured outline
         extracted_text = ""
         chunks = []
+        pages = []
+        sections = []
 
         if file_type == "text":
             pages = extract_text_from_file(content_bytes)
             extracted_text = "\n\n".join(p.text for p in pages if p.text)
             chunks = chunk_document_pages("temp", safe_name, pages)
+            if "<h1" in extracted_text.lower() or "<h2" in extracted_text.lower():
+                _, sections = extract_outline_from_html(extracted_text)
+            else:
+                _, sections = extract_outline_from_pages(pages, safe_name)
         elif file_type == "docx":
             pages = extract_text_from_docx(content_bytes)
             extracted_text = "\n\n".join(p.text for p in pages if p.text)
             chunks = chunk_document_pages("temp", safe_name, pages)
+            _, sections = extract_outline_from_pages(pages, safe_name)
         elif file_type == "pdf":
             pages = extract_text_from_pdf(content_bytes)
             extracted_text = "\n\n".join(p.text for p in pages if p.text)
             chunks = chunk_document_pages("temp", safe_name, pages)
+            _, sections = extract_outline_from_pages(pages, safe_name)
         elif file_type == "image":
             img_info = validate_and_inspect_image(content_bytes)
             extracted_text = f"[Image: {safe_name}, Format: {img_info['format'].upper()}, Dimensions: {img_info['width']}x{img_info['height']}]"
 
-        # 5. Persist to storage
+        # 5. Persist to storage with outline sections
         record = self.storage.save_attachment(
             conversation_id=conversation_id,
             filename=safe_name,
@@ -120,7 +129,8 @@ class AttachmentManager:
             file_type=file_type,
             mime_type=mime_type or f"application/{file_type}",
             extracted_text=extracted_text,
-            chunks=chunks
+            chunks=chunks,
+            sections=sections
         )
 
         return record
@@ -137,18 +147,36 @@ class AttachmentManager:
     def delete_conversation_attachments(self, conversation_id: str) -> int:
         return self.storage.delete_conversation_attachments(conversation_id)
 
+    def get_sections(
+        self,
+        conversation_id: str,
+        unit_name: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        return self.storage.get_sections(conversation_id, unit_name)
+
+    def get_section_by_id(self, section_id: str) -> Optional[Dict[str, Any]]:
+        return self.storage.get_section_by_id(section_id)
+
+    def update_section_cache(self, section_id: str, explanation_cache: str) -> None:
+        self.storage.update_section_cache(section_id, explanation_cache)
+
+    def get_document_outline_summary(self, conversation_id: str) -> Dict[str, Any]:
+        return self.storage.get_document_outline_summary(conversation_id)
+
     def get_document_prompt_context(
         self,
         conversation_id: str,
         user_query: str
-    ) -> str:
+    ) -> Tuple[str, Dict[str, Any]]:
         """
         Retrieves relevant document text and wraps it in untrusted reference tags
         to prevent prompt injection.
+        Returns (wrapped_prompt_context, coverage_metadata).
         """
-        raw_doc_context = self.storage.get_document_context_for_query(conversation_id, user_query)
+        raw_doc_context, coverage = self.storage.get_document_context_for_query(conversation_id, user_query)
         if not raw_doc_context.strip():
-            return ""
+            return "", {"sections": [], "pages": []}
 
-        return "\n\n" + DOCUMENT_PROMPT_WRAPPER.format(content=raw_doc_context)
+        wrapped = "\n\n" + DOCUMENT_PROMPT_WRAPPER.format(content=raw_doc_context)
+        return wrapped, coverage
 

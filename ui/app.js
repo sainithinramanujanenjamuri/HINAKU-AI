@@ -830,6 +830,13 @@ async function handleSendMessage(overrideText = null) {
   dom.emptyStateView?.classList.add("hidden");
   dom.messagesContainer?.classList.remove("hidden");
 
+  // Auto-clear Detailed mode after sending unless pinned
+  if (state.detailed && !state.detailedPinned) {
+    state.detailed = false;
+    dom.chipDetailed?.classList.add("hidden");
+    if (dom.menuDetailedCheck) dom.menuDetailedCheck.textContent = "";
+  }
+
   // Render User Message with attachment cards
   const userEl = createUserMessageElement(text || "(Sent attachments)", new Date().toISOString(), null, filesToUpload);
   dom.messagesContainer.appendChild(userEl);

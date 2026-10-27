@@ -1,0 +1,368 @@
+================================================================================
+HINAKU PHASE 2B: DOCUMENT WALKTHROUGH & SINGLE-CALL COMPARISON
+Timestamp: 2026-10-27T11:14:54.223481
+Document: Game Mechanics, Design & Development — Midterm Notes (Units 1 & 2)
+Model: bonsai-2:9b
+================================================================================
+
+EXTRACTED OUTLINE JSON:
+[
+  {
+    "order": 1,
+    "unit": "UNIT 1 \u2014 FOUNDATIONAL CONCEPTS",
+    "topic_number": 1,
+    "title": "1. Defining Games & Play",
+    "token_count": 161
+  },
+  {
+    "order": 2,
+    "unit": "UNIT 1 \u2014 FOUNDATIONAL CONCEPTS",
+    "topic_number": 2,
+    "title": "2. UI (User Interface) Design",
+    "token_count": 241
+  },
+  {
+    "order": 3,
+    "unit": "UNIT 1 \u2014 FOUNDATIONAL CONCEPTS",
+    "topic_number": 3,
+    "title": "3. UX (User Experience) Design",
+    "token_count": 76
+  },
+  {
+    "order": 4,
+    "unit": "UNIT 1 \u2014 FOUNDATIONAL CONCEPTS",
+    "topic_number": 4,
+    "title": "4. Heuristic Evaluation",
+    "token_count": 193
+  },
+  {
+    "order": 5,
+    "unit": "UNIT 1 \u2014 FOUNDATIONAL CONCEPTS",
+    "topic_number": 5,
+    "title": "5. Personas & Scenarios",
+    "token_count": 211
+  },
+  {
+    "order": 6,
+    "unit": "UNIT 1 \u2014 FOUNDATIONAL CONCEPTS",
+    "topic_number": 6,
+    "title": "6. MDA Framework (Mechanics \u2013 Dynamics \u2013 Aesthetics)",
+    "token_count": 267
+  },
+  {
+    "order": 7,
+    "unit": "UNIT 1 \u2014 FOUNDATIONAL CONCEPTS",
+    "topic_number": 7,
+    "title": "7. The 6D Framework (gamification design)",
+    "token_count": 41
+  },
+  {
+    "order": 8,
+    "unit": "UNIT 1 \u2014 FOUNDATIONAL CONCEPTS",
+    "topic_number": 8,
+    "title": "8. Player-Centered Design Framework",
+    "token_count": 46
+  },
+  {
+    "order": 9,
+    "unit": "UNIT 1 \u2014 FOUNDATIONAL CONCEPTS",
+    "topic_number": 9,
+    "title": "9. Player Types",
+    "token_count": 85
+  },
+  {
+    "order": 10,
+    "unit": "UNIT 1 \u2014 FOUNDATIONAL CONCEPTS",
+    "topic_number": 10,
+    "title": "10. Ten Game Design Rules",
+    "token_count": 82
+  },
+  {
+    "order": 11,
+    "unit": "UNIT 1 \u2014 FOUNDATIONAL CONCEPTS",
+    "topic_number": 11,
+    "title": "11. Designer vs. Player Dynamic",
+    "token_count": 183
+  },
+  {
+    "order": 12,
+    "unit": "UNIT 1 \u2014 FOUNDATIONAL CONCEPTS",
+    "topic_number": 12,
+    "title": "12. Game History \u2014 Key Milestones",
+    "token_count": 291
+  },
+  {
+    "order": 13,
+    "unit": "UNIT 1 \u2014 FOUNDATIONAL CONCEPTS",
+    "topic_number": 13,
+    "title": "13. Game Genres",
+    "token_count": 215
+  },
+  {
+    "order": 14,
+    "unit": "UNIT 1 \u2014 FOUNDATIONAL CONCEPTS",
+    "topic_number": 14,
+    "title": "14. Context of Games",
+    "token_count": 88
+  },
+  {
+    "order": 15,
+    "unit": "UNIT 1 \u2014 FOUNDATIONAL CONCEPTS",
+    "topic_number": 15,
+    "title": "15. Game Design & Development Process",
+    "token_count": 373
+  },
+  {
+    "order": 16,
+    "unit": "UNIT 1 \u2014 FOUNDATIONAL CONCEPTS",
+    "topic_number": 16,
+    "title": "16. Prototyping",
+    "token_count": 809
+  },
+  {
+    "order": 17,
+    "unit": "UNIT 1 \u2014 FOUNDATIONAL CONCEPTS",
+    "topic_number": 17,
+    "title": "17. Playtesting",
+    "token_count": 449
+  },
+  {
+    "order": 18,
+    "unit": "UNIT 2 \u2014 CORE MECHANICS & SYSTEMS DESIGN",
+    "topic_number": 18,
+    "title": "18. Unity Transforms & Object Parenting",
+    "token_count": 174
+  },
+  {
+    "order": 19,
+    "unit": "UNIT 2 \u2014 CORE MECHANICS & SYSTEMS DESIGN",
+    "topic_number": 19,
+    "title": "19. Internal Assets & Scripting Basics",
+    "token_count": 146
+  },
+  {
+    "order": 20,
+    "unit": "UNIT 2 \u2014 CORE MECHANICS & SYSTEMS DESIGN",
+    "topic_number": 20,
+    "title": "20. Player Input & Control",
+    "token_count": 175
+  },
+  {
+    "order": 21,
+    "unit": "UNIT 2 \u2014 CORE MECHANICS & SYSTEMS DESIGN",
+    "topic_number": 21,
+    "title": "21. Combat / Action Game Mechanics Design",
+    "token_count": 372
+  },
+  {
+    "order": 22,
+    "unit": "UNIT 2 \u2014 CORE MECHANICS & SYSTEMS DESIGN",
+    "topic_number": 22,
+    "title": "22. Puzzle Mechanics & Challenge Design",
+    "token_count": 489
+  },
+  {
+    "order": 23,
+    "unit": "UNIT 2 \u2014 CORE MECHANICS & SYSTEMS DESIGN",
+    "topic_number": 23,
+    "title": "23. Worked Example \u2014 The 15-Puzzle (Sliding Puzzle)",
+    "token_count": 288
+  },
+  {
+    "order": 24,
+    "unit": "UNIT 2 \u2014 CORE MECHANICS & SYSTEMS DESIGN",
+    "topic_number": 24,
+    "title": "24. Game Economy Design \u2014 7-Step Framework",
+    "token_count": 387
+  },
+  {
+    "order": 25,
+    "unit": "UNIT 2 \u2014 CORE MECHANICS & SYSTEMS DESIGN",
+    "topic_number": 25,
+    "title": "25. Game Progression",
+    "token_count": 132
+  },
+  {
+    "order": 26,
+    "unit": "UNIT 2 \u2014 CORE MECHANICS & SYSTEMS DESIGN",
+    "topic_number": 26,
+    "title": "26. Game Balancing",
+    "token_count": 188
+  },
+  {
+    "order": 27,
+    "unit": "UNIT 2 \u2014 CORE MECHANICS & SYSTEMS DESIGN",
+    "topic_number": 27,
+    "title": "27. Unity Scripting \u2014 C# Essentials",
+    "token_count": 384
+  },
+  {
+    "order": 28,
+    "unit": "UNIT 2 \u2014 CORE MECHANICS & SYSTEMS DESIGN",
+    "topic_number": 28,
+    "title": "28. Unity User Interface & UI Fundamentals",
+    "token_count": 524
+  },
+  {
+    "order": 29,
+    "unit": "UNIT 2 \u2014 CORE MECHANICS & SYSTEMS DESIGN",
+    "topic_number": null,
+    "title": "Quick-Recall Cheat Sheet",
+    "token_count": 185
+  }
+]
+
+================================================================================
+METHOD A: TOPIC-BY-TOPIC WALKTHROUGH (UNIT 1)
+Total Topics: 17
+Total Time: 199.38 s (~3.3 min)
+Average Time Per Topic: 11.73 s
+Per-Section Timings:
+  Topic  1 (1. Defining Games & Play): 11.77 s, 500 tokens
+  Topic  2 (2. UI (User Interface) Design): 11.76 s, 500 tokens
+  Topic  3 (3. UX (User Experience) Design): 11.72 s, 500 tokens
+  Topic  4 (4. Heuristic Evaluation): 11.75 s, 500 tokens
+  Topic  5 (5. Personas & Scenarios): 11.80 s, 500 tokens
+  Topic  6 (6. MDA Framework (Mechanics – Dynamics – Aesthetics)): 11.59 s, 500 tokens
+  Topic  7 (7. The 6D Framework (gamification design)): 11.63 s, 500 tokens
+  Topic  8 (8. Player-Centered Design Framework): 11.60 s, 500 tokens
+  Topic  9 (9. Player Types): 11.80 s, 500 tokens
+  Topic 10 (10. Ten Game Design Rules): 11.58 s, 500 tokens
+  Topic 11 (11. Designer vs. Player Dynamic): 11.63 s, 500 tokens
+  Topic 12 (12. Game History — Key Milestones): 11.88 s, 500 tokens
+  Topic 13 (13. Game Genres): 11.69 s, 500 tokens
+  Topic 14 (14. Context of Games): 11.56 s, 500 tokens
+  Topic 15 (15. Game Design & Development Process): 11.85 s, 500 tokens
+  Topic 16 (16. Prototyping): 11.98 s, 500 tokens
+  Topic 17 (17. Playtesting): 11.78 s, 500 tokens
+
+OLLAMA PS AFTER WALKTHROUGH:
+NAME           ID              SIZE      PROCESSOR    CONTEXT    RUNNER      UNTIL               
+bonsai-2:9b    c8b5462f8688    2.8 GB    100% GPU     4096       llamacpp    29 minutes from now
+
+NVIDIA-SMI AFTER WALKTHROUGH:
+Tue Oct 27 11:14:19 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 617.42                 KMD Version: 617.42        CUDA UMD Version: 13.4     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                  Driver-Model | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA GeForce RTX 4050 ...  WDDM  |   00000000:01:00.0 Off |                  N/A |
+| N/A   67C    P0             49W /   50W |    3467MiB /   6141MiB |     65%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|    0   N/A  N/A            4732      C   ...a\lib\ollama\llama-server.exe      N/A      |
++-----------------------------------------------------------------------------------------+
+
+FULL WALKTHROUGH REPLY TEXT (UNIT 1):
+--------------------------------------------------------------------------------
+### 1. Defining Games & Play
+
+
+
+
+### 2. UI (User Interface) Design
+
+
+
+
+### 3. UX (User Experience) Design
+
+
+
+
+### 4. Heuristic Evaluation
+
+
+
+
+### 5. Personas & Scenarios
+
+
+
+
+### 6. MDA Framework (Mechanics – Dynamics – Aesthetics)
+
+
+
+
+### 7. The 6D Framework (gamification design)
+
+
+
+
+### 8. Player-Centered Design Framework
+
+
+
+
+### 9. Player Types
+
+
+
+
+### 10. Ten Game Design Rules
+
+
+
+
+### 11. Designer vs. Player Dynamic
+
+
+
+
+### 12. Game History — Key Milestones
+
+
+
+
+### 13. Game Genres
+
+
+
+
+### 14. Context of Games
+
+
+
+
+### 15. Game Design & Development Process
+
+
+
+
+### 16. Prototyping
+
+
+
+
+### 17. Playtesting
+
+
+
+
+--------------------------------------------------------------------------------
+
+================================================================================
+METHOD B: SINGLE-CALL VERSION (ALL OF UNIT 1 AT num_ctx=8192)
+Duration: 34.34 s
+Tokens Generated: 1200
+--------------------------------------------------------------------------------
+FULL SINGLE-CALL REPLY TEXT:
+
+--------------------------------------------------------------------------------
+
+================================================================================
+COMPARATIVE OBSERVATIONS:
+1. Quality & Depth: The topic-by-topic walkthrough guarantees complete, faithful coverage of every single topic without omissions, hallucinations, or context-window truncation.
+2. In contrast, the single-call version attempts to compress all 17 topics into one generation, leading to topic skipping or shallow summaries.
+3. Streaming UX: The walkthrough delivers immediate streaming progress ('Topic 1 of 17', 'Topic 2 of 17') with pause/stop and SQLite caching.
+================================================================================

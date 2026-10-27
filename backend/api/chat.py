@@ -32,6 +32,7 @@ from backend.guards import (
     get_system_clock_context
 )
 from backend.models.ollama_shared import log_ollama_call
+from backend.attachments.intent import is_overview_intent, extract_target_unit
 
 logger = logging.getLogger("hinaku.chat")
 
@@ -490,13 +491,14 @@ async def chat_endpoint(req: ChatRequest, response: Response):
     persona_text = persona_state.content
     if is_api:
         persona_text += "\n\nDo not use LaTeX or mathematical dollar signs ($...$ or $$...$$). Use standard Unicode characters (e.g. →, ×, ≤, ≥, ≠, ·, etc.) for symbols and equations."
-    if is_detail:
+    if is_detail and not has_attachments:
         persona_text += "\nExplain in about 250 words ending with a one-sentence conclusion. Do not open with 'Okay, let's break down' or similar filler; begin directly with the answer."
     system_parts = [persona_text, clock_context]
     if memory_context:
         system_parts.append(memory_context)
+    coverage_meta = {"sections": [], "pages": []}
     if has_attachments:
-        doc_context = attachment_manager.get_document_prompt_context(conv_id, latest_user_text)
+        doc_context, coverage_meta = attachment_manager.get_document_prompt_context(conv_id, latest_user_text)
         if doc_context:
             system_parts.append(doc_context)
     if is_despair:
@@ -519,6 +521,8 @@ async def chat_endpoint(req: ChatRequest, response: Response):
 
     target_model = req.model if (req.model and req.model in settings.allowed_local_models) else settings.default_local_model
     target_opts = dict(settings.get_model_options(target_model))
+    if has_attachments and target_model == "bonsai-2:9b":
+        target_opts["num_ctx"] = 8192
     think_harder_used = False
     use_think = False
 
@@ -578,39 +582,119 @@ async def chat_endpoint(req: ChatRequest, response: Response):
 
             t_gen_start = time.perf_counter()
             encountered_error = None
-            async for event in model_router.stream_chat(
-                trimmed_messages,
-                user_prompt=latest_user_text,
-                is_private=is_private,
-                last_backend=last_backend,
-                override_model=target_model,
-                think=use_think,
-                options=target_opts,
-                is_detail=is_detail,
-                has_attachments=has_attachments
-            ):
-                if event.get("type") == "error":
-                    encountered_error = event
-                    yield f"data: {json.dumps(event)}\n\n"
-                    break
 
-                used_backend = event["backend"]
-                used_model = event["model"]
-                if event.get("notice"):
-                    stream_notice = event["notice"]
+            if has_attachments and is_overview_intent(latest_user_text):
+                # WALKTHROUGH FLOW (One model call per topic in order, cached in SQLite)
+                from pathlib import Path
+                prompt_file = Path("config/prompts/study_explainer.md")
+                explainer_prompt = prompt_file.read_text(encoding="utf-8") if prompt_file.exists() else "Explain from basics with examples."
 
-                chunk_payload = {
-                    "type": "chunk",
-                    "chunk": event["chunk"],
-                    "backend": used_backend,
-                    "model": used_model,
-                    "conversation_id": conv_id,
-                    "persona_fallback": persona_state.is_fallback,
-                    "notice": stream_notice,
-                    "logged_by_provider": settings.api_logged_by_provider
-                }
-                accumulated_chunks.append(event["chunk"])
-                yield f"data: {json.dumps(chunk_payload)}\n\n"
+                sections = attachment_manager.get_sections(conv_id)
+                summary = attachment_manager.get_document_outline_summary(conv_id)
+                target_unit = extract_target_unit(latest_user_text) or 1
+
+                unit_sections = [s for s in sections if f"UNIT {target_unit}" in (s.get("unit_name") or "").upper()]
+                if not unit_sections:
+                    unit_sections = sections
+
+                total_all_topics = summary.get("total_topics") or len(sections)
+                doc_title = summary.get("title") or "Study Notes"
+                unit_name = unit_sections[0].get("unit_name") if unit_sections else f"Unit {target_unit}"
+
+                # 1. Deterministic structure preamble
+                intro_text = (
+                    f"**{doc_title}**\n\n"
+                    f"Your notes contain **{total_all_topics} main topics** across {len(summary.get('units') or [1])} units. "
+                    f"We'll learn them step by step starting with **{unit_name}** (~{len(unit_sections)*3}s estimated).\n\n"
+                    "---\n"
+                )
+                accumulated_chunks.append(intro_text)
+                yield f"data: {json.dumps({'type': 'chunk', 'chunk': intro_text, 'backend': 'local', 'model': target_model, 'conversation_id': conv_id})}\n\n"
+
+                # 2. Iterate topic by topic
+                for idx, sec in enumerate(unit_sections, 1):
+                    sec_title = sec["title"]
+                    topic_num = sec.get("topic_number") or idx
+                    progress_msg = f"Explaining topic {topic_num} of {total_all_topics}"
+                    yield f"data: {json.dumps({'type': 'walkthrough_progress', 'notice': progress_msg, 'current': topic_num, 'total': total_all_topics, 'topic': sec_title, 'conversation_id': conv_id})}\n\n"
+
+                    # Check cache in SQLite
+                    cached = sec.get("explanation_cache")
+                    if cached:
+                        cached_block = f"\n\n### {sec_title}\n\n{cached}\n\n"
+                        accumulated_chunks.append(cached_block)
+                        yield f"data: {json.dumps({'type': 'chunk', 'chunk': cached_block, 'backend': 'local', 'model': target_model, 'conversation_id': conv_id})}\n\n"
+                        continue
+
+                    # Stream generation from model
+                    header_block = f"\n\n### {sec_title}\n\n"
+                    accumulated_chunks.append(header_block)
+                    yield f"data: {json.dumps({'type': 'chunk', 'chunk': header_block, 'backend': 'local', 'model': target_model, 'conversation_id': conv_id})}\n\n"
+
+                    sec_user_prompt = f"Topic to explain:\nTitle: {sec_title}\n\nNotes Text:\n{sec['text']}"
+                    topic_messages = [
+                        {"role": "system", "content": explainer_prompt},
+                        {"role": "user", "content": sec_user_prompt}
+                    ]
+
+                    topic_accumulated = []
+                    async for chunk_evt in local_adapter.stream_chat(
+                        model=target_model,
+                        messages=topic_messages,
+                        options=target_opts,
+                        think=False
+                    ):
+                        c = chunk_evt if isinstance(chunk_evt, str) else chunk_evt.get("chunk", "")
+                        if c:
+                            topic_accumulated.append(c)
+                            accumulated_chunks.append(c)
+                            yield f"data: {json.dumps({'type': 'chunk', 'chunk': c, 'backend': 'local', 'model': target_model, 'conversation_id': conv_id})}\n\n"
+
+                    full_sec_explanation = "".join(topic_accumulated).strip()
+                    if full_sec_explanation:
+                        attachment_manager.update_section_cache(sec["id"], full_sec_explanation)
+
+                # Check if next unit exists
+                next_unit = target_unit + 1
+                has_next = any(f"UNIT {next_unit}" in (s.get("unit_name") or "").upper() for s in sections)
+                if has_next:
+                    continue_block = f"\n\n---\n\n**Unit {target_unit} Complete.**\n\n👉 [Continue to Unit {next_unit}](#continue-unit-{next_unit})\n"
+                    accumulated_chunks.append(continue_block)
+                    yield f"data: {json.dumps({'type': 'chunk', 'chunk': continue_block, 'backend': 'local', 'model': target_model, 'conversation_id': conv_id})}\n\n"
+            else:
+                async for event in model_router.stream_chat(
+                    trimmed_messages,
+                    user_prompt=latest_user_text,
+                    is_private=is_private,
+                    last_backend=last_backend,
+                    override_model=target_model,
+                    think=use_think,
+                    options=target_opts,
+                    is_detail=is_detail,
+                    has_attachments=has_attachments
+                ):
+                    if event.get("type") == "error":
+                        encountered_error = event
+                        yield f"data: {json.dumps(event)}\n\n"
+                        break
+
+                    used_backend = event["backend"]
+                    used_model = event["model"]
+                    if event.get("notice"):
+                        stream_notice = event["notice"]
+
+                    chunk_payload = {
+                        "type": "chunk",
+                        "chunk": event["chunk"],
+                        "backend": used_backend,
+                        "model": used_model,
+                        "conversation_id": conv_id,
+                        "persona_fallback": persona_state.is_fallback,
+                        "notice": stream_notice,
+                        "logged_by_provider": settings.api_logged_by_provider
+                    }
+                    accumulated_chunks.append(event["chunk"])
+                    yield f"data: {json.dumps(chunk_payload)}\n\n"
 
             if encountered_error:
                 # Do NOT save error to DB, do NOT log to interactions or datasets
@@ -669,6 +753,14 @@ async def chat_endpoint(req: ChatRequest, response: Response):
 
             from backend.attachments.citations import strip_wrapper_tags_and_extract_citations
             final_reply, doc_citations = strip_wrapper_tags_and_extract_citations(final_reply)
+
+            if has_attachments and not is_overview_intent(latest_user_text):
+                if coverage_meta and coverage_meta.get("sections"):
+                    sec_names = ", ".join(coverage_meta["sections"][:3])
+                    p_nums = ", ".join(map(str, coverage_meta["pages"][:3]))
+                    coverage_note = f"\n\n*Based on {sec_names} (pp. {p_nums}).* [Explain the whole document](#explain-whole-doc)"
+                    final_reply += coverage_note
+                    yield f"data: {json.dumps({'type': 'chunk', 'chunk': coverage_note, 'backend': used_backend, 'model': used_model, 'conversation_id': conv_id})}\n\n"
 
             latency_breakdown = {
                 "generation_ms": gen_ms,

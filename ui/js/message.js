@@ -3,10 +3,8 @@ import { formatMarkdown } from "/static/js/markdown.js";
 export function getFileIcon(filename = "") {
   const ext = filename.split(".").pop().toLowerCase();
   if (["png", "jpg", "jpeg", "webp", "gif"].includes(ext)) return "🖼️";
-  if (["pdf"].includes(ext)) return "📕";
-  if (["docx", "doc"].includes(ext)) return "📘";
+  if (["pdf", "docx", "doc", "txt", "md", "html", "css", "py", "js", "yaml", "yml"].includes(ext)) return "📄";
   if (["csv", "json"].includes(ext)) return "📊";
-  if (["py", "js", "html", "css", "yaml", "yml"].includes(ext)) return "💻";
   return "📄";
 }
 
