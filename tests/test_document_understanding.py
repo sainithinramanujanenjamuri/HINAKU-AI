@@ -147,3 +147,4 @@ def test_250_word_cap_not_applied_when_attachments_present():
     has_attachments = True
     should_cap = (is_detail and not has_attachments)
     assert should_cap is False
+

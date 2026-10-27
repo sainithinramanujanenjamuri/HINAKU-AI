@@ -234,3 +234,4 @@ def extract_outline_from_pages(pages: List[DocumentPage], filename: str) -> Tupl
             ))
 
     return doc_title, sections
+

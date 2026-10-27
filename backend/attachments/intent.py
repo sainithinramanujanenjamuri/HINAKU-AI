@@ -35,3 +35,4 @@ def extract_target_unit(query_text: str) -> Optional[int]:
     if m:
         return int(m.group(1))
     return None
+

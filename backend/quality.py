@@ -477,7 +477,8 @@ async def perform_reply_verification(
     local_adapter: Any,
     settings: Any,
     messages_for_regen: Optional[List[Dict[str, str]]] = None,
-    clock_dt: Optional[datetime] = None
+    clock_dt: Optional[datetime] = None,
+    has_attachments: bool = False
 ) -> Tuple[str, bool, int, str, Optional[str]]:
     """
     Executes deterministic checks and optional single-pass regenerations.
@@ -555,12 +556,13 @@ async def perform_reply_verification(
             logger.warning(f"Error regenerating hardware conflict: {e}")
 
     # 4. Deterministic check: More than 4 sentences outside detail mode, or word cap in detail mode
-    if not is_detail:
+    # For documents (has_attachments=True), responses are comprehensive study guides/analyses and are never capped.
+    if not has_attachments and not is_detail:
         num_s = count_sentences(curr_text)
         if num_s > 4:
             curr_text = trim_to_four_sentences(curr_text)
             correction_reasons.append("Trimmed to four sentences outside detail mode")
-    else:
+    elif not has_attachments and is_detail:
         words = re.findall(r"\b\w+\b", curr_text)
         if len(words) > 350:
             # If reply is over 350, regenerate once with a shorter target

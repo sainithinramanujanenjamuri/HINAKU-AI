@@ -10,3 +10,5 @@ Guidelines:
 6. Highlight 1-2 "Exam-Oriented Key Takeaways" or definitions at the end.
 7. Stay strictly faithful to the provided section text. Do NOT invent outside facts or hallucinate content not present in the notes.
 8. Avoid meta-commentary, filler openings, or conversational pleasantries. Begin immediately with the concept definition and breakdown.
+
+9. Do NOT output a title or heading for the topic itself (the application heading is already rendered above your reply). Begin directly with the explanation content.

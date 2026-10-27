@@ -638,6 +638,7 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                     ]
 
                     topic_accumulated = []
+                    is_first_chunk = True
                     async for chunk_evt in local_adapter.stream_chat(
                         model=target_model,
                         messages=topic_messages,
@@ -646,6 +647,10 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                     ):
                         c = chunk_evt if isinstance(chunk_evt, str) else chunk_evt.get("chunk", "")
                         if c:
+                            # Strip any redundant leading heading emitted by the model
+                            if is_first_chunk and (c.startswith("#") or c.startswith("**")) and sec_title.lower() in c.lower():
+                                continue
+                            is_first_chunk = False
                             topic_accumulated.append(c)
                             accumulated_chunks.append(c)
                             yield f"data: {json.dumps({'type': 'chunk', 'chunk': c, 'backend': 'local', 'model': target_model, 'conversation_id': conv_id})}\n\n"
@@ -704,11 +709,12 @@ async def chat_endpoint(req: ChatRequest, response: Response):
             gen_ms = int((time.perf_counter() - t_gen_start) * 1000)
             draft_reply = "".join(accumulated_chunks)
 
-            # If reply hit token limit (ends mid-sentence), cut back to last complete sentence
-            trimmed_draft, was_cut = trim_to_last_complete_sentence(draft_reply)
-            if was_cut:
-                draft_reply = trimmed_draft
-                yield f"data: {json.dumps({'type': 'correction', 'final_content': draft_reply, 'conversation_id': conv_id, 'hit_token_limit': True})}\n\n"
+            # If reply hit token limit (ends mid-sentence), cut back to last complete sentence (chat turns only)
+            if not has_attachments:
+                trimmed_draft, was_cut = trim_to_last_complete_sentence(draft_reply)
+                if was_cut:
+                    draft_reply = trimmed_draft
+                    yield f"data: {json.dumps({'type': 'correction', 'final_content': draft_reply, 'conversation_id': conv_id, 'hit_token_limit': True})}\n\n"
             
 
             final_reply = draft_reply
@@ -729,7 +735,8 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                 is_detail=is_detail,
                 local_adapter=local_adapter,
                 settings=settings,
-                messages_for_regen=trimmed_messages
+                messages_for_regen=trimmed_messages,
+                has_attachments=has_attachments
             )
             if not draft_reply.strip():
                 fallback_chunk = {
