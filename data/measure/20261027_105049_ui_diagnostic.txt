@@ -1,0 +1,38 @@
+=== HINAKU UI DIAGNOSTIC & VERIFICATION REPORT ===
+Timestamp: 2026-10-27T10:50:49.705765+00:00
+
+Real database: D:\HINAKU-AI\data\hinaku.db
+Total conversations in data/hinaku.db: 15
+Top 5 recent conversations:
+  - [06222a97-cd7c-491a-bb16-b0c4bf52248a] tell me what you understand from the (updated: 2026-10-27T07:03:04.860579+00:00)
+  - [3ccfade0-65a4-4004-a1e8-72e7b1131951] explain this pdf to me. (updated: 2026-10-27T06:30:09.629964+00:00)
+  - [4e58d0d7-4e33-4dad-941b-7d29e6922974] explain this to me (updated: 2026-10-26T17:07:41.978846+00:00)
+  - [87f28708-31f4-46dc-9bdb-6aea1de2d4d5] hey hi (updated: 2026-10-26T09:10:59.991034+00:00)
+  - [cae3c548-795f-4647-886d-4a8128822242] can you code ? (updated: 2026-10-25T23:54:32.759875+00:00)
+
+Checking ES Module imports via Node.js:
+Command: node --input-type=module -e import { attachCodeBlockCopyHandlers, formatMarkdown, parseOfflineMarkdown } from './ui/js/markdown.js';console.log('markdown.js exports attachCodeBlockCopyHandlers:', typeof attachCodeBlockCopyHandlers);console.log('markdown.js exports formatMarkdown:', typeof formatMarkdown);
+Return code: 0
+Stdout:
+markdown.js exports attachCodeBlockCopyHandlers: function
+markdown.js exports formatMarkdown: function
+
+Running pytest tests/ui/test_ui_markdown.py:
+Command: D:\HINAKU-AI\venv\Scripts\pytest.exe -v tests/ui/test_ui_markdown.py
+Return code: 0
+Stdout:
+============================= test session starts =============================
+platform win32 -- Python 3.11.9, pytest-9.1.1, pluggy-1.7.0 -- D:\HINAKU-AI\venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: D:\HINAKU-AI
+configfile: pytest.ini
+plugins: anyio-4.15.1, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 3 items
+
+tests/ui/test_ui_markdown.py::test_markdown_heading_and_rule_rendering PASSED [ 33%]
+tests/ui/test_ui_markdown.py::test_markdown_rendering_on_walkthrough_data PASSED [ 66%]
+tests/ui/test_ui_markdown.py::test_ui_javascript_imports_and_exports_integrity PASSED [100%]
+
+============================== 3 passed in 2.49s ==============================
+

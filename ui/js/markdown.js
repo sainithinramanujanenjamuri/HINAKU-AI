@@ -175,3 +175,22 @@ function wrapCodeBlocks(html) {
 
   return temp.innerHTML;
 }
+
+export function attachCodeBlockCopyHandlers(container) {
+  if (!container) return;
+  const buttons = container.querySelectorAll(".code-copy-btn, .copy-code-btn");
+  buttons.forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const pre = btn.closest("pre");
+      if (!pre) return;
+      const codeEl = pre.querySelector("code");
+      const textToCopy = codeEl ? codeEl.innerText : pre.innerText;
+      navigator.clipboard.writeText(textToCopy).then(() => {
+        btn.textContent = "Copied!";
+        setTimeout(() => (btn.textContent = "Copy"), 2000);
+      });
+    };
+  });
+}
+

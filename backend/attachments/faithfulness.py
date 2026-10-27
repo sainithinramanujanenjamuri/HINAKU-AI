@@ -97,3 +97,4 @@ def verify_explanation_faithfulness(
         return False, missing, annotated
 
     return True, [], explanation_text
+

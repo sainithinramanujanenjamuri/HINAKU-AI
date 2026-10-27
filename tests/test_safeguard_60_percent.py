@@ -74,3 +74,4 @@ async def test_safeguard_allows_guard_short_replies():
     )
 
     assert final_reply == guard_draft
+

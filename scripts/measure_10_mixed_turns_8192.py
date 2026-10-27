@@ -126,3 +126,4 @@ output_text = "\n".join(lines) + "\n"
 output_path.write_text(output_text, encoding="utf-8")
 print(f"Report written to: {output_path}")
 print(output_text)
+

@@ -134,3 +134,42 @@ def test_markdown_rendering_on_walkthrough_data():
     assert "<h3>1. Defining Games &amp; Play</h3>" in html
     assert "<strong>goal-oriented system</strong>" in html
     assert "<hr>" in html
+
+
+def test_ui_javascript_imports_and_exports_integrity():
+    """
+    Validates that all symbols imported in ui/app.js and other ui scripts
+    are actually exported by their target ES modules, preventing syntax errors
+    and blank/broken UI windows on startup.
+    """
+    root = Path(__file__).resolve().parent.parent.parent
+    ui_dir = root / "ui"
+    js_files = list(ui_dir.glob("*.js")) + list((ui_dir / "js").glob("*.js"))
+
+    import_re = re.compile(r'import\s+\{([^}]+)\}\s+from\s+["\']([^"\']+)["\']')
+
+    for js_file in js_files:
+        content = js_file.read_text(encoding="utf-8")
+        for match in import_re.finditer(content):
+            symbols = [s.strip() for s in match.group(1).split(",") if s.strip()]
+            import_path = match.group(2)
+            if import_path.startswith("/static/"):
+                rel_path = import_path.replace("/static/", "")
+                target_file = ui_dir / rel_path
+            else:
+                target_file = (js_file.parent / import_path).resolve()
+
+            assert target_file.exists(), f"{js_file.name} imports non-existent file {import_path}"
+            target_content = target_file.read_text(encoding="utf-8")
+
+            for sym in symbols:
+                export_pattern = re.compile(
+                    rf'export\s+(?:function|const|let|var|class)\s+{re.escape(sym)}\b|'
+                    rf'export\s*\{{[^}}]*\b{re.escape(sym)}\b'
+                )
+                assert export_pattern.search(target_content), (
+                    f"Integrity failure: {js_file.name} imports '{sym}' from {target_file.name}, "
+                    f"but '{sym}' is not exported by {target_file.name}!"
+                )
+
+
