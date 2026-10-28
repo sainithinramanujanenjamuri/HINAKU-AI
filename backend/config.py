@@ -32,7 +32,7 @@ class Settings:
 
     @property
     def local_host(self) -> str:
-        return self.local.get("host", "http://localhost:11434")
+        return self.local.get("host", "http://127.0.0.1:11434")
 
     @property
     def default_local_model(self) -> str:

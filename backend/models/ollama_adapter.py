@@ -7,7 +7,7 @@ from .ollama_shared import get_shared_llm_settings, log_ollama_call
 class OllamaAdapter:
     def __init__(
         self,
-        host: str = "http://localhost:11434",
+        host: str = "http://127.0.0.1:11434",
         default_model: Optional[str] = None,
         default_options: Optional[Dict[str, Any]] = None,
         default_think: Optional[bool] = None,

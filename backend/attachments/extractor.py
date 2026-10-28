@@ -12,12 +12,15 @@ Text and content extraction for attachments:
 import html
 from html.parser import HTMLParser
 import io
+import logging
 import re
 import xml.etree.ElementTree as ET
 import zipfile
 import zlib
 from typing import Any, Dict, List, Optional, Tuple
 from PIL import Image
+
+logger = logging.getLogger("hinaku.attachments.extractor")
 
 class DocumentPage:
     def __init__(self, page_number: int, text: str):
@@ -176,11 +179,25 @@ def _parse_pdf_cmap(cmap_data: bytes) -> Dict[int, str]:
 
 def extract_text_from_pdf(content: bytes, max_pages: int = 100) -> List[DocumentPage]:
     """
-    Extracts structured pages from PDF using standard library zlib decompression,
-    /ToUnicode CMap glyph resolution, and PDF operand decoding.
-    Handles multi-page PDFs, subsetted fonts, and FlateDecode streams.
+    Extracts structured pages from PDF.
+    Uses pypdf as the primary high-fidelity parser with ToUnicode CMap and stream handling,
+    falling back to the built-in lightweight FlateDecode parser if pypdf fails or produces no text.
     """
-    # 1. Parse all PDF indirect objects: N M obj ... endobj
+    # 1. Primary parser: pypdf
+    try:
+        import pypdf
+        reader = pypdf.PdfReader(io.BytesIO(content))
+        pypdf_pages: List[DocumentPage] = []
+        for idx, page in enumerate(reader.pages[:max_pages], 1):
+            txt = page.extract_text() or ""
+            pypdf_pages.append(DocumentPage(page_number=idx, text=txt.strip()))
+        if pypdf_pages and any(len(p.text) > 0 for p in pypdf_pages):
+            return pypdf_pages
+    except Exception as e:
+        logger.warning(f"pypdf extraction failed or yielded empty result, falling back to built-in parser: {e}")
+
+    # 2. Fallback parser: Built-in standard library zlib / operand decoder
+    # Parse all PDF indirect objects: N M obj ... endobj
     obj_pattern = re.compile(rb"(\d+)\s+(\d+)\s+obj\s*(.*?)\s*endobj", re.DOTALL)
     objects: Dict[int, bytes] = {}
     decompressed_streams: Dict[int, bytes] = {}

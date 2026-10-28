@@ -233,7 +233,8 @@ class ModelRouter:
         is_private: bool = False,
         last_backend: Optional[str] = None,
         is_detail: bool = False,
-        has_attachments: bool = False
+        has_attachments: bool = False,
+        requested_model: Optional[str] = None
     ) -> RouterDecision:
         # Strict privacy: conversations with attachments are locked to local model under all modes
         if has_attachments:
@@ -258,6 +259,22 @@ class ModelRouter:
                 target_backend="local",
                 target_model=self.local_adapter.default_model,
                 fallback_allowed=False,
+                notice=None
+            )
+
+        # Explicit user selection of API model
+        if requested_model and requested_model == self.api_adapter.model:
+            if not self.api_adapter.api_key:
+                return RouterDecision(
+                    target_backend="local",
+                    target_model=self.local_adapter.default_model,
+                    fallback_allowed=False,
+                    notice="API key missing. Using local model."
+                )
+            return RouterDecision(
+                target_backend="api",
+                target_model=self.api_adapter.model,
+                fallback_allowed=self.fallback_on_failure,
                 notice=None
             )
 
@@ -373,14 +390,16 @@ class ModelRouter:
         think: Optional[bool] = None,
         options: Optional[Dict[str, Any]] = None,
         is_detail: bool = False,
-        has_attachments: bool = False
+        has_attachments: bool = False,
+        requested_model: Optional[str] = None
     ) -> AsyncGenerator[Dict[str, Any], None]:
         decision = self.decide_backend(
             user_prompt,
             is_private=is_private,
             last_backend=last_backend,
             is_detail=is_detail,
-            has_attachments=has_attachments
+            has_attachments=has_attachments,
+            requested_model=requested_model or override_model
         )
         active_backend = decision.target_backend
         active_model = override_model if (override_model and active_backend == "local") else decision.target_model

@@ -1,0 +1,168 @@
+COMMAND: python scripts/measure_10_mixed_turns_8192.py
+TIMESTAMP: 2026-10-28T14:42:22.932866
+================================================================================
+10 MIXED TURNS BENCHMARK THROUGH REAL /api/chat PIPELINE (num_ctx: 8192)
+Verifying zero model reloads, full pipeline fidelity, and honest latency ratio
+================================================================================
+
+--- INITIAL HARDWARE & OLLAMA STATUS ---
+[nvidia-smi]:
+NVIDIA GeForce RTX 4050 Laptop GPU, 6141 MiB, 4390 MiB, 1531 MiB, 0 %
+[ollama ps]:
+NAME                    ID              SIZE      PROCESSOR    CONTEXT    RUNNER      UNTIL                   
+bonsai-2:9b             c8b5462f8688    3.0 GB    100% GPU     8192       llamacpp    29 minutes from now        
+qwen3-embedding:0.6b    ac6da0dfba84    719 MB    100% GPU     512        llamacpp    About a minute from now
+--------------------------------------------------------------------------------
+Initialized benchmark conversation: 41342da4-380d-43fb-963b-36daf80a76cd
+Attached document: Security, Ethics & Regulations in AI - Midterm Notes.pdf (17 sections indexed)
+
+>>> TURN 1/10: Turn 1 (Persona Chat)
+Prompt: Hi HINAKU, what is your purpose and how do you help?
+Backend: local | Model: bonsai-2:9b
+Full Reply:
+I am HINAKU, a personal AI assistant designed to support your work alone. I help by answering questions clearly, keeping focus sharp when you drift, and providing concrete next steps for tasks or problems. My role is calm observation and efficient action within this conversation. Do you have a specific task you need help with right now?
+Timing: total=4.14s | breakdown={'guards_ms': 37, 'router_ms': 0, 'memory_ms': 75, 'attachment_ms': 62, 'prompt_assembly_ms': 0, 'ttft_ms': 2797, 'generation_ms': 3350, 'verify_ms': 0, 'think_ms': 0, 'post_processing_ms': 6, 'db_writes_ms': 16, 'total_ms': 4101} | est_tokens=76 (~18.4 t/s)
+[Hardware State] ollama ps: qwen3-embedding:0.6b    ac6da0dfba84    719 MB    100% GPU     512        llamacpp    4 minutes from now
+[Hardware State] VRAM used: 4390 MiB, 82 %
+
+>>> TURN 2/10: Turn 2 (Doc Retrieval)
+Prompt: From the AI security notes, what are the three pillars of the AI Triad?
+Backend: local | Model: bonsai-2:9b
+Full Reply:
+The three pillars of the AI Triad are Safety, Alignment, and Robustness. They ensure systems behave reliably without harm or deception. Do you need details on how to implement one of them?
+Timing: total=1.88s | breakdown={'guards_ms': 12, 'router_ms': 0, 'memory_ms': 33, 'attachment_ms': 37, 'prompt_assembly_ms': 0, 'ttft_ms': 1149, 'generation_ms': 1351, 'verify_ms': 0, 'think_ms': 0, 'post_processing_ms': 0, 'db_writes_ms': 15, 'total_ms': 1873} | est_tokens=42 (~22.3 t/s)
+[Hardware State] ollama ps: qwen3-embedding:0.6b    ac6da0dfba84    719 MB    100% GPU     512        llamacpp    4 minutes from now
+[Hardware State] VRAM used: 4390 MiB, 86 %
+
+>>> TURN 3/10: Turn 3 (Persona Chat)
+Prompt: Write a concise Python function to calculate factorial recursively.
+Backend: local | Model: bonsai-2:9b
+Full Reply:
+```python
+def factorial(n):
+    if n == 0 or n == 1:
+        return 1
+    return n * factorial(n - 1)
+```
+
+This works for non-negative integers. Call it with a number to get the result.
+Timing: total=2.20s | breakdown={'guards_ms': 13, 'router_ms': 0, 'memory_ms': 32, 'attachment_ms': 44, 'prompt_assembly_ms': 0, 'ttft_ms': 1129, 'generation_ms': 1645, 'verify_ms': 0, 'think_ms': 0, 'post_processing_ms': 0, 'db_writes_ms': 17, 'total_ms': 2187} | est_tokens=45 (~20.5 t/s)
+[Hardware State] ollama ps: qwen3-embedding:0.6b    ac6da0dfba84    719 MB    100% GPU     512        llamacpp    4 minutes from now
+[Hardware State] VRAM used: 4390 MiB, 85 %
+
+>>> TURN 4/10: Turn 4 (Doc Retrieval)
+Prompt: What is the key difference between evasion attacks and poisoning attacks in AI?
+Backend: local | Model: bonsai-2:9b
+Full Reply:
+Evasion attacks manipulate input data at inference time, whereas poisoning attacks corrupt training data during the learning process. Evasion targets the model's decision boundary with subtle perturbations to force wrong predictions on clean inputs, while poisoning injects malicious or mislabeled samples into the dataset so the model itself learns incorrect patterns that persist after deployment.
+
+*Based on Topic 4 — Evolving Threat Landscape: Adversarial AI (pp. 4).* [Explain the whole document](#explain-whole-doc)
+Timing: total=3.33s | breakdown={'guards_ms': 15, 'router_ms': 0, 'memory_ms': 36, 'attachment_ms': 49, 'prompt_assembly_ms': 0, 'ttft_ms': 2056, 'generation_ms': 2726, 'verify_ms': 0, 'think_ms': 0, 'post_processing_ms': 0, 'db_writes_ms': 21, 'total_ms': 3319} | est_tokens=94 (~28.2 t/s)
+[Hardware State] ollama ps: qwen3-embedding:0.6b    ac6da0dfba84    719 MB    100% GPU     512        llamacpp    4 minutes from now
+[Hardware State] VRAM used: 4390 MiB, 81 %
+
+>>> TURN 5/10: Turn 5 (Walkthrough Section)
+Prompt: Explain Topic 1: AI Triad: Security, Ethics, and Regulation in simple terms with an example.
+Backend: local | Model: bonsai-2:9b
+Full Reply:
+Topic 1 defines the three interconnected pillars required to build safe and legal AI: **Security** (protecting systems from attacks), **Ethics** (ensuring fairness and transparency), and **Regulation** (following laws).
+
+A practical example is a hiring algorithm:
+*   **Security:** Encrypts applicant data so hackers cannot steal it.
+*   **Ethics:** Ensures the system doesn't discriminate against candidates based on gender or zip code, keeping decisions fair.
+*   **Regulation:** Adheres to laws like India's DPDP Act or the EU AI Act, ensuring the company stays compliant with legal requirements.
+
+Without all three, an AI system is risky, unfair, and potentially illegal.
+
+*Based on Topic 1 — AI Triad: Security, Ethics, and Regulation (pp. 1).* [Explain the whole document](#explain-whole-doc)
+Timing: total=4.91s | breakdown={'guards_ms': 13, 'router_ms': 0, 'memory_ms': 40, 'attachment_ms': 41, 'prompt_assembly_ms': 0, 'ttft_ms': 2112, 'generation_ms': 4358, 'verify_ms': 0, 'think_ms': 0, 'post_processing_ms': 0, 'db_writes_ms': 16, 'total_ms': 4906} | est_tokens=152 (~30.9 t/s)
+[Hardware State] ollama ps: qwen3-embedding:0.6b    ac6da0dfba84    719 MB    100% GPU     512        llamacpp    4 minutes from now
+[Hardware State] VRAM used: 4390 MiB, 86 %
+
+>>> TURN 6/10: Turn 6 (Persona Chat)
+Prompt: What is the primary architectural difference between a CPU and an NVIDIA GPU?
+Backend: local | Model: bonsai-2:9b
+Full Reply:
+A CPU has many cores designed for general-purpose tasks with high precision per core, while an NVIDIA GPU has thousands of simpler cores optimized for parallel computation. The GPU handles massive data throughput by splitting work into small, independent chunks that many cores can process simultaneously, whereas the CPU excels at managing complex logic sequences where deep iteration is needed.
+
+*Based on Topic 2 — Hardware Foundations: CPUs vs GPUs (pp. 2).* [Explain the whole document](#explain-whole-doc)
+Timing: total=4.10s | breakdown={'guards_ms': 16, 'router_ms': 0, 'memory_ms': 41, 'attachment_ms': 48, 'prompt_assembly_ms': 0, 'ttft_ms': 2195, 'generation_ms': 3507, 'verify_ms': 0, 'think_ms': 0, 'post_processing_ms': 0, 'db_writes_ms': 22, 'total_ms': 4086} | est_tokens=101 (~24.7 t/s)
+[Hardware State] ollama ps: qwen3-embedding:0.6b    ac6da0dfba84    719 MB    100% GPU     512        llamacpp    4 minutes from now
+[Hardware State] VRAM used: 4390 MiB, 77 %
+
+>>> TURN 7/10: Turn 7 (Doc Retrieval)
+Prompt: According to Session 8, how is MLSecOps defined and what lifecycle stages does it protect?
+Backend: local | Model: bonsai-2:9b
+Full Reply:
+MLSecOps is a framework designed to secure machine learning operations across the entire data-to-deployment pipeline. It focuses on protecting critical assets like model weights, training pipelines, inference endpoints, and associated infrastructure from threats such as adversarial examples, data poisoning, model inversion, and supply chain attacks.
+
+The lifecycle stages it protects are:
+1.  **Data Collection**: Securing raw data sources against tampering or bias.
+2.  **Preprocessing & Labeling**: Ensuring data quality and integrity during cleaning and annotation.
+3.  **Model Training**: Guarding against poisoning attacks during the learning phase.
+4.  **Deployment & Inference**: Protecting the running model from evasion attacks or resource exhaustion.
+5.  **Monitoring & Maintenance**: Detecting drift, degradation, or new threats after release.
+
+*Based on Topic 8 — MLSecOps: Securing Machine Learning (pp. 7).* [Explain the whole document](#explain-whole-doc)
+Timing: total=5.05s | breakdown={'guards_ms': 17, 'router_ms': 0, 'memory_ms': 47, 'attachment_ms': 58, 'prompt_assembly_ms': 0, 'ttft_ms': 1249, 'generation_ms': 4438, 'verify_ms': 0, 'think_ms': 0, 'post_processing_ms': 1, 'db_writes_ms': 17, 'total_ms': 5033} | est_tokens=169 (~33.5 t/s)
+[Hardware State] ollama ps: qwen3-embedding:0.6b    ac6da0dfba84    719 MB    100% GPU     512        llamacpp    4 minutes from now
+[Hardware State] VRAM used: 4390 MiB, 87 %
+
+>>> TURN 8/10: Turn 8 (Walkthrough Section)
+Prompt: Explain Topic 2: AI System Lifecycle and Associated Risks step by step.
+Backend: local | Model: bonsai-2:9b
+Full Reply:
+Topic 2 outlines seven iterative stages of building an AI system, emphasizing that deployment is not the end but a starting point for ongoing security and monitoring.
+
+1.  **Inception/Scoping**: Define purpose, users, success criteria, and risk tolerance before writing code. Risk: Wrong problem framing or unclear ownership.
+2.  **Design & Development**: Build data pipelines, models, and manage supply chain risks like poisoning or IP theft. Risk: Data bias or privacy leaks.
+3.  **Verification & Validation**: Test functional security, performance, fairness, and human evaluation. Ask if it works for the intended users under specific conditions.
+4.  **Deployment**: Implement controls for authentication, secure configuration, rollback mechanisms, and logging. Risk: Unauthorized access or unsafe automation integration.
+5.  **Operation & Monitoring**: Continuously watch for accuracy drift, bias gaps, security attacks, and data drift. Follow a loop of Monitor → Alert → Investigate → Mitigate.
+6.  **Re-evaluation**: Retrain models, reassess fairness, and verify changes before re-approving them.
+7.  **Retirement**: Define end-of-life criteria, disable APIs, preserve audit evidence, and manage data deletion safely. Risk: Insecure systems left running or unmanaged data retention.
+
+*Based on Topic 2 — AI System Lifecycle (pp. 4).* [Explain the whole document](#explain-whole-doc)
+
+*Based on Topic 1 — AI Triad: Security, Ethics, and Regulation (pp. 2).* [Explain the whole document](#explain-whole-doc)
+Timing: total=8.13s | breakdown={'guards_ms': 14, 'router_ms': 0, 'memory_ms': 37, 'attachment_ms': 52, 'prompt_assembly_ms': 0, 'ttft_ms': 2546, 'generation_ms': 7610, 'verify_ms': 0, 'think_ms': 0, 'post_processing_ms': 1, 'db_writes_ms': 18, 'total_ms': 8126} | est_tokens=276 (~33.9 t/s)
+[Hardware State] ollama ps: qwen3-embedding:0.6b    ac6da0dfba84    719 MB    100% GPU     512        llamacpp    4 minutes from now
+[Hardware State] VRAM used: 4390 MiB, 85 %
+
+>>> TURN 9/10: Turn 9 (Persona Chat)
+Prompt: Give me two practical rules for writing clean, maintainable async Python code.
+Backend: local | Model: bonsai-2:9b
+Full Reply:
+Use `asyncio` primitives like `await` instead of threading or blocking calls to keep the event loop responsive and avoid context-switching overhead.
+
+Keep each coroutine function short and single-responsibility; if logic grows, split it into smaller tasks rather than nesting deep loops inside one handler.
+Timing: total=3.50s | breakdown={'guards_ms': 15, 'router_ms': 0, 'memory_ms': 43, 'attachment_ms': 41, 'prompt_assembly_ms': 0, 'ttft_ms': 2364, 'generation_ms': 2899, 'verify_ms': 0, 'think_ms': 0, 'post_processing_ms': 0, 'db_writes_ms': 22, 'total_ms': 3494} | est_tokens=58 (~16.6 t/s)
+[Hardware State] ollama ps: qwen3-embedding:0.6b    ac6da0dfba84    719 MB    100% GPU     512        llamacpp    4 minutes from now
+[Hardware State] VRAM used: 4390 MiB, 85 %
+
+>>> TURN 10/10: Turn 10 (Doc Retrieval)
+Prompt: Summarize the primary themes students should review for their AI security midterm exam.
+Backend: local | Model: bonsai-2:9b
+Full Reply:
+The midterm likely tests three core areas: **Threat Models** (understanding how adversaries attack), **Mitigation Techniques** (specific countermeasures like adversarial training or input validation), and **Regulatory Context** (compliance with frameworks like the AI Act). Students should also review practical skills in securing data pipelines, model inference endpoints, and supply chains.
+
+*Based on Topic 8 — MLSecOps: Securing Machine Learning (pp. 7).* [Explain the whole document](#explain-whole-doc)
+Timing: total=3.28s | breakdown={'guards_ms': 15, 'router_ms': 0, 'memory_ms': 73, 'attachment_ms': 39, 'prompt_assembly_ms': 0, 'ttft_ms': 1229, 'generation_ms': 2696, 'verify_ms': 0, 'think_ms': 0, 'post_processing_ms': 0, 'db_writes_ms': 19, 'total_ms': 3270} | est_tokens=85 (~25.9 t/s)
+[Hardware State] ollama ps: qwen3-embedding:0.6b    ac6da0dfba84    719 MB    100% GPU     512        llamacpp    4 minutes from now
+[Hardware State] VRAM used: 4390 MiB, 82 %
+
+================================================================================
+SUMMARY STATISTICAL EVALUATION ACROSS TURNS 2 TO 10
+================================================================================
+Initial Turn 1 (Cold/Warmup) Latency: 4.14s
+Turns 2 to 10 Latencies: [1.88, 2.2, 3.33, 4.91, 4.1, 5.05, 8.13, 3.5, 3.28]
+Mean Latency (Turns 2-10): 4.04s
+Min Latency (Turns 2-10):  1.88s
+Max Latency (Turns 2-10):  8.13s
+Latency Ratio (Max / Mean): 2.01x (Constraint: <= 1.5x)
+
+Final Ollama Status:
+NAME                    ID              SIZE      PROCESSOR    CONTEXT    RUNNER      UNTIL               
+bonsai-2:9b             c8b5462f8688    3.0 GB    100% GPU     8192       llamacpp    29 minutes from now    
+qwen3-embedding:0.6b    ac6da0dfba84    719 MB    100% GPU     512        llamacpp    4 minutes from now
+VERDICT: FAILED (Latency ratio 2.01x exceeds limit of 1.5x)

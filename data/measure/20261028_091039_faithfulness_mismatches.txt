@@ -1,0 +1,60 @@
+TIMESTAMP: 2026-10-28T09:10:39.924306+00:00
+SECTION: Topic 5 — Evasion & Poisoning Attacks
+FLAGGED ITEM: Evasion vs. Poisoning Distinction
+REASON: Term 'Evasion vs. Poisoning Distinction' was not found in section text or full document.
+SOURCE TEXT SNIPPET:
+Core distinction — WHEN the attacker intervenes:
+Evasion Poisoning
+When Inference-time Training/fine-tuning time
+Target Input Learning process
+Persistence Often per-input Can persist in the model
+Security property Integrity (mainly) Integrity
+Defense Robustness/testing Provenance/validation
+Evasion: clean input → strategically manipulated → same deployed model → different (attacker-useful)
+predict...
+================================================================================
+TIMESTAMP: 2026-10-28T09:10:39.936366+00:00
+SECTION: Topic 5 — Evasion & Poisoning Attacks
+FLAGGED ITEM: Pillar 1: Evasion Attacks
+REASON: Term 'Pillar 1: Evasion Attacks' was not found in section text or full document.
+SOURCE TEXT SNIPPET:
+Core distinction — WHEN the attacker intervenes:
+Evasion Poisoning
+When Inference-time Training/fine-tuning time
+Target Input Learning process
+Persistence Often per-input Can persist in the model
+Security property Integrity (mainly) Integrity
+Defense Robustness/testing Provenance/validation
+Evasion: clean input → strategically manipulated → same deployed model → different (attacker-useful)
+predict...
+================================================================================
+TIMESTAMP: 2026-10-28T09:10:39.944435+00:00
+SECTION: Topic 5 — Evasion & Poisoning Attacks
+FLAGGED ITEM: Timing
+REASON: Term 'Timing' was not found in section text or full document.
+SOURCE TEXT SNIPPET:
+Core distinction — WHEN the attacker intervenes:
+Evasion Poisoning
+When Inference-time Training/fine-tuning time
+Target Input Learning process
+Persistence Often per-input Can persist in the model
+Security property Integrity (mainly) Integrity
+Defense Robustness/testing Provenance/validation
+Evasion: clean input → strategically manipulated → same deployed model → different (attacker-useful)
+predict...
+================================================================================
+TIMESTAMP: 2026-10-28T09:10:39.993195+00:00
+SECTION: Topic 5 — Evasion & Poisoning Attacks
+FLAGGED ITEM: Pillar 2: Poisoning Attacks
+REASON: Term 'Pillar 2: Poisoning Attacks' was not found in section text or full document.
+SOURCE TEXT SNIPPET:
+Core distinction — WHEN the attacker intervenes:
+Evasion Poisoning
+When Inference-time Training/fine-tuning time
+Target Input Learning process
+Persistence Often per-input Can persist in the model
+Security property Integrity (mainly) Integrity
+Defense Robustness/testing Provenance/validation
+Evasion: clean input → strategically manipulated → same deployed model → different (attacker-useful)
+predict...
+================================================================================

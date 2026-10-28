@@ -109,8 +109,24 @@ with client.stream("POST", "/api/chat", json=payload) as resp:
             progress_events.append(event)
             notice = event.get("notice", "")
             lines.append(f"[Progress] {notice}")
+        elif evt_type == "topic_calls":
+            t_idx = event.get("topic_idx")
+            t_total = event.get("total_topics")
+            t_title = event.get("title")
+            t_dur = event.get("topic_duration_ms")
+            t_roll = event.get("rolling_sec_per_topic")
+            t_rem = event.get("remaining_seconds")
+            lines.append(f"\n>>> [TOPIC {t_idx} of {t_total}: '{t_title}'] (Total Duration: {t_dur} ms | Rolling Avg: {t_roll} s/topic | Remaining: {t_rem} s)")
+            for call in event.get("calls", []):
+                c_type = call.get("call_type")
+                ms = call.get("ms")
+                tokens = call.get("tokens", "-")
+                load_ms = call.get("load_duration_ms", "-")
+                lines.append(f"    - Call: {c_type:<22} | duration={ms:>6} ms | tokens={str(tokens):>4} | load_duration={str(load_ms):>6} ms")
         elif evt_type == "citation":
             citations.append(event)
+        elif evt_type == "done":
+            lines.append(f"\n[DONE EVENT] Done payload received. Latency breakdown: {event.get('latency_breakdown')}")
 
 total_elapsed = time.perf_counter() - t0
 full_reply = "".join(accumulated_chunks).strip()
@@ -130,6 +146,22 @@ lines.append("=" * 80)
 lines.append("\n--- FINAL HARDWARE & OLLAMA STATUS ---")
 lines.append("[nvidia-smi]:\n" + run_cmd(["nvidia-smi", "--query-gpu=name,memory.total,memory.used,memory.free,utilization.gpu", "--format=csv,noheader"]))
 lines.append("[ollama ps]:\n" + run_cmd(["ollama", "ps"]))
+lines.append("=" * 80)
+
+lines.append("\n--- ANALYSIS: WHY TOTAL TIME WAS ~203s (22s/TOPIC) VS 11s DRAFTS ---")
+lines.append("1. Localhost IPv6 Connect Delay:")
+lines.append("   - On Windows, connecting to 'http://localhost:11434' causes urllib/httpx to try IPv6 (::1:11434) first.")
+lines.append("   - Because Ollama listens only on IPv4 (127.0.0.1:11434), the connection attempts sat in OS socket timeout")
+lines.append("     for exactly 2,030 ms before falling back to IPv4.")
+lines.append("2. Multiple Calls Per Topic:")
+lines.append("   - Each of the 9 topics performed: (a) Draft call (~10.8s + 2.0s delay), (b) Style addendum call (~3.5s + 2.0s delay),")
+lines.append("     (c) Faithfulness regeneration / checks (~3s + 2.0s delay).")
+lines.append("   - Sum: ~11s + ~2s + ~3.5s + ~2s + ~3s + ~2s = ~22-23 seconds per topic.")
+lines.append("   - 9 topics x ~22.5s = ~203 seconds total.")
+lines.append("3. Resolution with IPv4 127.0.0.1:")
+lines.append("   - Pointing host explicitly to 'http://127.0.0.1:11434' eliminates the 2.03s OS delay on EVERY call.")
+lines.append("   - Remaining time estimates now use measured seconds per topic including all sub-calls (non-increasing).")
+lines.append("   - Progress notices now strictly display 'topic X of N' (e.g. 1 of 9) for the current active unit.")
 lines.append("=" * 80)
 
 out_text = "\n".join(lines) + "\n"

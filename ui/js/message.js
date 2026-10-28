@@ -285,7 +285,8 @@ export function updateMetaRow(metaRow, data) {
 
   if (bKind === "api") {
     badge.className = "badge badge-online";
-    badge.textContent = "API · logged by provider";
+    const cleanModel = model ? (model.includes("/") ? model.split("/").pop().replace(":free", "") : model) : "API";
+    badge.textContent = `${cleanModel} · API · logged by provider`;
   } else if (bKind === "guard") {
     badge.className = "badge badge-guard";
     badge.textContent = "guard · not used for training";
@@ -346,4 +347,35 @@ export function renderCitationChips(container, citations, onCitationClick) {
 
   container.appendChild(row);
 }
+
+/**
+ * Renders structured interactive action buttons below assistant message.
+ * Excluded from raw text and history, sent as structured event metadata.
+ */
+export function renderActionButtons(container, actions, onActionClick) {
+  if (!actions || actions.length === 0 || !container) return;
+  const existing = container.querySelector(".walkthrough-actions-container");
+  if (existing) existing.remove();
+
+  const row = document.createElement("div");
+  row.className = "walkthrough-actions-container walkthrough-actions-row";
+
+  actions.forEach(action => {
+    const btn = document.createElement("button");
+    btn.className = `walkthrough-action-btn ${action.style || ""}`.trim();
+    btn.textContent = action.label;
+    btn.dataset.prompt = action.prompt;
+    if (onActionClick) {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        onActionClick(action.prompt);
+      };
+    }
+    row.appendChild(btn);
+  });
+
+  const target = container.querySelector(".assistant-bubble") || container;
+  target.appendChild(row);
+}
+
 

@@ -1,0 +1,55 @@
+TIMESTAMP: 2026-10-28T09:11:32.300406+00:00
+SECTION: Topic 8 — LLM and RAG Vulnerabilities: Data Poisoning, Supply Chain, Vector DB Issues
+FLAGGED ITEM: Pillar 1: The RAG Pipeline
+REASON: Term 'Pillar 1: The RAG Pipeline' was not found in section text or full document.
+SOURCE TEXT SNIPPET:
+Why RAG changes the threat model: LLM is no longer the only component to protect — external
+documents, embedding models, vector stores, and retrieval logic all matter. Trust boundaries exist at Data
+→ Access → Context → Output stages (Security lens: C·I·A).
+RAG pipeline: Source docs → Chunk + Embed → Vector Store → Retrieval + ACL → LLM + Response. Each
+boundary needs provenance, authorization, va...
+================================================================================
+TIMESTAMP: 2026-10-28T09:11:32.309279+00:00
+SECTION: Topic 8 — LLM and RAG Vulnerabilities: Data Poisoning, Supply Chain, Vector DB Issues
+FLAGGED ITEM: Pillar 2: Data Poisoning
+REASON: Term 'Pillar 2: Data Poisoning' was not found in section text or full document.
+SOURCE TEXT SNIPPET:
+Why RAG changes the threat model: LLM is no longer the only component to protect — external
+documents, embedding models, vector stores, and retrieval logic all matter. Trust boundaries exist at Data
+→ Access → Context → Output stages (Security lens: C·I·A).
+RAG pipeline: Source docs → Chunk + Embed → Vector Store → Retrieval + ACL → LLM + Response. Each
+boundary needs provenance, authorization, va...
+================================================================================
+TIMESTAMP: 2026-10-28T09:11:32.318337+00:00
+SECTION: Topic 8 — LLM and RAG Vulnerabilities: Data Poisoning, Supply Chain, Vector DB Issues
+FLAGGED ITEM: Pillar 3: Supply Chain Risks
+REASON: Term 'Pillar 3: Supply Chain Risks' was not found in section text or full document.
+SOURCE TEXT SNIPPET:
+Why RAG changes the threat model: LLM is no longer the only component to protect — external
+documents, embedding models, vector stores, and retrieval logic all matter. Trust boundaries exist at Data
+→ Access → Context → Output stages (Security lens: C·I·A).
+RAG pipeline: Source docs → Chunk + Embed → Vector Store → Retrieval + ACL → LLM + Response. Each
+boundary needs provenance, authorization, va...
+================================================================================
+TIMESTAMP: 2026-10-28T09:11:32.326866+00:00
+SECTION: Topic 8 — LLM and RAG Vulnerabilities: Data Poisoning, Supply Chain, Vector DB Issues
+FLAGGED ITEM: Pillar 4: Vector DB Weaknesses
+REASON: Term 'Pillar 4: Vector DB Weaknesses' was not found in section text or full document.
+SOURCE TEXT SNIPPET:
+Why RAG changes the threat model: LLM is no longer the only component to protect — external
+documents, embedding models, vector stores, and retrieval logic all matter. Trust boundaries exist at Data
+→ Access → Context → Output stages (Security lens: C·I·A).
+RAG pipeline: Source docs → Chunk + Embed → Vector Store → Retrieval + ACL → LLM + Response. Each
+boundary needs provenance, authorization, va...
+================================================================================
+TIMESTAMP: 2026-10-28T09:11:32.334801+00:00
+SECTION: Topic 8 — LLM and RAG Vulnerabilities: Data Poisoning, Supply Chain, Vector DB Issues
+FLAGGED ITEM: Pillar 5: Access Control & Inversion
+REASON: Term 'Pillar 5: Access Control & Inversion' was not found in section text or full document.
+SOURCE TEXT SNIPPET:
+Why RAG changes the threat model: LLM is no longer the only component to protect — external
+documents, embedding models, vector stores, and retrieval logic all matter. Trust boundaries exist at Data
+→ Access → Context → Output stages (Security lens: C·I·A).
+RAG pipeline: Source docs → Chunk + Embed → Vector Store → Retrieval + ACL → LLM + Response. Each
+boundary needs provenance, authorization, va...
+================================================================================

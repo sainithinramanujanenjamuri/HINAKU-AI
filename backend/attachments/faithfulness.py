@@ -121,10 +121,12 @@ def extract_named_items(text: str) -> List[str]:
 def check_term_in_source(term: str, source_normalized: str) -> bool:
     """
     Checks if a normalized term or its keywords appear in the normalized document text.
-    Handles hyphens, punctuation (&, /), plurals (tactics/tactic), and partial acronym expansions.
+    Handles hyphens, punctuation (&, /), plurals (tactics/tactic), and collocated word matching.
+    For multi-word phrases, enforces that substantive words appear in close proximity (collocated),
+    preventing disjoint words scattered across different pages from matching falsely.
     """
-    # Normalize both term and source by removing non-alphanumeric punctuation
-    norm_source_clean = re.sub(r"[^a-z0-9\s]+", " ", source_normalized)
+    norm_source = normalize_text_for_search(source_normalized)
+    norm_source_clean = re.sub(r"[^a-z0-9\s]+", " ", norm_source)
     norm_source_clean = re.sub(r"\s+", " ", norm_source_clean).strip()
 
     norm_term = normalize_text_for_search(term)
@@ -155,13 +157,16 @@ def check_term_in_source(term: str, source_normalized: str) -> bool:
     if f" {singular_term} " in f" {norm_source_clean} " or singular_term in norm_source_clean:
         return True
 
-    # 3. Multi-word match: at least 70% of substantive keywords appear
-    substantive = [w for w in singular_words if len(w) > 2 and w not in {"the", "and", "for", "with", "from", "are"}]
+    # 3. Collocated phrase match: words must appear in close proximity (0-2 words between them)
+    substantive = [w for w in singular_words if len(w) > 2 and w not in {"the", "and", "for", "with", "from", "are", "that"}]
     if not substantive:
         return True
 
-    matches = sum(1 for w in substantive if f" {w} " in f" {norm_source_clean} ")
-    return (matches / len(substantive)) >= 0.70
+    if len(substantive) >= 2:
+        colloc_pat = r"\b" + r"\s+(?:\w+\s+){0,2}".join(re.escape(w) for w in substantive) + r"\b"
+        return bool(re.search(colloc_pat, norm_source_clean))
+    else:
+        return f" {substantive[0]} " in f" {norm_source_clean} "
 
 def log_faithfulness_mismatch_to_measure(
     item: str,

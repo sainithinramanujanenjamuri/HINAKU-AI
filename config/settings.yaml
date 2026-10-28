@@ -39,7 +39,7 @@ router:
 
 local:
   provider: ollama
-  host: http://localhost:11434
+  host: http://127.0.0.1:11434
   default_model: bonsai-2:9b      # Q2_0 fits 6 GB VRAM
   keep_alive: "30m"             # keep model in VRAM
   allowed_models:               # larger ones run slower (partial CPU offload)
@@ -91,7 +91,7 @@ api:
   base_url: https://openrouter.ai/api/v1
   model: nvidia/nemotron-3-ultra-550b-a55b:free
   api_key_env: HINAKU_API_KEY   # key is read from the environment / .env, never stored here
-  max_tokens: 1024
+  max_tokens: 4096
   timeout_seconds: 90
   send_personal_context: false   # never attach memories or personal data to API requests
   logged_by_provider: true       # free endpoint is logged; show this in the UI

@@ -1,0 +1,30 @@
+TIMESTAMP: 2026-10-28T09:10:40.018397+00:00
+SECTION: Topic 5 — Evasion & Poisoning Attacks
+FLAGGED ITEM: Evasion Defense
+REASON: Term 'Evasion Defense' was not found in section text or full document.
+SOURCE TEXT SNIPPET:
+Core distinction — WHEN the attacker intervenes:
+Evasion Poisoning
+When Inference-time Training/fine-tuning time
+Target Input Learning process
+Persistence Often per-input Can persist in the model
+Security property Integrity (mainly) Integrity
+Defense Robustness/testing Provenance/validation
+Evasion: clean input → strategically manipulated → same deployed model → different (attacker-useful)
+predict...
+================================================================================
+TIMESTAMP: 2026-10-28T09:10:40.025473+00:00
+SECTION: Topic 5 — Evasion & Poisoning Attacks
+FLAGGED ITEM: Poisoning Defense
+REASON: Term 'Poisoning Defense' was not found in section text or full document.
+SOURCE TEXT SNIPPET:
+Core distinction — WHEN the attacker intervenes:
+Evasion Poisoning
+When Inference-time Training/fine-tuning time
+Target Input Learning process
+Persistence Often per-input Can persist in the model
+Security property Integrity (mainly) Integrity
+Defense Robustness/testing Provenance/validation
+Evasion: clean input → strategically manipulated → same deployed model → different (attacker-useful)
+predict...
+================================================================================

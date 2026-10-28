@@ -1,4 +1,5 @@
 import datetime
+import json
 import math
 import sqlite3
 import uuid
@@ -130,6 +131,8 @@ class ChatHistoryManager:
             msg_cols = [c["name"] for c in conn.execute("PRAGMA table_info(messages)").fetchall()]
             if "backend" not in msg_cols:
                 conn.execute("ALTER TABLE messages ADD COLUMN backend TEXT")
+            if "metadata" not in msg_cols:
+                conn.execute("ALTER TABLE messages ADD COLUMN metadata TEXT")
 
             int_cols = [c["name"] for c in conn.execute("PRAGMA table_info(interactions)").fetchall()]
             if "message_id" not in int_cols:
@@ -213,7 +216,7 @@ class ChatHistoryManager:
 
             msgs = conn.execute(
                 """
-                SELECT m.id, m.conversation_id, m.role, m.content, m.model, m.backend, m.created_at,
+                SELECT m.id, m.conversation_id, m.role, m.content, m.model, m.backend, m.metadata, m.created_at,
                        i.id as interaction_id, i.feedback, i.edited_answer
                 FROM messages m
                 LEFT JOIN interactions i ON m.id = i.message_id
@@ -223,6 +226,19 @@ class ChatHistoryManager:
                 (conv_id,)
             ).fetchall()
 
+            parsed_msgs = []
+            for m in msgs:
+                d = dict(m)
+                raw_meta = d.get("metadata")
+                if raw_meta and isinstance(raw_meta, str):
+                    try:
+                        d["metadata"] = json.loads(raw_meta)
+                    except Exception:
+                        d["metadata"] = {}
+                else:
+                    d["metadata"] = d.get("metadata") or {}
+                parsed_msgs.append(d)
+
             conv_dict = {
                 "id": conv["id"],
                 "title": conv["title"],
@@ -230,7 +246,7 @@ class ChatHistoryManager:
                 "pinned": bool(conv["pinned"]),
                 "created_at": conv["created_at"],
                 "updated_at": conv["updated_at"],
-                "messages": [dict(m) for m in msgs]
+                "messages": parsed_msgs
             }
             return conv_dict
 
@@ -290,10 +306,12 @@ class ChatHistoryManager:
         role: str,
         content: str,
         model: Optional[str] = None,
-        backend: Optional[str] = None
+        backend: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         msg_id = str(uuid.uuid4())
         now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        meta_json = json.dumps(metadata) if metadata else None
         with self._get_connection() as conn:
             conv = conn.execute("SELECT id, title FROM conversations WHERE id = ?", (conv_id,)).fetchone()
             if not conv:
@@ -308,8 +326,8 @@ class ChatHistoryManager:
                     conn.execute("UPDATE conversations SET title = ? WHERE id = ?", (new_title, conv_id))
 
             conn.execute(
-                "INSERT INTO messages (id, conversation_id, role, content, model, backend, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (msg_id, conv_id, role, content, model, backend, now)
+                "INSERT INTO messages (id, conversation_id, role, content, model, backend, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (msg_id, conv_id, role, content, model, backend, meta_json, now)
             )
             conn.execute("UPDATE conversations SET updated_at = ? WHERE id = ?", (now, conv_id))
             conn.commit()
@@ -321,6 +339,7 @@ class ChatHistoryManager:
             "content": content,
             "model": model,
             "backend": backend,
+            "metadata": metadata or {},
             "created_at": now
         }
 

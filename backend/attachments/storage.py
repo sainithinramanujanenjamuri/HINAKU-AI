@@ -14,6 +14,7 @@ import json
 import logging
 import math
 import os
+import re
 import shutil
 import sqlite3
 import urllib.request
@@ -425,15 +426,31 @@ class AttachmentStorage:
         self,
         conversation_id: str,
         query_text: str,
-        top_k: int = 5
+        top_k: int = 5,
+        min_similarity: float = 0.35
     ) -> Tuple[str, Dict[str, Any]]:
         """
         Retrieves document context for model prompt:
+        - If query is pure conversational greeting or unrelated chatter: returns empty context
         - If total document tokens <= 2500 tokens: returns entire text with headers
         - If total document tokens > 2500 tokens: queries top-k chunks with citations
-          and prepends the structural outline (Units & Topics list).
+          and filters by min_similarity to avoid injecting unrelated excerpts.
         Returns (context_text, coverage_metadata).
         """
+        q_lower = query_text.strip().lower()
+        if not q_lower:
+            return "", {"sections": [], "pages": []}
+
+        # Fast exit for generic greetings / non-document banter
+        greetings = {
+            "hi", "hello", "hey", "howdy", "sup", "good morning", "good evening",
+            "good night", "thanks", "thank you", "bye", "who are you",
+            "what can you do", "tell me a joke"
+        }
+        words = set(re.findall(r"\b[a-z]+\b", q_lower))
+        if words and words.issubset(greetings):
+            return "", {"sections": [], "pages": []}
+
         with self._get_connection() as conn:
             rows = conn.execute("""
                 SELECT id, filename, extracted_text, token_count
@@ -467,13 +484,21 @@ class AttachmentStorage:
         results = self.doc_collection.query(
             query_embeddings=[query_emb],
             n_results=min(top_k, 6),
-            where={"conversation_id": conversation_id}
+            where={"conversation_id": conversation_id},
+            include=["documents", "metadatas", "distances"]
         )
 
         retrieved_docs = results.get("documents", [[]])[0]
         retrieved_metas = results.get("metadatas", [[]])[0]
+        distances = results.get("distances", [[]])[0] if "distances" in results and results["distances"] else [0.0] * len(retrieved_docs)
 
-        if not retrieved_docs:
+        valid_entries = []
+        for doc, meta, dist in zip(retrieved_docs, retrieved_metas, distances):
+            sim = 1.0 - dist
+            if sim >= min_similarity:
+                valid_entries.append((doc, meta))
+
+        if not valid_entries:
             return "", {"sections": [], "pages": []}
 
         # Build structural outline header so the model knows the document's macro-structure
@@ -490,7 +515,7 @@ class AttachmentStorage:
         sections_used = []
         pages_used = []
 
-        for doc, meta in zip(retrieved_docs, retrieved_metas):
+        for doc, meta in valid_entries:
             page_num = meta.get("page_number", 1)
             filename = meta.get("filename", "document")
             citation = meta.get("citation", f"[File: {filename}, Page: {page_num}]")

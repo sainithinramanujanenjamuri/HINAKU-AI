@@ -1,0 +1,28 @@
+TIMESTAMP: 2026-10-28T09:09:15.897746+00:00
+SECTION: Topic 1 — AI Triad: Security, Ethics, and Regulation
+FLAGGED ITEM: Pillar 2: Ethics
+REASON: Term 'Pillar 2: Ethics' was not found in section text or full document.
+SOURCE TEXT SNIPPET:
+AI Triad = three interconnected pillars
+Pillar Focus
+Security Protect AI systems (confidentiality, integrity, availability, trustworthiness)
+Ethics Responsible AI (fairness, accountability, transparency, privacy)
+Regulation Legal compliance
+Why it matters: rising AI adoption, privacy concerns, cyberattacks, bias, legal accountability, public trust.
+Without the triad → unsafe, unfair, illegal AI.
+A...
+================================================================================
+TIMESTAMP: 2026-10-28T09:09:15.904793+00:00
+SECTION: Topic 1 — AI Triad: Security, Ethics, and Regulation
+FLAGGED ITEM: Pillar 3: Regulation
+REASON: Term 'Pillar 3: Regulation' was not found in section text or full document.
+SOURCE TEXT SNIPPET:
+AI Triad = three interconnected pillars
+Pillar Focus
+Security Protect AI systems (confidentiality, integrity, availability, trustworthiness)
+Ethics Responsible AI (fairness, accountability, transparency, privacy)
+Regulation Legal compliance
+Why it matters: rising AI adoption, privacy concerns, cyberattacks, bias, legal accountability, public trust.
+Without the triad → unsafe, unfair, illegal AI.
+A...
+================================================================================

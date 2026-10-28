@@ -1,0 +1,76 @@
+COMMAND: python scripts/measure_faithfulness_recall.py
+TIMESTAMP: 2026-10-28T14:13:25.369230
+================================================================================
+FAITHFULNESS VERIFICATION: RECALL & FALSE-POSITIVE EVALUATION
+================================================================================
+
+--- PART 1: POSITIVE-CONTROL TEST (REWORDED STEP NAMES) ---
+Source: Game Mechanics Notes - Topic 7 (The 6D Framework)
+Original Steps in Notes:
+  1. Establish business objectives
+  2. Outline targeted actions
+  3. Define personas
+  4. Refine activity sequences
+  5. Ensure a fun system
+  6. Select the right game elements
+
+Tested Reworded Steps (6 terms):
+  - 'Formulate commercial goals' -> Flagged as ungrounded: True
+  - 'Catalog user activities' -> Flagged as ungrounded: True
+  - 'Build customer avatars' -> Flagged as ungrounded: True
+  - 'Map workflow loops' -> Flagged as ungrounded: True
+  - 'Maximize entertainment' -> Flagged as ungrounded: True
+  - 'Choose gamification widgets' -> Flagged as ungrounded: True
+
+Positive-Control Results:
+  Total Injected Reworded Steps: 6
+  Correctly Flagged as Ungrounded: 6
+  Recall: 100.00%
+  Overall Faithful Verdict: False (Expected False)
+
+================================================================================
+--- PART 2: NEGATIVE-CONTROL TEST (FALSE-POSITIVE RATE) ---
+
+Game Mechanics Ground Truth Terms:
+  - Verified grounded: 'Mechanics'
+  - Verified grounded: 'Dynamics'
+  - Verified grounded: 'Aesthetics'
+  - Verified grounded: 'Killers'
+  - Verified grounded: 'Achievers'
+  - Verified grounded: 'Socializers'
+  - Verified grounded: 'Explorers'
+  - Verified grounded: 'MDA Framework'
+  - Verified grounded: 'Establish business objectives'
+  - Verified grounded: 'Outline targeted actions'
+  - Verified grounded: 'Define personas'
+  - Verified grounded: 'Refine activity sequences'
+  - Verified grounded: 'Ensure a fun system'
+  - Verified grounded: 'Select the right game elements'
+
+Security Ground Truth Terms:
+  - Verified grounded: 'AI Triad'
+  - Verified grounded: 'Security'
+  - Verified grounded: 'Ethics'
+  - Verified grounded: 'Regulation'
+  - Verified grounded: 'Model Inversion'
+  - Verified grounded: 'Membership Inference'
+  - Verified grounded: 'Model Extraction'
+  - Verified grounded: 'Data Poisoning'
+  - Verified grounded: 'Adversarial Inputs'
+  - Verified grounded: 'ATLAS'
+  - Verified grounded: 'MITRE ATT&CK'
+  - Verified grounded: 'TTPs'
+  - Verified grounded: 'Tactics'
+  - Verified grounded: 'Techniques'
+  - Verified grounded: 'Procedures'
+
+Negative-Control Results:
+  Total Grounded Terms Tested: 29
+  False Positives: 0
+  False-Positive Rate: 0.00%
+
+================================================================================
+SUMMARY VERDICT:
+  Recall (Positive Control): 100.00% (Target: 100%)
+  False-Positive Rate (Negative Control): 0.00% (Target: 0%)
+================================================================================

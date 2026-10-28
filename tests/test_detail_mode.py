@@ -47,6 +47,14 @@ def test_trim_to_last_complete_sentence():
     assert trimmed == 'First sentence. "This is a quoted sentence!"'
     assert was_cut is True
 
+    # Incomplete code block: must close code fence and keep code, NOT wipe it out
+    code_text = "Here is the code.\n\n```html\n<!DOCTYPE html>\n<style>body { color: red; }"
+    trimmed_code, was_cut_code = trim_to_last_complete_sentence(code_text)
+    assert was_cut_code is True
+    assert trimmed_code.endswith("\n```")
+    assert "<style>body { color: red; }" in trimmed_code
+    assert trimmed_code.startswith("Here is the code.")
+
 
 def test_verification_leaves_long_detail_replies_alone():
     # In detail mode, a reply with 8 sentences must not be treated as malformed or violating rule 3

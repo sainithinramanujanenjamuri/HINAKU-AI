@@ -1,0 +1,11 @@
+TIMESTAMP: 2026-10-28T09:07:16.748088+00:00
+SECTION: Topic 7 — LLM and Transformer Vulnerabilities: Prompt Injection and Jailbreaking
+FLAGGED ITEM: Analogy
+REASON: Term 'Analogy' was not found in section text or full document.
+SOURCE TEXT SNIPPET:
+Why LLM security differs: probabilistic (generated, not deterministic), context-rich (many sources share
+context window), instruction-sensitive, connected (RAG/APIs/tools extend consequences).
+LLM attack surface: System prompt, User prompt, External context (RAG/web), Tools/APIs.
+Prompt Injection (OWASP LLM01:2025): inputs that alter LLM behavior/output unintentionally. Fine-
+tuning/RAG do NOT eli...
+================================================================================

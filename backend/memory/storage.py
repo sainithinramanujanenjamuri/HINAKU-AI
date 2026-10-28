@@ -78,7 +78,7 @@ class MemoryStorage:
         embedding_dims: int = 1024,
         query_prefix: str = "",
         document_prefix: str = "",
-        ollama_host: str = "http://localhost:11434",
+        ollama_host: str = "http://127.0.0.1:11434",
         custom_embedder: Optional[Callable[[str, List[str]], List[List[float]]]] = None,
         embedding_keep_alive: Optional[str] = None,
         embedding_num_ctx: Optional[int] = None

@@ -107,15 +107,20 @@ def build_addendum_prompt(
         f"Begin directly with the missing components."
     )
 
-def check_and_fix_count_consistency(explanation_text: str) -> Tuple[bool, str, List[Dict[str, Any]]]:
+def check_and_fix_count_consistency(
+    explanation_text: str,
+    section_text: str = ""
+) -> Tuple[bool, str, List[Dict[str, Any]]]:
     """
-    Detects statements like 'three distinct phases' followed by list items.
-    If claimed count N != actual listed items M, corrects N to M in the text.
+    Checks count consistency:
+    - If the explanation states 'N distinct stages/phases/types/steps/pillars' (N claimed)
+      and lists fewer items M < N:
+      DOES NOT rewrite N to M.
+      Instead, retrieves the missing items from section_text and appends them
+      to the list so all N items are represented, logging before and after.
     Returns: (was_modified, fixed_text, list_of_fixes)
     """
     fixes = []
-    
-    # Split text into paragraphs
     paragraphs = explanation_text.split("\n\n")
     modified_paragraphs = []
     overall_modified = False
@@ -128,7 +133,6 @@ def check_and_fix_count_consistency(explanation_text: str) -> Tuple[bool, str, L
 
         full_statement = match.group(0)
         num_str = match.group(1).lower()
-        distinct_str = match.group(2) or ""
         noun_str = match.group(3)
 
         claimed = WORD_TO_NUM.get(num_str)
@@ -139,27 +143,56 @@ def check_and_fix_count_consistency(explanation_text: str) -> Tuple[bool, str, L
                 modified_paragraphs.append(para)
                 continue
 
-        # Count bullets in the paragraph or subsequent lines
+        # Find existing bullet lines
         after_stmt = para[match.end():]
-        bullets = re.findall(r"(?:^|\n)\s*(?:[*+-]|\d+\.)\s+", after_stmt)
-        actual = len(bullets)
+        existing_bullets = re.findall(r"(?:^|\n)\s*(?:[*+-]|\d+\.)\s+[^\n]+", after_stmt)
+        actual = len(existing_bullets)
 
-        if actual > 0 and actual != claimed:
-            new_num_word = NUM_TO_WORD.get(actual, str(actual))
-            if match.group(1)[0].isupper():
-                new_num_word = new_num_word.capitalize()
+        if actual > 0 and actual < claimed:
+            # We are missing (claimed - actual) items!
+            missing_count = claimed - actual
+            before_text = para
 
-            fixed_stmt = f"{new_num_word} {distinct_str}{noun_str}"
-            fixed_para = para[:match.start()] + fixed_stmt + para[match.end():]
-            modified_paragraphs.append(fixed_para)
-            overall_modified = True
-            fixes.append({
-                "original": full_statement,
-                "fixed": fixed_stmt,
-                "claimed": claimed,
-                "actual": actual
-            })
-            logger.info(f"Count consistency fix: '{full_statement}' -> '{fixed_stmt}' (actual items: {actual})")
+            # Extract candidates from section_text
+            missing_items = []
+            if section_text:
+                sec_lines = [l.strip() for l in section_text.splitlines() if l.strip()]
+                candidate_lines = []
+                for sl in sec_lines:
+                    if re.match(r"^(?:[*+-]|\d+[\.)])\s+", sl):
+                        cleaned_item = re.sub(r"^(?:[*+-]|\d+[\.)])\s*", "", sl).strip()
+                        candidate_lines.append(cleaned_item)
+
+                existing_lower = " ".join(existing_bullets).lower()
+                for cand in candidate_lines:
+                    cand_words = [w for w in re.findall(r"\b[a-zA-Z]{3,}\b", cand.lower())]
+                    if cand_words and not any(w in existing_lower for w in cand_words[:2]):
+                        missing_items.append(f"* {cand}")
+                        if len(missing_items) == missing_count:
+                            break
+
+            if missing_items:
+                added_block = "\n" + "\n".join(missing_items)
+                fixed_para = para + added_block
+                modified_paragraphs.append(fixed_para)
+                overall_modified = True
+                fix_entry = {
+                    "statement": full_statement,
+                    "claimed": claimed,
+                    "before_count": actual,
+                    "after_count": actual + len(missing_items),
+                    "added_items": missing_items,
+                    "before": before_text,
+                    "after": fixed_para
+                }
+                fixes.append(fix_entry)
+                logger.info(
+                    f"Count consistency completed: '{full_statement}' claimed {claimed} but had {actual}. "
+                    f"Added {len(missing_items)} missing items from notes.\n"
+                    f"BEFORE:\n{before_text}\nAFTER:\n{fixed_para}"
+                )
+            else:
+                modified_paragraphs.append(para)
         else:
             modified_paragraphs.append(para)
 

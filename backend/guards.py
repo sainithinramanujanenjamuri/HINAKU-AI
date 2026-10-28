@@ -192,11 +192,18 @@ def trim_to_last_complete_sentence(text: str) -> Tuple[str, bool]:
     """
     If a text ends mid-sentence (e.g. cut off by token limit),
     trims it back to the last complete sentence boundary.
+    If cut off inside an open markdown code block (```), closes the code block
+    to preserve all generated code rather than wiping it out.
     Returns (trimmed_text, was_cut).
     """
     if not text or not text.strip():
         return text, False
     stripped = text.rstrip()
+
+    # If cut off inside an open markdown code block, close it cleanly to preserve generated code
+    if stripped.count("```") % 2 != 0:
+        return stripped + "\n```", True
+
     # Sentence ending punctuation followed optionally by quotes or parens
     if re.search(r'[.!?]["\')\]]?$', stripped):
         return stripped, False

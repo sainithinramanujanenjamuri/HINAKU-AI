@@ -71,9 +71,15 @@ export function getPrivacyChipInfo(mode) {
  */
 export function formatModelDisplayName(modelName, isLoading = false) {
   if (!modelName) return "Select model";
-  if (isLoading) {
-    return `${modelName} (loading... ~15s)`;
+  let display = modelName;
+  if (modelName.includes("/")) {
+    const parts = modelName.split("/");
+    const short = parts[parts.length - 1].replace(":free", "");
+    display = `${short} (API)`;
   }
-  return modelName;
+  if (isLoading) {
+    return `${display} (loading... ~15s)`;
+  }
+  return display;
 }
 

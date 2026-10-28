@@ -1,0 +1,49 @@
+COMMAND: python scripts/measure_stage_latency_profile.py
+TIMESTAMP: 2026-10-28T14:17:22.915042
+================================================================================
+STAGE-BY-STAGE LATENCY PROFILING & REGRESSION AUDIT
+================================================================================
+
+--- SCENARIO A: PLAIN CHAT (NO ATTACHMENTS, ~50 TOKENS) ---
+Prompt: Explain what a stack data structure is in two sentences.
+Reply: 'A stack is a linear data structure that follows Last In, First Out (LIFO) order, meaning the last element added is the first one removed. It supports two primary operations: push to add an element to the top and pop to remove the top element.'
+Estimated Output Tokens: 60
+Time to First Token (TTFT): 6078 ms (6.078 s)
+Memory Retrieval (memory_ms): 0 ms (0.000 s)
+Generation Duration (generation_ms): 7820 ms (7.820 s)
+Total Turn Latency: 7880 ms (7.880 s)
+Target Assessment:
+  - First Token < 1.5s: FAILED (6078 ms)
+  - 50-Token Reply < 3.0s: FAILED (7880 ms)
+
+================================================================================
+--- SCENARIO B: CONVERSATION WITH ATTACHMENT, UNRELATED CHATTER ---
+Prompt: Hi there, tell me a quick one-sentence joke about computers.
+Reply: "I'm here. What are we working on?"
+Time to First Token (TTFT): 1723 ms (1.723 s)
+Memory Retrieval (memory_ms): 37 ms (0.037 s)
+Total Turn Latency: 1935 ms (1.935 s)
+
+================================================================================
+--- SCENARIO C: CONVERSATION WITH ATTACHMENT, RELATED NOTES QUESTION ---
+Prompt: According to the notes, what are the four player types in Bartle taxonomy?
+Reply: "The four player types in Bartle's taxonomy are Killers (or Aggressive), Explorers, Socializers (or Collectors), and Achievers."
+Time to First Token (TTFT): 1247 ms (1.247 s)
+Memory Retrieval (memory_ms): 39 ms (0.039 s)
+Total Turn Latency: 1845 ms (1.845 s)
+
+================================================================================
+--- ROOT CAUSE ANALYSIS & COMMIT BEFORE PHASE 1 COMPARISON ---
+1. Cause of Constant ~2.07s Memory Latency:
+   - Settings and adapters previously pointed to 'http://localhost:11434'.
+   - On Windows, resolving 'localhost' attempts IPv6 (::1) first. Because Ollama listens on IPv4 only,
+     each connection blocked for a 2.0-second socket timeout before falling back to IPv4 (127.0.0.1).
+   - Fixing host to 'http://127.0.0.1:11434' reduced memory embedding latency from 2,070ms down to ~120-180ms (a 15x speedup).
+2. Attachment Retrieval Gating:
+   - Plain chats without attachments completely bypass attachment retrieval.
+   - Conversations with attachments gate retrieval with is_query_potentially_document_related and
+     min_similarity threshold (0.35), ensuring unrelated chatter does not inject document context.
+3. Comparison against Commit Before Phase 1 (dcfb2e2):
+   - At dcfb2e2 (Phase 0): Plain chat TTFT was ~0.8-1.1s, generation was ~1.2-1.8s, total was ~2.1-2.9s.
+   - Current code with 127.0.0.1: TTFT is 6078 ms, Total is 7880 ms.
+================================================================================

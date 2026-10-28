@@ -1,0 +1,56 @@
+TIMESTAMP: 2026-10-28T09:06:55.930522+00:00
+SECTION: Topic 6 — Inference and Extraction Attacks: Stealing Secrets
+FLAGGED ITEM: Inference and Extraction Attacks: Stealing Secrets
+REASON: Term 'Inference and Extraction Attacks: Stealing Secrets' was not found in section text or full document.
+SOURCE TEXT SNIPPET:
+Inference = derive hidden facts from outputs. Extraction = recover model/data secrets. Both threaten
+privacy and IP.
+The "Secret" surface: Training data (personal/confidential records), Model (parameters/behavior), API
+(predictions/confidence), Logs (prompts/context/outputs).
+Attack taxonomy (NIST AI 100-2e2025):
+Attack Goal
+Membership inference Was a sample in training?
+Attribute inference Infer ...
+================================================================================
+TIMESTAMP: 2026-10-28T09:06:55.958528+00:00
+SECTION: Topic 6 — Inference and Extraction Attacks: Stealing Secrets
+FLAGGED ITEM: NIST AI 100-2025 taxonomy
+REASON: Term 'NIST AI 100-2025 taxonomy' was not found in section text or full document.
+SOURCE TEXT SNIPPET:
+Inference = derive hidden facts from outputs. Extraction = recover model/data secrets. Both threaten
+privacy and IP.
+The "Secret" surface: Training data (personal/confidential records), Model (parameters/behavior), API
+(predictions/confidence), Logs (prompts/context/outputs).
+Attack taxonomy (NIST AI 100-2e2025):
+Attack Goal
+Membership inference Was a sample in training?
+Attribute inference Infer ...
+================================================================================
+TIMESTAMP: 2026-10-28T09:06:55.981714+00:00
+SECTION: Topic 6 — Inference and Extraction Attacks: Stealing Secrets
+FLAGGED ITEM: Model Extraction/Inversion
+REASON: Term 'Model Extraction/Inversion' was not found in section text or full document.
+SOURCE TEXT SNIPPET:
+Inference = derive hidden facts from outputs. Extraction = recover model/data secrets. Both threaten
+privacy and IP.
+The "Secret" surface: Training data (personal/confidential records), Model (parameters/behavior), API
+(predictions/confidence), Logs (prompts/context/outputs).
+Attack taxonomy (NIST AI 100-2e2025):
+Attack Goal
+Membership inference Was a sample in training?
+Attribute inference Infer ...
+================================================================================
+TIMESTAMP: 2026-10-28T09:06:55.991330+00:00
+SECTION: Topic 6 — Inference and Extraction Attacks: Stealing Secrets
+FLAGGED ITEM: Confidence scores matter significantly
+REASON: Term 'Confidence scores matter significantly' was not found in section text or full document.
+SOURCE TEXT SNIPPET:
+Inference = derive hidden facts from outputs. Extraction = recover model/data secrets. Both threaten
+privacy and IP.
+The "Secret" surface: Training data (personal/confidential records), Model (parameters/behavior), API
+(predictions/confidence), Logs (prompts/context/outputs).
+Attack taxonomy (NIST AI 100-2e2025):
+Attack Goal
+Membership inference Was a sample in training?
+Attribute inference Infer ...
+================================================================================

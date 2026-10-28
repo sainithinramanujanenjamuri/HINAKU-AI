@@ -1,5 +1,5 @@
 import { groupConversationsByDate, getPrivacyChipInfo, formatModelDisplayName } from "/static/js/utils.js";
-import { createUserMessageElement, createAssistantMessageElement, updateMetaRow, renderCitationChips, formatFileSize, getFileIcon } from "/static/js/message.js";
+import { createUserMessageElement, createAssistantMessageElement, updateMetaRow, renderCitationChips, renderActionButtons, formatFileSize, getFileIcon } from "/static/js/message.js";
 import { attachCodeBlockCopyHandlers, formatMarkdown } from "/static/js/markdown.js";
 import { renderMemoryPage, renderRatingsPage, renderDatasetPage, renderSettingsPage } from "/static/js/pages.js";
 
@@ -243,12 +243,14 @@ function setupEventListeners() {
   });
 
   // Model dropdown
-  dom.composerModelChip?.addEventListener("click", (e) => {
+  const toggleModelMenu = (e) => {
     e.stopPropagation();
     dom.composerPlusMenu?.classList.add("hidden");
     dom.privacyDropdownMenu?.classList.add("hidden");
     dom.modelDropdownMenu?.classList.toggle("hidden");
-  });
+  };
+  dom.composerModelChip?.addEventListener("click", toggleModelMenu);
+  dom.topModelChip?.addEventListener("click", toggleModelMenu);
 
   dom.modelDropdownMenu?.querySelectorAll(".dropdown-item").forEach(item => {
     item.addEventListener("click", () => {
@@ -441,6 +443,22 @@ async function loadInitialInfo() {
       const info = await res.json();
       if (info.default_model) {
         selectModel(info.default_model);
+      }
+      if (info.router?.api_model && dom.modelDropdownMenu) {
+        state.apiModel = info.router.api_model;
+        let apiItem = dom.modelDropdownMenu.querySelector("#menu-api-model-item");
+        if (!apiItem) {
+          apiItem = document.createElement("button");
+          apiItem.id = "menu-api-model-item";
+          apiItem.className = "dropdown-item";
+          apiItem.dataset.model = info.router.api_model;
+          apiItem.textContent = formatModelDisplayName(info.router.api_model);
+          apiItem.addEventListener("click", () => {
+            selectModel(info.router.api_model);
+            dom.modelDropdownMenu.classList.add("hidden");
+          });
+          dom.modelDropdownMenu.appendChild(apiItem);
+        }
       }
       if (info.router?.api_logged_by_provider) {
         state.isApiLoggedByProvider = true;
@@ -636,6 +654,12 @@ function renderConversationMessages(messages) {
       });
       if (msg.citations && msg.citations.length > 0) {
         renderCitationChips(row, msg.citations, (cit) => openContextPanelTab("files", cit.file));
+      }
+      if (msg.metadata && msg.metadata.actions && msg.metadata.actions.length > 0) {
+        renderActionButtons(row, msg.metadata.actions, (promptText) => {
+          if (dom.promptInput) dom.promptInput.value = promptText;
+          handleSendMessage();
+        });
       }
       dom.messagesContainer.appendChild(row);
       attachCodeBlockCopyHandlers(row);
@@ -880,6 +904,7 @@ async function handleSendMessage(overrideText = null) {
   let lastMessageId = null;
   let lastInteractionId = null;
   let lastBackend = "local";
+  let lastModel = state.activeModel;
   let isVerified = false;
   let verifyStatus = null;
   let verifyReason = null;
@@ -1018,12 +1043,19 @@ async function handleSendMessage(overrideText = null) {
           }
 
           if (parsed.backend) lastBackend = parsed.backend;
+          if (parsed.model) lastModel = parsed.model;
           if (parsed.verified !== undefined) isVerified = Boolean(parsed.verified);
           if (parsed.verify_status) verifyStatus = parsed.verify_status;
           if (parsed.verify_reason) verifyReason = parsed.verify_reason;
           if (parsed.hit_token_limit !== undefined) hitTokenLimit = Boolean(parsed.hit_token_limit);
           if (parsed.citations && parsed.citations.length > 0) {
             docCitations = parsed.citations;
+          }
+          if (parsed.type === "actions" && Array.isArray(parsed.actions)) {
+            renderActionButtons(assistantRow, parsed.actions, (promptText) => {
+              if (dom.promptInput) dom.promptInput.value = promptText;
+              handleSendMessage();
+            });
           }
 
           if (parsed.chunk) {
@@ -1059,12 +1091,19 @@ async function handleSendMessage(overrideText = null) {
     }
 
     updateMetaRow(metaRow, {
-      model: state.activeModel,
+      model: lastModel,
       backend: lastBackend,
       verified: isVerified,
       verifyStatus,
       verifyReason
     });
+
+    // Update top and composer model display chips to match the model that replied
+    if (lastModel) {
+      const label = formatModelDisplayName(lastModel, false);
+      if (dom.topModelText) dom.topModelText.textContent = label;
+      if (dom.composerModelLabel) dom.composerModelLabel.textContent = label;
+    }
 
   } catch (err) {
     if (err.name !== "AbortError") {

@@ -1,0 +1,48 @@
+TIMESTAMP: 2026-10-28T08:43:26.319732+00:00
+SECTION: 7. The 6D Framework
+FLAGGED ITEM: Formulate commercial goals
+REASON: Term 'Formulate commercial goals' was not found in section text or full document.
+SOURCE TEXT SNIPPET:
+1. Establish business objectives 2. Outline targeted actions 3. Define personas 4. Refine activity sequences 5.
+Ensure a fun system 6. Select the right game elements
+================================================================================
+TIMESTAMP: 2026-10-28T08:43:26.328375+00:00
+SECTION: 7. The 6D Framework
+FLAGGED ITEM: Catalog user activities
+REASON: Term 'Catalog user activities' was not found in section text or full document.
+SOURCE TEXT SNIPPET:
+1. Establish business objectives 2. Outline targeted actions 3. Define personas 4. Refine activity sequences 5.
+Ensure a fun system 6. Select the right game elements
+================================================================================
+TIMESTAMP: 2026-10-28T08:43:26.341196+00:00
+SECTION: 7. The 6D Framework
+FLAGGED ITEM: Build customer avatars
+REASON: Term 'Build customer avatars' was not found in section text or full document.
+SOURCE TEXT SNIPPET:
+1. Establish business objectives 2. Outline targeted actions 3. Define personas 4. Refine activity sequences 5.
+Ensure a fun system 6. Select the right game elements
+================================================================================
+TIMESTAMP: 2026-10-28T08:43:26.348286+00:00
+SECTION: 7. The 6D Framework
+FLAGGED ITEM: Map workflow loops
+REASON: Term 'Map workflow loops' was not found in section text or full document.
+SOURCE TEXT SNIPPET:
+1. Establish business objectives 2. Outline targeted actions 3. Define personas 4. Refine activity sequences 5.
+Ensure a fun system 6. Select the right game elements
+================================================================================
+TIMESTAMP: 2026-10-28T08:43:26.355332+00:00
+SECTION: 7. The 6D Framework
+FLAGGED ITEM: Maximize entertainment
+REASON: Term 'Maximize entertainment' was not found in section text or full document.
+SOURCE TEXT SNIPPET:
+1. Establish business objectives 2. Outline targeted actions 3. Define personas 4. Refine activity sequences 5.
+Ensure a fun system 6. Select the right game elements
+================================================================================
+TIMESTAMP: 2026-10-28T08:43:26.363027+00:00
+SECTION: 7. The 6D Framework
+FLAGGED ITEM: Choose gamification widgets
+REASON: Term 'Choose gamification widgets' was not found in section text or full document.
+SOURCE TEXT SNIPPET:
+1. Establish business objectives 2. Outline targeted actions 3. Define personas 4. Refine activity sequences 5.
+Ensure a fun system 6. Select the right game elements
+================================================================================

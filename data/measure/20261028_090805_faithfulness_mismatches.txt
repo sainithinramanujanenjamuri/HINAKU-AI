@@ -1,0 +1,14 @@
+TIMESTAMP: 2026-10-28T09:08:05.522126+00:00
+SECTION: Topic 9 — Frameworks for Understanding AI Threats: MITRE ATLAS
+FLAGGED ITEM: Procedure (TTPs)
+REASON: Term 'Procedure (TTPs)' was not found in section text or full document.
+SOURCE TEXT SNIPPET:
+ATLAS = Adversarial Threat Landscape for Artificial-Intelligence Systems — a living knowledge base of
+adversary tactics/techniques against AI-enabled systems, modeled after and complementary to MITRE
+ATT&CK.
+ATT&CK → enterprise/traditional cyber behavior.
+ATLAS → AI-enabled threat behavior.
+Both together give full-system threat-informed defense.
+10/27/26, 1:09 PM
+file:///D:/HINAKU-AI/tests/real_sa...
+================================================================================

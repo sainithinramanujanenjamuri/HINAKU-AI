@@ -1,0 +1,77 @@
+COMMAND: python scripts/measure_faithfulness_recall.py
+TIMESTAMP: 2026-10-28T14:10:40.024918
+================================================================================
+FAITHFULNESS VERIFICATION: RECALL & FALSE-POSITIVE EVALUATION
+================================================================================
+
+--- PART 1: POSITIVE-CONTROL TEST (REWORDED STEP NAMES) ---
+Source: Game Mechanics Notes - Topic 7 (The 6D Framework)
+Original Steps in Notes:
+  1. Establish business objectives
+  2. Outline targeted actions
+  3. Define personas
+  4. Refine activity sequences
+  5. Ensure a fun system
+  6. Select the right game elements
+
+Tested Reworded Steps (6 terms):
+  - 'Formulate commercial goals' -> Flagged as ungrounded: True
+  - 'Catalog user activities' -> Flagged as ungrounded: True
+  - 'Build customer avatars' -> Flagged as ungrounded: True
+  - 'Map workflow loops' -> Flagged as ungrounded: False
+  - 'Maximize entertainment' -> Flagged as ungrounded: True
+  - 'Choose gamification widgets' -> Flagged as ungrounded: True
+
+Positive-Control Results:
+  Total Injected Reworded Steps: 6
+  Correctly Flagged as Ungrounded: 5
+  Recall: 83.33%
+  Overall Faithful Verdict: False (Expected False)
+
+================================================================================
+--- PART 2: NEGATIVE-CONTROL TEST (FALSE-POSITIVE RATE) ---
+
+Game Mechanics Ground Truth Terms:
+  - Verified grounded: 'Mechanics'
+  - Verified grounded: 'Dynamics'
+  - Verified grounded: 'Aesthetics'
+  - FALSE POSITIVE: 'Killers' not found in source text
+  - FALSE POSITIVE: 'Achievers' not found in source text
+  - FALSE POSITIVE: 'Socializers' not found in source text
+  - Verified grounded: 'Explorers'
+  - FALSE POSITIVE: 'Extrinsic Motivation' not found in source text
+  - FALSE POSITIVE: 'Intrinsic Motivation' not found in source text
+  - FALSE POSITIVE: 'SAPS' not found in source text
+  - Verified grounded: 'Status'
+  - Verified grounded: 'Access'
+  - Verified grounded: 'Power'
+  - FALSE POSITIVE: 'Stuff' not found in source text
+  - FALSE POSITIVE: 'MDA Framework' not found in source text
+
+Security Ground Truth Terms:
+  - Verified grounded: 'AI Triad'
+  - Verified grounded: 'Security'
+  - Verified grounded: 'Ethics'
+  - Verified grounded: 'Regulation'
+  - Verified grounded: 'Model Inversion'
+  - Verified grounded: 'Membership Inference'
+  - Verified grounded: 'Model Extraction'
+  - Verified grounded: 'Data Poisoning'
+  - Verified grounded: 'Adversarial Inputs'
+  - FALSE POSITIVE: 'ATLAS' not found in source text
+  - FALSE POSITIVE: 'MITRE ATT&CK' not found in source text
+  - FALSE POSITIVE: 'TTPs' not found in source text
+  - Verified grounded: 'Tactics'
+  - Verified grounded: 'Techniques'
+  - FALSE POSITIVE: 'Procedures' not found in source text
+
+Negative-Control Results:
+  Total Grounded Terms Tested: 30
+  False Positives: 12
+  False-Positive Rate: 40.00%
+
+================================================================================
+SUMMARY VERDICT:
+  Recall (Positive Control): 83.33% (Target: 100%)
+  False-Positive Rate (Negative Control): 40.00% (Target: 0%)
+================================================================================

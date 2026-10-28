@@ -85,11 +85,14 @@ async def upload_attachments(
         )
 
     storage_usage = attachment_manager.get_total_storage_usage()
+    indexed_sections = attachment_manager.get_sections(conversation_id)
 
     return {
         "status": "success",
         "conversation_id": conversation_id,
         "attachments": saved_records,
+        "sections": indexed_sections,
+        "section_count": len(indexed_sections),
         "errors": errors if errors else None,
         "storage_usage": storage_usage
     }

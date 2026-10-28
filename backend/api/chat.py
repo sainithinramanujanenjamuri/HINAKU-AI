@@ -1,5 +1,6 @@
 from datetime import datetime
 import json
+import re
 import time
 import uuid
 import logging
@@ -168,6 +169,7 @@ async def get_ollama_health():
 
 @router.post("/chat")
 async def chat_endpoint(req: ChatRequest, response: Response):
+    t_req_start = time.perf_counter()
     if not req.messages:
         raise HTTPException(status_code=400, detail="Messages list cannot be empty")
 
@@ -460,6 +462,8 @@ async def chat_endpoint(req: ChatRequest, response: Response):
             if m.role != "system"
         ]
 
+    guards_ms = int((time.perf_counter() - t_req_start) * 1000)
+
     from backend.guards import is_detail_request, trim_to_last_complete_sentence
 
     is_detail = bool(req.detailed) or is_detail_request(latest_user_text)
@@ -468,13 +472,16 @@ async def chat_endpoint(req: ChatRequest, response: Response):
     has_attachments = attachment_manager.has_attachments(conv_id)
 
     # Identify target backend for memory retrieval privacy rule
+    t_router_start = time.perf_counter()
     router_decision = model_router.decide_backend(
         latest_user_text,
         is_private=is_private,
         last_backend=last_backend,
         is_detail=is_detail,
-        has_attachments=has_attachments
+        has_attachments=has_attachments,
+        requested_model=req.model
     )
+    router_ms = int((time.perf_counter() - t_router_start) * 1000)
     is_api = (router_decision.target_backend == "api")
 
     # Retrieve memory context (only for local model requests per privacy rules)
@@ -497,10 +504,14 @@ async def chat_endpoint(req: ChatRequest, response: Response):
     if memory_context:
         system_parts.append(memory_context)
     coverage_meta = {"sections": [], "pages": []}
+    t_att_start = time.perf_counter()
     if has_attachments:
         doc_context, coverage_meta = attachment_manager.get_document_prompt_context(conv_id, latest_user_text)
         if doc_context:
             system_parts.append(doc_context)
+    attachment_ms = int((time.perf_counter() - t_att_start) * 1000)
+
+    t_prompt_start = time.perf_counter()
     if is_despair:
         helpline_lines = [f"{h.get('name')}: {h.get('number')}" for h in settings.helpline_numbers if h.get('name') and h.get('number')]
         hl_info = f" Available helplines: {'; '.join(helpline_lines)}." if helpline_lines else " No external helplines are configured."
@@ -515,11 +526,12 @@ async def chat_endpoint(req: ChatRequest, response: Response):
     # Prepend persona system prompt (with memory context if applicable) and trim history
     full_messages = [{"role": "system", "content": system_content}] + messages_to_trim
     trimmed_messages = trim_history(full_messages, max_tokens=settings.max_context_tokens)
+    prompt_assembly_ms = int((time.perf_counter() - t_prompt_start) * 1000)
 
     # Re-read fresh API key if changed in environment
     api_adapter.api_key = settings.get_api_key()
 
-    target_model = req.model if (req.model and req.model in settings.allowed_local_models) else settings.default_local_model
+    target_model = req.model if (req.model and (req.model in settings.allowed_local_models or req.model == settings.api_model)) else settings.default_local_model
     target_opts = dict(settings.get_model_options(target_model))
     if target_model == "bonsai-2:9b":
         target_opts["num_ctx"] = 8192
@@ -546,6 +558,7 @@ async def chat_endpoint(req: ChatRequest, response: Response):
             used_model = target_model
             stream_notice = persona_state.notice
             was_cut = False
+            message_actions = []
 
             # Initial metadata payload
             if auto_private_triggered:
@@ -582,6 +595,7 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                     pass
 
             t_gen_start = time.perf_counter()
+            t_ttft = None
             encountered_error = None
 
             if has_attachments and is_overview_intent(latest_user_text):
@@ -603,9 +617,11 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                 unit_name = unit_sections[0].get("unit_name") if unit_sections else f"Unit {target_unit}"
                 intro_desc = summary.get("intro_desc") or f"{total_all_topics} main topics across {len(summary.get('units') or [1])} units"
 
-                # Rolling time estimate baseline: ~10.6 seconds per topic
+                unit_total_topics = len(unit_sections)
                 rolling_sec_per_topic = 10.6
-                initial_est_seconds = round(rolling_sec_per_topic * len(unit_sections))
+                initial_est_seconds = round(rolling_sec_per_topic * unit_total_topics)
+                prev_remaining_estimate = initial_est_seconds
+                t_walkthrough_start = time.perf_counter()
 
                 # Walkthrough options: allow up to 800 tokens so full explanation, example, and takeaways fit
                 walkthrough_opts = dict(target_opts)
@@ -621,6 +637,8 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                     f"We'll learn them step by step starting with **{unit_name}** (~{initial_est_seconds}s estimated).\n\n"
                     "---\n"
                 )
+                if t_ttft is None:
+                    t_ttft = time.perf_counter()
                 accumulated_chunks.append(intro_text)
                 yield f"data: {json.dumps({'type': 'chunk', 'chunk': intro_text, 'backend': 'local', 'model': target_model, 'conversation_id': conv_id})}\n\n"
 
@@ -631,11 +649,18 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                 for idx, sec in enumerate(unit_sections, 1):
                     sec_title = sec["title"]
                     topic_num = sec.get("topic_number") or idx
-                    rem_topics = len(unit_sections) - (idx - 1)
-                    current_topic_estimate = round(rolling_sec_per_topic * rem_topics)
+                    rem_topics = unit_total_topics - (idx - 1)
+                    if idx == 1:
+                        current_topic_estimate = initial_est_seconds
+                    else:
+                        elapsed_total = time.perf_counter() - t_walkthrough_start
+                        avg_sec = elapsed_total / (idx - 1)
+                        calc_est = round(avg_sec * rem_topics)
+                        current_topic_estimate = min(prev_remaining_estimate, max(1, calc_est))
+                    prev_remaining_estimate = current_topic_estimate
 
-                    progress_msg = f"Explaining topic {topic_num} of {total_all_topics} (~{current_topic_estimate}s remaining)"
-                    yield f"data: {json.dumps({'type': 'walkthrough_progress', 'notice': progress_msg, 'current': topic_num, 'total': total_all_topics, 'estimated_remaining_seconds': current_topic_estimate, 'topic': sec_title, 'conversation_id': conv_id})}\n\n"
+                    progress_msg = f"Explaining topic {idx} of {unit_total_topics} (~{current_topic_estimate}s remaining)"
+                    yield f"data: {json.dumps({'type': 'walkthrough_progress', 'notice': progress_msg, 'current': idx, 'total': unit_total_topics, 'estimated_remaining_seconds': current_topic_estimate, 'topic': sec_title, 'conversation_id': conv_id})}\n\n"
 
                     # Check cache in SQLite
                     cached = sec.get("explanation_cache")
@@ -679,19 +704,41 @@ async def chat_endpoint(req: ChatRequest, response: Response):
 
                     draft_duration_s = time.perf_counter() - topic_t0
                     full_sec_explanation = "".join(topic_accumulated).strip()
+                    # Inner section labels formatting: normalize inner ### to ####
+                    full_sec_explanation = re.sub(r"(?m)^###\s+(\*\*[^*]+\*\*):?", r"#### \1", full_sec_explanation)
+                    full_sec_explanation = re.sub(r"(?m)^###\s+", r"#### ", full_sec_explanation)
+                    draft_load_ms = round((getattr(local_adapter, "last_load_duration", 0) or 0) / 1e6, 2)
+                    topic_calls = [
+                        {
+                            "call_type": "draft",
+                            "ms": int(draft_duration_s * 1000),
+                            "tokens": draft_tokens,
+                            "load_duration_ms": draft_load_ms
+                        }
+                    ]
                     logger.info(
                         f"[Walkthrough Call: Draft] [Topic {topic_num}/{total_all_topics}: '{sec_title}'] "
                         f"duration={draft_duration_s*1000:.1f}ms | tokens={draft_tokens} | "
-                        f"tps={draft_tokens/max(0.001, draft_duration_s):.1f}"
+                        f"load_duration={draft_load_ms}ms"
                     )
 
                     # 3. Count consistency check and fix
-                    was_count_fixed, full_sec_explanation, count_fixes = check_and_fix_count_consistency(full_sec_explanation)
+                    t_count_0 = time.perf_counter()
+                    was_count_fixed, full_sec_explanation, count_fixes = check_and_fix_count_consistency(full_sec_explanation, section_text=sec.get("text", ""))
+                    count_ms = int((time.perf_counter() - t_count_0) * 1000)
+                    topic_calls.append({
+                        "call_type": "count_check",
+                        "ms": count_ms,
+                        "fixed": was_count_fixed,
+                        "fixes": count_fixes
+                    })
                     if was_count_fixed:
                         logger.info(f"Count consistency corrected in '{sec_title}': {count_fixes}")
 
                     # 4. Style verification: check for example and takeaways
+                    t_style_0 = time.perf_counter()
                     style_res = check_study_style(full_sec_explanation)
+                    style_check_ms = int((time.perf_counter() - t_style_0) * 1000)
                     if not style_res["is_complete"]:
                         logger.info(
                             f"Style check in '{sec_title}': missing {style_res['missing_parts']}. "
@@ -726,19 +773,41 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                         addendum_duration_s = time.perf_counter() - addendum_t0
                         addendum_text = "".join(addendum_chunks).strip()
                         full_sec_explanation += "\n\n" + addendum_text
+                        addendum_load_ms = round((getattr(local_adapter, "last_load_duration", 0) or 0) / 1e6, 2)
+                        topic_calls.append({
+                            "call_type": "style_addendum",
+                            "ms": int(addendum_duration_s * 1000),
+                            "tokens": addendum_tokens,
+                            "load_duration_ms": addendum_load_ms,
+                            "missing_parts": style_res["missing_parts"]
+                        })
                         logger.info(
                             f"[Walkthrough Call: Addendum] [Topic {topic_num}/{total_all_topics}: '{sec_title}'] "
                             f"duration={addendum_duration_s*1000:.1f}ms | tokens={addendum_tokens} | "
-                            f"components={style_res['missing_parts']}"
+                            f"load_duration={addendum_load_ms}ms | components={style_res['missing_parts']}"
                         )
+                    else:
+                        topic_calls.append({
+                            "call_type": "style_check",
+                            "ms": style_check_ms,
+                            "complete": True
+                        })
 
                     # 5. Faithfulness check across document
+                    t_faith_0 = time.perf_counter()
                     is_faithful, missing_terms, checked_text = verify_explanation_faithfulness(
                         explanation_text=full_sec_explanation,
                         section_text=sec["text"],
                         full_document_text=full_doc_text,
                         sec_title=sec_title
                     )
+                    faith_ms = int((time.perf_counter() - t_faith_0) * 1000)
+                    topic_calls.append({
+                        "call_type": "faithfulness_check",
+                        "ms": faith_ms,
+                        "faithful": is_faithful,
+                        "missing_terms": missing_terms
+                    })
                     if not is_faithful:
                         logger.info(f"Faithfulness check triggered for '{sec_title}': ungrounded terms {missing_terms}. Running single-pass regeneration.")
                         regen_prompt = (
@@ -765,9 +834,17 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                                 regen_chunks.append(c_str)
                         regen_duration_s = time.perf_counter() - regen_t0
                         regen_explanation = "".join(regen_chunks).strip()
+                        regen_load_ms = round((getattr(local_adapter, "last_load_duration", 0) or 0) / 1e6, 2)
+                        topic_calls.append({
+                            "call_type": "faithfulness_regen",
+                            "ms": int(regen_duration_s * 1000),
+                            "tokens": regen_tokens,
+                            "load_duration_ms": regen_load_ms
+                        })
                         logger.info(
                             f"[Walkthrough Call: Regeneration] [Topic {topic_num}/{total_all_topics}: '{sec_title}'] "
-                            f"duration={regen_duration_s*1000:.1f}ms | tokens={regen_tokens}"
+                            f"duration={regen_duration_s*1000:.1f}ms | tokens={regen_tokens} | "
+                            f"load_duration={regen_load_ms}ms"
                         )
                         is_regen_faithful, missing_regen, final_annotated = verify_explanation_faithfulness(
                             explanation_text=regen_explanation,
@@ -780,6 +857,15 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                         else:
                             full_sec_explanation = final_annotated
 
+                    t_db_cache = time.perf_counter()
+                    if full_sec_explanation:
+                        attachment_manager.update_section_cache(sec["id"], full_sec_explanation)
+                    db_cache_ms = int((time.perf_counter() - t_db_cache) * 1000)
+                    topic_calls.append({
+                        "call_type": "db_cache_write",
+                        "ms": db_cache_ms
+                    })
+
                     actual_duration_s = time.perf_counter() - topic_t0
                     rolling_sec_per_topic = (rolling_sec_per_topic * (idx - 1) + actual_duration_s) / idx
                     logger.info(
@@ -788,8 +874,7 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                         f"Rolling Avg: {rolling_sec_per_topic:.2f}s/topic"
                     )
 
-                    if full_sec_explanation:
-                        attachment_manager.update_section_cache(sec["id"], full_sec_explanation)
+                    yield f"data: {json.dumps({'type': 'topic_calls', 'topic_idx': idx, 'topic_num': topic_num, 'total_topics': unit_total_topics, 'title': sec_title, 'calls': topic_calls, 'topic_duration_ms': int(actual_duration_s * 1000), 'rolling_sec_per_topic': round(rolling_sec_per_topic, 2), 'remaining_seconds': current_topic_estimate})}\n\n"
 
                 # Check if next unit exists
                 next_unit = target_unit + 1
@@ -797,34 +882,43 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                 if has_next:
                     continue_block = (
                         f"\n\n---\n\n"
-                        f"**Unit {target_unit} Complete.**\n\n"
-                        f'<div class="walkthrough-actions-row">\n'
-                        f'  <button class="walkthrough-action-btn" data-prompt="explain unit {next_unit}">Continue to Unit {next_unit} →</button>\n'
-                        f'</div>\n'
+                        f"**Unit {target_unit} Complete.**\n"
                     )
                     accumulated_chunks.append(continue_block)
                     yield f"data: {json.dumps({'type': 'chunk', 'chunk': continue_block, 'backend': 'local', 'model': target_model, 'conversation_id': conv_id})}\n\n"
+                    message_actions.append({
+                        "label": f"Continue to Unit {next_unit} →",
+                        "prompt": f"explain unit {next_unit}",
+                        "style": "primary"
+                    })
 
                 # Offer study aids at the end of the walkthrough
                 study_aids = summary.get("study_aids") or []
                 if study_aids:
                     aid_lines = [f"- **{aid}**" for aid in study_aids]
-                    aid_buttons = [
-                        f'  <button class="walkthrough-action-btn" data-prompt="explain {aid}">Explain {aid} →</button>'
-                        for aid in study_aids
-                    ]
                     aid_block = (
                         f"\n\n---\n\n"
                         f"### 📚 Available Study Aids\n\n"
                         f"Your notes include **{len(study_aids)} study aids** (reference materials):\n"
                         + "\n".join(aid_lines)
-                        + f'\n\n<div class="walkthrough-actions-row">\n'
-                        + f'  <button class="walkthrough-action-btn highlight" data-prompt="explain the study aids">Explain All Study Aids →</button>\n'
-                        + "\n".join(aid_buttons)
-                        + f"\n</div>\n"
+                        + "\n"
                     )
                     accumulated_chunks.append(aid_block)
                     yield f"data: {json.dumps({'type': 'chunk', 'chunk': aid_block, 'backend': 'local', 'model': target_model, 'conversation_id': conv_id})}\n\n"
+                    message_actions.append({
+                        "label": "Explain All Study Aids →",
+                        "prompt": "explain the study aids",
+                        "style": "highlight"
+                    })
+                    for aid in study_aids:
+                        message_actions.append({
+                            "label": f"Explain {aid} →",
+                            "prompt": f"explain {aid}",
+                            "style": "secondary"
+                        })
+
+                if message_actions:
+                    yield f"data: {json.dumps({'type': 'actions', 'actions': message_actions, 'conversation_id': conv_id})}\n\n"
             else:
                 async for event in model_router.stream_chat(
                     trimmed_messages,
@@ -835,7 +929,8 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                     think=use_think,
                     options=target_opts,
                     is_detail=is_detail,
-                    has_attachments=has_attachments
+                    has_attachments=has_attachments,
+                    requested_model=req.model
                 ):
                     if event.get("type") == "error":
                         encountered_error = event
@@ -857,6 +952,8 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                         "notice": stream_notice,
                         "logged_by_provider": settings.api_logged_by_provider
                     }
+                    if event.get("chunk") and t_ttft is None:
+                        t_ttft = time.perf_counter()
                     accumulated_chunks.append(event["chunk"])
                     yield f"data: {json.dumps(chunk_payload)}\n\n"
 
@@ -925,8 +1022,13 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                     }
                     yield f"data: {json.dumps(corr_payload)}\n\n"
 
+            t_post_start = time.perf_counter()
             from backend.attachments.citations import strip_wrapper_tags_and_extract_citations
             final_reply, doc_citations = strip_wrapper_tags_and_extract_citations(final_reply)
+
+            # Strip any raw HTML tags (e.g. <button>, <div>, <script>) to guarantee stored text contains no HTML
+            final_reply = re.sub(r"<(script|style|button|a|div|span|p|h[1-6])[^>]*>.*?</\1>", "", final_reply, flags=re.IGNORECASE | re.DOTALL)
+            final_reply = re.sub(r"<[^>]+>", "", final_reply).strip()
 
             if has_attachments and not is_overview_intent(latest_user_text):
                 if coverage_meta and coverage_meta.get("sections"):
@@ -935,14 +1037,11 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                     coverage_note = f"\n\n*Based on {sec_names} (pp. {p_nums}).* [Explain the whole document](#explain-whole-doc)"
                     final_reply += coverage_note
                     yield f"data: {json.dumps({'type': 'chunk', 'chunk': coverage_note, 'backend': used_backend, 'model': used_model, 'conversation_id': conv_id})}\n\n"
+            post_processing_ms = int((time.perf_counter() - t_post_start) * 1000)
 
-            latency_breakdown = {
-                "generation_ms": gen_ms,
-                "verify_ms": verify_ms,
-                "think_ms": 0,
-                "memory_ms": memory_ms
-            }
-
+            t_db_start = time.perf_counter()
+            ast_msg = None
+            inter_id = None
             if final_reply.strip():
                 # Persist message with model & backend
                 ast_msg = history_manager.add_message(
@@ -950,7 +1049,8 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                     "assistant",
                     final_reply,
                     model=used_model,
-                    backend=used_backend
+                    backend=used_backend,
+                    metadata={"actions": message_actions} if message_actions else None
                 )
                 # Log interaction
                 inter_id = history_manager.log_interaction(
@@ -976,6 +1076,24 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                         is_private=is_private
                     )
                 memory_manager.notify_chat_completed()
+                db_writes_ms = int((time.perf_counter() - t_db_start) * 1000)
+                total_turn_ms = int((time.perf_counter() - t_req_start) * 1000)
+                ttft_ms = int((t_ttft - t_req_start) * 1000) if t_ttft else 0
+
+                latency_breakdown = {
+                    "guards_ms": guards_ms,
+                    "router_ms": router_ms,
+                    "memory_ms": memory_ms,
+                    "attachment_ms": attachment_ms,
+                    "prompt_assembly_ms": prompt_assembly_ms,
+                    "ttft_ms": ttft_ms,
+                    "generation_ms": gen_ms,
+                    "verify_ms": verify_ms,
+                    "think_ms": 0,
+                    "post_processing_ms": post_processing_ms,
+                    "db_writes_ms": db_writes_ms,
+                    "total_ms": total_turn_ms
+                }
 
                 done_payload = {
                     "type": "done",
@@ -992,7 +1110,8 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                     "hit_token_limit": was_cut,
                     "latency_breakdown": latency_breakdown,
                     "final_reply": final_reply,
-                    "citations": doc_citations
+                    "citations": doc_citations,
+                    "actions": message_actions
                 }
                 yield f"data: {json.dumps(done_payload)}\n\n"
 
@@ -1027,7 +1146,8 @@ async def chat_endpoint(req: ChatRequest, response: Response):
             think=use_think,
             options=target_opts,
             is_detail=is_detail,
-            has_attachments=has_attachments
+            has_attachments=has_attachments,
+            requested_model=req.model
         ):
             if event.get("type") == "error":
                 encountered_error = event

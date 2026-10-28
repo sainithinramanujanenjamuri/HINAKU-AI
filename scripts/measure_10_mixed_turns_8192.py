@@ -101,17 +101,31 @@ for idx, (turn_type, prompt) in enumerate(turns, 1):
         "messages": [{"role": "user", "content": prompt}],
         "conversation_id": conv_id,
         "model": "bonsai-2:9b",
-        "stream": False
+        "stream": True
     }
 
     t0 = time.perf_counter()
-    res = client.post("/api/chat", json=payload)
+    chunks = []
+    done_payload = None
+    with client.stream("POST", "/api/chat", json=payload) as resp:
+        assert resp.status_code == 200, f"Turn {idx} failed: {resp.status_code}"
+        for line in resp.iter_lines():
+            if not line or not line.startswith("data: "):
+                continue
+            data_str = line[len("data: "):]
+            if data_str == "[DONE]":
+                break
+            try:
+                evt = json.loads(data_str)
+            except Exception:
+                continue
+            if evt.get("type") == "chunk":
+                chunks.append(evt.get("chunk", ""))
+            elif evt.get("type") == "done":
+                done_payload = evt
+
     elapsed = time.perf_counter() - t0
-
-    assert res.status_code == 200, f"Turn {idx} failed: {res.text}"
-    data = res.json()
-
-    reply_content = data.get("content", "")
+    reply_content = "".join(chunks).strip()
     full_replies.append(reply_content)
 
     # Estimate/measure real token count
@@ -119,9 +133,9 @@ for idx, (turn_type, prompt) in enumerate(turns, 1):
     token_counts.append(token_count)
     latencies.append(elapsed)
 
-    used_model = data.get("model", "unknown")
-    used_backend = data.get("backend", "unknown")
-    latency_breakdown = data.get("latency_breakdown", {})
+    used_model = (done_payload or {}).get("model", "bonsai-2:9b")
+    used_backend = (done_payload or {}).get("backend", "local")
+    latency_breakdown = (done_payload or {}).get("latency_breakdown", {})
 
     lines.append(f"Backend: {used_backend} | Model: {used_model}")
     lines.append(f"Full Reply:\n{reply_content}")
