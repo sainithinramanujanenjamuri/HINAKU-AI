@@ -270,7 +270,7 @@ def run_export_pipeline(
         "stream": False
     }
     req = urllib.request.Request(
-        "http://localhost:11434/api/chat",
+        "http://127.0.0.1:11434/api/chat",
         data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json"}
     )

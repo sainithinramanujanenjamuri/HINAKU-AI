@@ -1,0 +1,35 @@
+COMMAND: python scripts/measure_phase0_baseline.py
+TIMESTAMP: 2026-10-28T19:33:41.123924
+================================================================================
+PHASE 0 MEMORY SEARCH LATENCY PROFILE & ROOT CAUSE AUDIT
+================================================================================
+
+--- EXPERIMENT 1: EMPTY COLLECTION (Phase 0 Initial State) ---
+Collection count: 0
+Execution time: 2.03 ms
+Explanation: In Phase 0 before memories were saved, search_memories checked `self.collection.count() == 0`
+and immediately returned [], completely bypassing embed_query() and network calls.
+
+--- EXPERIMENT 2: EMBEDDING QUERY VIA 127.0.0.1 (DIRECT IPV4) ---
+HTTP Endpoint: http://127.0.0.1:11434/api/embed
+Embedding Dimensions: 1024
+Execution time: 6644.20 ms
+Result: Zero DNS resolution delay, connects immediately via IPv4 loopback.
+
+--- EXPERIMENT 3: EMBEDDING QUERY VIA LOCALHOST ---
+HTTP Endpoint: http://localhost:11434/api/embed
+Execution time: 2074.33 ms
+Note: Windows resolves 'localhost' to IPv6 [::1] first. Because Ollama binds only to IPv4 (127.0.0.1:11434),
+Windows experiences a 2.03s TCP SYN timeout on [::1] before falling back to 127.0.0.1.
+
+--- EXPERIMENT 4: POPULATED COLLECTION VECTOR SEARCH VIA 127.0.0.1 ---
+Chroma query execution time: 9.97 ms
+Total end-to-end memory retrieval (embed + search): 6654.17 ms
+
+================================================================================
+AUDIT CONCLUSION
+================================================================================
+1. Phase 0 commit showed ~47 ms because fresh/empty test databases skipped embed_query().
+2. Once memories were written, embed_query() was called on every turn.
+3. Using 'localhost' caused a 2.03s IPv6 timeout per request on Windows.
+4. With '127.0.0.1', full embedding + Chroma search completes in 6654.2 ms.

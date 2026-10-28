@@ -1,0 +1,80 @@
+TIMESTAMP: 2026-10-28T14:00:08.411797+00:00
+SECTION: Test Evaluation
+FLAGGED ITEM: adversarial robustness tests
+NEAREST SOURCE PHRASE: None
+ACTION: REGENERATE_TOPIC
+REASON: Term 'adversarial robustness tests' was not found in section text or full document, with no close candidate match.
+SOURCE TEXT SNIPPET:
+
+Session 8: Introduction to MLSecOps
+Core Lifecycle Stages:
+1. Establish business objectives and security requirements.
+2. Secure data pipeline and provenance tracking.
+3. Model development, adversarial robustness testing, and training integrity.
+4. Deployment gating, continuous monitoring, and drift detection.
+Key Attacks: Evasion attacks occur at test time, while data poisoning attacks corrupt t...
+================================================================================
+TIMESTAMP: 2026-10-28T14:00:08.411797+00:00
+SECTION: Test Evaluation
+FLAGGED ITEM: poisoning and evasion
+NEAREST SOURCE PHRASE: None
+ACTION: REGENERATE_TOPIC
+REASON: Term 'poisoning and evasion' was not found in section text or full document, with no close candidate match.
+SOURCE TEXT SNIPPET:
+
+Session 8: Introduction to MLSecOps
+Core Lifecycle Stages:
+1. Establish business objectives and security requirements.
+2. Secure data pipeline and provenance tracking.
+3. Model development, adversarial robustness testing, and training integrity.
+4. Deployment gating, continuous monitoring, and drift detection.
+Key Attacks: Evasion attacks occur at test time, while data poisoning attacks corrupt t...
+================================================================================
+TIMESTAMP: 2026-10-28T14:00:08.411797+00:00
+SECTION: Test Evaluation
+FLAGGED ITEM: Define business objectives
+NEAREST SOURCE PHRASE: None
+ACTION: REGENERATE_TOPIC
+REASON: Term 'Define business objectives' was not found in section text or full document, with no close candidate match.
+SOURCE TEXT SNIPPET:
+
+Session 8: Introduction to MLSecOps
+Core Lifecycle Stages:
+1. Establish business objectives and security requirements.
+2. Secure data pipeline and provenance tracking.
+3. Model development, adversarial robustness testing, and training integrity.
+4. Deployment gating, continuous monitoring, and drift detection.
+Key Attacks: Evasion attacks occur at test time, while data poisoning attacks corrupt t...
+================================================================================
+TIMESTAMP: 2026-10-28T14:00:08.411797+00:00
+SECTION: Test Evaluation
+FLAGGED ITEM: quantum cryptographic matrix
+NEAREST SOURCE PHRASE: None
+ACTION: REGENERATE_TOPIC
+REASON: Term 'quantum cryptographic matrix' was not found in section text or full document, with no close candidate match.
+SOURCE TEXT SNIPPET:
+
+Session 8: Introduction to MLSecOps
+Core Lifecycle Stages:
+1. Establish business objectives and security requirements.
+2. Secure data pipeline and provenance tracking.
+3. Model development, adversarial robustness testing, and training integrity.
+4. Deployment gating, continuous monitoring, and drift detection.
+Key Attacks: Evasion attacks occur at test time, while data poisoning attacks corrupt t...
+================================================================================
+TIMESTAMP: 2026-10-28T14:00:08.416967+00:00
+SECTION: Test Evaluation
+FLAGGED ITEM: blockchain consensus layer
+NEAREST SOURCE PHRASE: None
+ACTION: REGENERATE_TOPIC
+REASON: Term 'blockchain consensus layer' was not found in section text or full document, with no close candidate match.
+SOURCE TEXT SNIPPET:
+
+Session 8: Introduction to MLSecOps
+Core Lifecycle Stages:
+1. Establish business objectives and security requirements.
+2. Secure data pipeline and provenance tracking.
+3. Model development, adversarial robustness testing, and training integrity.
+4. Deployment gating, continuous monitoring, and drift detection.
+Key Attacks: Evasion attacks occur at test time, while data poisoning attacks corrupt t...
+================================================================================

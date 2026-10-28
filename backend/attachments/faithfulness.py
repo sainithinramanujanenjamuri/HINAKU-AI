@@ -118,11 +118,21 @@ def extract_named_items(text: str) -> List[str]:
 
     return deduped
 
+def stem_word(w: str) -> str:
+    """Lightweight zero-dependency morphological stemmer for English inflections."""
+    w = w.lower()
+    if w.endswith("ies") and len(w) > 4:
+        return w[:-3] + "y"
+    for sfx in ["ing", "tion", "ment", "ed", "es", "s"]:
+        if w.endswith(sfx) and len(w) > len(sfx) + 2:
+            return w[:-len(sfx)]
+    return w
+
 def check_term_in_source(term: str, source_normalized: str) -> bool:
     """
     Checks if a normalized term or its keywords appear in the normalized document text.
-    Handles hyphens, punctuation (&, /), plurals (tactics/tactic), and collocated word matching.
-    For multi-word phrases, enforces that substantive words appear in close proximity (collocated),
+    Handles hyphens, punctuation (&, /), plurals, gerunds/participles, and word reordering.
+    Enforces that substantive words appear in close proximity (sliding window),
     preventing disjoint words scattered across different pages from matching falsely.
     """
     norm_source = normalize_text_for_search(source_normalized)
@@ -140,41 +150,34 @@ def check_term_in_source(term: str, source_normalized: str) -> bool:
     if f" {term_clean} " in f" {norm_source_clean} " or term_clean in norm_source_clean:
         return True
 
-    # 2. Singular / plural variants
+    # 2. Substantive words and morphological stemming
     words = term_clean.split()
-    singular_words = []
-    for w in words:
-        if w.endswith("ies") and len(w) > 4:
-            singular_words.append(w[:-3] + "y")
-        elif w.endswith("es") and len(w) > 3:
-            singular_words.append(w[:-2])
-        elif w.endswith("s") and len(w) > 3:
-            singular_words.append(w[:-1])
-        else:
-            singular_words.append(w)
-
-    singular_term = " ".join(singular_words)
-    if f" {singular_term} " in f" {norm_source_clean} " or singular_term in norm_source_clean:
-        return True
-
-    # 3. Collocated phrase match: words must appear in close proximity (0-2 words between them)
-    substantive = [w for w in singular_words if len(w) > 2 and w not in {"the", "and", "for", "with", "from", "are", "that"}]
+    substantive = [w for w in words if len(w) > 2 and w not in {"the", "and", "for", "with", "from", "are", "that", "which"}]
     if not substantive:
         return True
 
-    if len(substantive) >= 2:
-        colloc_pat = r"\b" + r"\s+(?:\w+\s+){0,2}".join(re.escape(w) for w in substantive) + r"\b"
-        return bool(re.search(colloc_pat, norm_source_clean))
-    else:
-        return f" {substantive[0]} " in f" {norm_source_clean} "
+    target_stems = set(stem_word(w) for w in substantive)
+    source_words = norm_source_clean.split()
+    source_stems = [stem_word(sw) for sw in source_words]
+
+    # Enforce proximity: all target stems must appear within a local window (e.g. 15 words)
+    win_size = min(18, len(substantive) * 4 + 4)
+    for i in range(len(source_stems)):
+        window = set(source_stems[i : i + win_size])
+        if target_stems.issubset(window):
+            return True
+
+    return False
 
 def log_faithfulness_mismatch_to_measure(
     item: str,
     sec_title: str,
     reason: str,
-    source_snippet: str
+    source_snippet: str,
+    nearest_phrase: Optional[str] = None,
+    action: str = "FLAGGED"
 ) -> None:
-    """Writes flagged item and source context to data/measure/."""
+    """Writes flagged item, nearest source phrase, action, and source context to data/measure/."""
     try:
         MEASURE_DIR.mkdir(parents=True, exist_ok=True)
         ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
@@ -183,6 +186,8 @@ def log_faithfulness_mismatch_to_measure(
             f"TIMESTAMP: {datetime.now(timezone.utc).isoformat()}\n"
             f"SECTION: {sec_title}\n"
             f"FLAGGED ITEM: {item}\n"
+            f"NEAREST SOURCE PHRASE: {nearest_phrase or 'None'}\n"
+            f"ACTION: {action}\n"
             f"REASON: {reason}\n"
             f"SOURCE TEXT SNIPPET:\n{source_snippet}\n"
             f"{'=' * 80}\n"
@@ -192,6 +197,70 @@ def log_faithfulness_mismatch_to_measure(
     except Exception as e:
         logger.warning(f"Could not log faithfulness mismatch: {e}")
 
+import difflib
+
+def find_nearest_source_phrase(term: str, source_text: str) -> Optional[Tuple[str, float]]:
+    """
+    Finds the nearest matching candidate phrase in source_text for an ungrounded term.
+    Returns (nearest_phrase, similarity_score) if similarity >= 0.65, else None.
+    """
+    term_lower = term.lower().strip()
+    term_words = [w for w in re.findall(r"\b[a-z0-9]{3,}\b", term_lower) if w not in {"the", "and", "for", "with", "from", "are"}]
+    if not term_words:
+        return None
+
+    term_stems = set(stem_word(w) for w in term_words)
+
+    candidates = []
+    # 1. Bold terms in source
+    bold_candidates = re.findall(r"\*\*([^*]+)\*\*", source_text)
+    for b in bold_candidates:
+        bc = b.strip().strip(":").strip("-").strip()
+        if 3 <= len(bc) <= 60:
+            candidates.append(bc)
+
+    # 2. Lines, list items, and clauses
+    for line in source_text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("http"):
+            continue
+        clean_line = re.sub(r"^(?:\d+\.|\*|-)\s*", "", line).strip()
+        if 3 <= len(clean_line) <= 60:
+            candidates.append(clean_line)
+        # Also split clauses by comma, semicolon, period, or conjunctions ('and', 'or')
+        for clause in re.split(r"[,;.]|\b(?:and|or)\b", clean_line):
+            c_clean = clause.strip("-*# ").strip()
+            if 3 <= len(c_clean) <= 60:
+                candidates.append(c_clean)
+
+    best_match = None
+    best_score = 0.0
+
+    for cand in set(candidates):
+        cand_lower = cand.lower().strip()
+        cand_words = [w for w in re.findall(r"\b[a-z0-9]{3,}\b", cand_lower) if w not in {"the", "and", "for", "with", "from", "are"}]
+        cand_stems = set(stem_word(w) for w in cand_words)
+
+        if term_stems and cand_stems:
+            overlap = term_stems.intersection(cand_stems)
+            jaccard = len(overlap) / max(len(term_stems), len(cand_stems))
+        else:
+            jaccard = 0.0
+
+        seq_ratio = difflib.SequenceMatcher(None, term_lower, cand_lower).ratio()
+
+        combined_score = max(seq_ratio, (seq_ratio * 0.4 + jaccard * 0.6))
+        if len(overlap) >= 2 and jaccard >= 0.5:
+            combined_score = max(combined_score, 0.76)
+
+        if combined_score > best_score:
+            best_score = combined_score
+            best_match = cand
+
+    if best_match and best_score >= 0.65:
+        return best_match, best_score
+    return None
+
 def verify_explanation_faithfulness(
     explanation_text: str,
     section_text: str,
@@ -200,7 +269,10 @@ def verify_explanation_faithfulness(
 ) -> Tuple[bool, List[str], str]:
     """
     Checks if named items are grounded in the section text or full document.
-    Returns: (is_faithful, missing_terms, annotated_text)
+    - If a term is an ungrounded near-paraphrase of a source term (score >= 0.65),
+      it is deterministically replaced with the nearest source phrase.
+    - If ungrounded with no match, it is flagged for regeneration.
+    Returns: (is_faithful, missing_terms, aligned_text)
     """
     named_items = extract_named_items(explanation_text)
     if not named_items:
@@ -214,29 +286,61 @@ def verify_explanation_faithfulness(
     normalized_source = normalize_text_for_search(source_to_search)
 
     missing = []
-    annotated = explanation_text
+    aligned = explanation_text
+    replacements = []
 
     for item in named_items:
         if not check_term_in_source(item, normalized_source):
-            missing.append(item)
-            reason = f"Term '{item}' was not found in section text or full document."
+            # Check for nearest source phrase match
+            near_match = find_nearest_source_phrase(item, section_text)
+            if not near_match and full_document_text:
+                near_match = find_nearest_source_phrase(item, full_document_text[:3000])
+
             source_snippet = section_text[:400] + "..." if len(section_text) > 400 else section_text
-            log_faithfulness_mismatch_to_measure(
-                item=item,
-                sec_title=sec_title,
-                reason=reason,
-                source_snippet=source_snippet
-            )
-            logger.info(f"Faithfulness mismatch in '{sec_title}': term '{item}' not found.")
+
+            if near_match:
+                nearest_phrase, sim_score = near_match
+                # Deterministic replacement of the near-paraphrase with the exact source phrase
+                pat_bold = rf"\*\*({re.escape(item)})\*\*"
+                if re.search(pat_bold, aligned):
+                    aligned = re.sub(pat_bold, f"**{nearest_phrase}**", aligned, count=1)
+                else:
+                    pat_plain = rf"\b{re.escape(item)}\b"
+                    aligned = re.sub(pat_plain, nearest_phrase, aligned, count=1)
+
+                replacements.append((item, nearest_phrase, sim_score))
+                reason = f"Near-paraphrase '{item}' matched source phrase '{nearest_phrase}' (similarity {sim_score:.2f}). Replaced deterministically."
+                log_faithfulness_mismatch_to_measure(
+                    item=item,
+                    sec_title=sec_title,
+                    reason=reason,
+                    source_snippet=source_snippet,
+                    nearest_phrase=nearest_phrase,
+                    action="DETERMINISTIC_REPLACEMENT"
+                )
+                logger.info(f"Faithfulness auto-aligned '{item}' -> '{nearest_phrase}' in '{sec_title}'.")
+            else:
+                # No match found: true ungrounded term requiring regeneration
+                missing.append(item)
+                reason = f"Term '{item}' was not found in section text or full document, with no close candidate match."
+                log_faithfulness_mismatch_to_measure(
+                    item=item,
+                    sec_title=sec_title,
+                    reason=reason,
+                    source_snippet=source_snippet,
+                    nearest_phrase=None,
+                    action="REGENERATE_TOPIC"
+                )
+                logger.info(f"Faithfulness mismatch in '{sec_title}': ungrounded term '{item}'.")
 
     if missing:
         for m in missing:
             pat_bold = rf"(\*\*{re.escape(m)}\*\*)"
-            if re.search(pat_bold, annotated):
-                annotated = re.sub(pat_bold, rf"\1 *(wording not from your notes)*", annotated, count=1)
+            if re.search(pat_bold, aligned):
+                aligned = re.sub(pat_bold, rf"\1 *(wording not from your notes)*", aligned, count=1)
             else:
                 pat_plain = rf"\b({re.escape(m)})\b"
-                annotated = re.sub(pat_plain, rf"\1 *(wording not from your notes)*", annotated, count=1)
-        return False, missing, annotated
+                aligned = re.sub(pat_plain, rf"\1 *(wording not from your notes)*", aligned, count=1)
+        return False, missing, aligned
 
-    return True, [], explanation_text
+    return True, [], aligned

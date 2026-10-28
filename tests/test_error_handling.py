@@ -21,7 +21,7 @@ async def test_error_event_not_persisted_to_db():
             "type": "error",
             "error_type": "local_error",
             "chunk": "",
-            "error": "Unable to connect to local Ollama service at http://localhost:11434. Is Ollama running?",
+            "error": "Unable to connect to local Ollama service at http://127.0.0.1:11434. Is Ollama running?",
             "backend": "local",
             "model": "gemma3:4b",
             "notice": "Local model error"

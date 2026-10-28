@@ -115,7 +115,7 @@ def stop_model(model_name: str):
         pass
 
 async def warm_model(model: str):
-    url = "http://localhost:11434/api/chat"
+    url = "http://127.0.0.1:11434/api/chat"
     payload = {
         "model": model,
         "messages": [{"role": "user", "content": "ping"}],
@@ -136,7 +136,7 @@ async def call_model(
     standard_num_predict: int = 300,
     timeout_sec: float = 120.0
 ) -> Dict[str, Any]:
-    url = "http://localhost:11434/api/chat"
+    url = "http://127.0.0.1:11434/api/chat"
     num_pred = think_num_predict if think else standard_num_predict
     payload = {
         "model": model,

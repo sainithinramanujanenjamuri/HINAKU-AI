@@ -1,0 +1,58 @@
+COMMAND: python scripts/measure_faithfulness_hard_cases.py
+TIMESTAMP: 2026-10-28T19:32:14.624540
+================================================================================
+FAITHFULNESS VERIFICATION: HARD CASES & NEAR-PARAPHRASE AUDIT
+Testing positive control recall, deterministic replacement, and false-positive rate
+================================================================================
+
+--- TEST CASE EVALUATION ---
+
+Case: Plural to singular variant
+  Input Term: 'evasion attack'
+  Expected Grounded: True | Actual Faithful: True
+  Missing: []
+  Verdict: PASS
+
+Case: Singular to plural variant
+  Input Term: 'adversarial robustness tests'
+  Expected Grounded: True | Actual Faithful: True
+  Missing: []
+  Verdict: PASS
+
+Case: Word reordering
+  Input Term: 'poisoning and evasion'
+  Expected Grounded: True | Actual Faithful: True
+  Missing: []
+  Verdict: PASS
+
+Case: Near-paraphrase (Define business objectives vs Establish business objectives)
+  Input Term: 'Define business objectives'
+  Expected Grounded: True | Actual Faithful: True
+  Missing: []
+  Auto-Replacement in Text: Yes -> 'The primary step is **Establish business objectives** which must be strictly maintained.'
+  Verdict: PASS
+
+Case: Exact term
+  Input Term: 'provenance tracking'
+  Expected Grounded: True | Actual Faithful: True
+  Missing: []
+  Verdict: PASS
+
+Case: Ungrounded invented term
+  Input Term: 'quantum cryptographic matrix'
+  Expected Grounded: False | Actual Faithful: False
+  Missing: ['quantum cryptographic matrix']
+  Verdict: PASS
+
+Case: Ungrounded external framework
+  Input Term: 'blockchain consensus layer'
+  Expected Grounded: False | Actual Faithful: False
+  Missing: ['blockchain consensus layer']
+  Verdict: PASS
+
+================================================================================
+FAITHFULNESS BENCHMARK SUMMARY
+================================================================================
+Positive Control Recall: 5/5 (100.0%)
+Negative Control Detection (Specificity): 2/2 (100.0%)
+False-Positive Rate on Grounded Terms: 0.0%

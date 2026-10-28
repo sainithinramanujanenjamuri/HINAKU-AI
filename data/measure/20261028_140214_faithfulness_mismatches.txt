@@ -1,0 +1,48 @@
+TIMESTAMP: 2026-10-28T14:02:14.626974+00:00
+SECTION: Test Evaluation
+FLAGGED ITEM: Define business objectives
+NEAREST SOURCE PHRASE: Establish business objectives
+ACTION: DETERMINISTIC_REPLACEMENT
+REASON: Near-paraphrase 'Define business objectives' matched source phrase 'Establish business objectives' (similarity 0.80). Replaced deterministically.
+SOURCE TEXT SNIPPET:
+
+Session 8: Introduction to MLSecOps
+Core Lifecycle Stages:
+1. Establish business objectives and security requirements.
+2. Secure data pipeline and provenance tracking.
+3. Model development, adversarial robustness testing, and training integrity.
+4. Deployment gating, continuous monitoring, and drift detection.
+Key Attacks: Evasion attacks occur at test time, while data poisoning attacks corrupt t...
+================================================================================
+TIMESTAMP: 2026-10-28T14:02:14.629980+00:00
+SECTION: Test Evaluation
+FLAGGED ITEM: quantum cryptographic matrix
+NEAREST SOURCE PHRASE: None
+ACTION: REGENERATE_TOPIC
+REASON: Term 'quantum cryptographic matrix' was not found in section text or full document, with no close candidate match.
+SOURCE TEXT SNIPPET:
+
+Session 8: Introduction to MLSecOps
+Core Lifecycle Stages:
+1. Establish business objectives and security requirements.
+2. Secure data pipeline and provenance tracking.
+3. Model development, adversarial robustness testing, and training integrity.
+4. Deployment gating, continuous monitoring, and drift detection.
+Key Attacks: Evasion attacks occur at test time, while data poisoning attacks corrupt t...
+================================================================================
+TIMESTAMP: 2026-10-28T14:02:14.632130+00:00
+SECTION: Test Evaluation
+FLAGGED ITEM: blockchain consensus layer
+NEAREST SOURCE PHRASE: None
+ACTION: REGENERATE_TOPIC
+REASON: Term 'blockchain consensus layer' was not found in section text or full document, with no close candidate match.
+SOURCE TEXT SNIPPET:
+
+Session 8: Introduction to MLSecOps
+Core Lifecycle Stages:
+1. Establish business objectives and security requirements.
+2. Secure data pipeline and provenance tracking.
+3. Model development, adversarial robustness testing, and training integrity.
+4. Deployment gating, continuous monitoring, and drift detection.
+Key Attacks: Evasion attacks occur at test time, while data poisoning attacks corrupt t...
+================================================================================

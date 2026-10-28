@@ -618,8 +618,11 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                 intro_desc = summary.get("intro_desc") or f"{total_all_topics} main topics across {len(summary.get('units') or [1])} units"
 
                 unit_total_topics = len(unit_sections)
-                rolling_sec_per_topic = 10.6
-                initial_est_seconds = round(rolling_sec_per_topic * unit_total_topics)
+                # Measured average per topic including draft + style check/addendum + verification
+                measured_avg_per_topic = 19.5
+                initial_est_seconds = round(measured_avg_per_topic * unit_total_topics)
+                initial_low = round(initial_est_seconds * 0.85)
+                initial_high = round(initial_est_seconds * 1.15)
                 prev_remaining_estimate = initial_est_seconds
                 t_walkthrough_start = time.perf_counter()
 
@@ -634,7 +637,7 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                 intro_text = (
                     f"**{doc_title}**\n\n"
                     f"Your notes contain **{intro_desc}**. "
-                    f"We'll learn them step by step starting with **{unit_name}** (~{initial_est_seconds}s estimated).\n\n"
+                    f"We'll learn them step by step starting with **{unit_name}** (~{initial_est_seconds}s estimated, range {initial_low}–{initial_high}s).\n\n"
                     "---\n"
                 )
                 if t_ttft is None:
@@ -652,14 +655,23 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                     rem_topics = unit_total_topics - (idx - 1)
                     if idx == 1:
                         current_topic_estimate = initial_est_seconds
+                        low_est = initial_low
+                        high_est = initial_high
                     else:
                         elapsed_total = time.perf_counter() - t_walkthrough_start
-                        avg_sec = elapsed_total / (idx - 1)
-                        calc_est = round(avg_sec * rem_topics)
+                        rolling_avg = elapsed_total / (idx - 1)
+                        calc_est = round(rolling_avg * rem_topics)
                         current_topic_estimate = min(prev_remaining_estimate, max(1, calc_est))
+                        low_est = max(1, round(current_topic_estimate * 0.85))
+                        high_est = max(low_est, round(current_topic_estimate * 1.15))
                     prev_remaining_estimate = current_topic_estimate
 
-                    progress_msg = f"Explaining topic {idx} of {unit_total_topics} (~{current_topic_estimate}s remaining)"
+                    progress_msg = f"Explaining topic {idx} of {unit_total_topics} (~{current_topic_estimate}s remaining, range {low_est}–{high_est}s)"
+                    logger.info(
+                        f"[Walkthrough Estimate] Topic {idx}/{unit_total_topics}: "
+                        f"elapsed={time.perf_counter() - t_walkthrough_start:.1f}s | "
+                        f"remaining={current_topic_estimate}s (range {low_est}-{high_est}s)"
+                    )
                     yield f"data: {json.dumps({'type': 'walkthrough_progress', 'notice': progress_msg, 'current': idx, 'total': unit_total_topics, 'estimated_remaining_seconds': current_topic_estimate, 'topic': sec_title, 'conversation_id': conv_id})}\n\n"
 
                     # Check cache in SQLite
@@ -1030,13 +1042,20 @@ async def chat_endpoint(req: ChatRequest, response: Response):
             final_reply = re.sub(r"<(script|style|button|a|div|span|p|h[1-6])[^>]*>.*?</\1>", "", final_reply, flags=re.IGNORECASE | re.DOTALL)
             final_reply = re.sub(r"<[^>]+>", "", final_reply).strip()
 
-            if has_attachments and not is_overview_intent(latest_user_text):
-                if coverage_meta and coverage_meta.get("sections"):
-                    sec_names = ", ".join(coverage_meta["sections"][:3])
-                    p_nums = ", ".join(map(str, coverage_meta["pages"][:3]))
-                    coverage_note = f"\n\n*Based on {sec_names} (pp. {p_nums}).* [Explain the whole document](#explain-whole-doc)"
+            if has_attachments and not is_overview_intent(latest_user_text) and doc_context:
+                from backend.attachments.citations import format_outline_citations
+                coverage_note = format_outline_citations(coverage_meta.get("sections_meta", []))
+                if not coverage_note and coverage_meta and coverage_meta.get("sections"):
+                    sec_names = ", ".join(coverage_meta["sections"][:2])
+                    p_nums = ", ".join(map(str, coverage_meta["pages"][:2]))
+                    coverage_note = f"\n\n*Based on {sec_names} (pp. {p_nums}).*"
+
+                if coverage_note:
                     final_reply += coverage_note
                     yield f"data: {json.dumps({'type': 'chunk', 'chunk': coverage_note, 'backend': used_backend, 'model': used_model, 'conversation_id': conv_id})}\n\n"
+                    # Emit structured action chip only for document answers
+                    message_actions = [{"label": "Explain the whole document →", "prompt": "explain this document to me", "style": "secondary"}]
+                    yield f"data: {json.dumps({'type': 'actions', 'actions': message_actions, 'conversation_id': conv_id})}\n\n"
             post_processing_ms = int((time.perf_counter() - t_post_start) * 1000)
 
             t_db_start = time.perf_counter()
@@ -1190,8 +1209,19 @@ async def chat_endpoint(req: ChatRequest, response: Response):
             messages_for_regen=trimmed_messages
         )
 
-        from backend.attachments.citations import strip_wrapper_tags_and_extract_citations
+        from backend.attachments.citations import strip_wrapper_tags_and_extract_citations, format_outline_citations
         final_reply, doc_citations = strip_wrapper_tags_and_extract_citations(final_reply)
+
+        message_actions = None
+        if has_attachments and not is_overview_intent(latest_user_text) and doc_context:
+            coverage_note = format_outline_citations(coverage_meta.get("sections_meta", []))
+            if not coverage_note and coverage_meta and coverage_meta.get("sections"):
+                sec_names = ", ".join(coverage_meta["sections"][:2])
+                p_nums = ", ".join(map(str, coverage_meta["pages"][:2]))
+                coverage_note = f"\n\n*Based on {sec_names} (pp. {p_nums}).*"
+            if coverage_note:
+                final_reply += coverage_note
+                message_actions = [{"label": "Explain the whole document →", "prompt": "explain this document to me", "style": "secondary"}]
 
         latency_breakdown = {
             "generation_ms": gen_ms,
@@ -1205,7 +1235,8 @@ async def chat_endpoint(req: ChatRequest, response: Response):
             "assistant",
             final_reply,
             model=used_model,
-            backend=used_backend
+            backend=used_backend,
+            metadata={"actions": message_actions} if message_actions else None
         )
         inter_id = history_manager.log_interaction(
             conv_id=conv_id,

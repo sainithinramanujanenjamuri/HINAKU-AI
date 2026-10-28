@@ -1,0 +1,57 @@
+COMMAND: python scripts/measure_faithfulness_hard_cases.py
+TIMESTAMP: 2026-10-28T19:30:08.409858
+================================================================================
+FAITHFULNESS VERIFICATION: HARD CASES & NEAR-PARAPHRASE AUDIT
+Testing positive control recall, deterministic replacement, and false-positive rate
+================================================================================
+
+--- TEST CASE EVALUATION ---
+
+Case: Plural to singular variant
+  Input Term: 'evasion attack'
+  Expected Grounded: True | Actual Faithful: True
+  Missing: []
+  Verdict: PASS
+
+Case: Singular to plural variant
+  Input Term: 'adversarial robustness tests'
+  Expected Grounded: True | Actual Faithful: False
+  Missing: ['adversarial robustness tests']
+  Verdict: FAIL
+
+Case: Word reordering
+  Input Term: 'poisoning and evasion'
+  Expected Grounded: True | Actual Faithful: False
+  Missing: ['poisoning and evasion']
+  Verdict: FAIL
+
+Case: Near-paraphrase (Define business objectives vs Establish business objectives)
+  Input Term: 'Define business objectives'
+  Expected Grounded: True | Actual Faithful: False
+  Missing: ['Define business objectives']
+  Verdict: FAIL
+
+Case: Exact term
+  Input Term: 'provenance tracking'
+  Expected Grounded: True | Actual Faithful: True
+  Missing: []
+  Verdict: PASS
+
+Case: Ungrounded invented term
+  Input Term: 'quantum cryptographic matrix'
+  Expected Grounded: False | Actual Faithful: False
+  Missing: ['quantum cryptographic matrix']
+  Verdict: PASS
+
+Case: Ungrounded external framework
+  Input Term: 'blockchain consensus layer'
+  Expected Grounded: False | Actual Faithful: False
+  Missing: ['blockchain consensus layer']
+  Verdict: PASS
+
+================================================================================
+FAITHFULNESS BENCHMARK SUMMARY
+================================================================================
+Positive Control Recall: 2/5 (40.0%)
+Negative Control Detection (Specificity): 2/2 (100.0%)
+False-Positive Rate on Grounded Terms: 0.0%

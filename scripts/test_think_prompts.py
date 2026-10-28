@@ -19,7 +19,7 @@ def stop_model(model_name: str):
         pass
 
 async def test_prompt(model: str, prompt: str, num_predict: int = 3000):
-    url = "http://localhost:11434/api/chat"
+    url = "http://127.0.0.1:11434/api/chat"
     payload = {
         "model": model,
         "messages": [

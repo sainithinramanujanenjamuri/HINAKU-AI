@@ -266,7 +266,7 @@ def test_retrieval_quality_12_memories():
     try:
         import urllib.request
         body = json.dumps({"model": "qwen3-embedding:0.6b", "input": ["test"]}).encode()
-        req = urllib.request.Request("http://localhost:11434/api/embed", data=body, headers={"Content-Type": "application/json"})
+        req = urllib.request.Request("http://127.0.0.1:11434/api/embed", data=body, headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=15) as r:
             ollama_online = r.status == 200
     except Exception:
@@ -278,7 +278,7 @@ def test_retrieval_quality_12_memories():
     # Live embedding test with qwen3-embedding:0.6b
     def embedder(texts, prefix=""):
         body = json.dumps({"model": "qwen3-embedding:0.6b", "input": [f"{prefix}{t}" for t in texts]}).encode()
-        req = urllib.request.Request("http://localhost:11434/api/embed", data=body, headers={"Content-Type": "application/json"})
+        req = urllib.request.Request("http://127.0.0.1:11434/api/embed", data=body, headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=60) as r:
             return [l2_normalize(v) for v in json.loads(r.read())["embeddings"]]
 

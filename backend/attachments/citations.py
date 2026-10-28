@@ -67,8 +67,47 @@ def strip_wrapper_tags_and_extract_citations(text: str) -> Tuple[str, List[Dict[
     # 3. Strip any dangling open/close <document_reference> tags
     cleaned = WRAPPER_TAG_REGEX.sub("", cleaned)
 
-    # 4. Clean up excessive trailing newlines
+    # 4. Strip any model-written citations or pseudo-citations
+    cleaned = re.sub(r"(?i)\n*\s*\*?Based\s+on\s+.*?(?:\(pp?\.?\s*\d+(?:[–\-]\d+)?\))?\*?\s*$", "", cleaned).strip()
+    cleaned = re.sub(r"(?i)\n*\s*\*?Based\s+on\s+(?:Topic|Session)\s+\d+.*?\*?\s*", "", cleaned).strip()
+    cleaned = re.sub(r"\[Explain the whole document\]\([^)]*\)", "", cleaned).strip()
+
+    # 5. Clean up excessive trailing newlines
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
 
     return cleaned, citations
+
+
+def format_outline_citations(sections_meta: List[Dict[str, Any]]) -> str:
+    """
+    Generates exact citation string in code from retrieved outline section metadata:
+    e.g. '*Based on Topic 1 — AI Triad: Security, Ethics, and Regulation (pp. 1-2).*'
+    or '*Based on 9. Player Types (pp. 3-3).*'
+    Never model-written. Only generated when answer used retrieved chunks.
+    """
+    if not sections_meta:
+        return ""
+
+    parts = []
+    seen = set()
+    for s in sections_meta:
+        title = s.get("title", "").strip()
+        sp = s.get("start_page", 1)
+        ep = s.get("end_page", sp)
+        if not title:
+            continue
+        key = (title.lower(), sp, ep)
+        if key in seen:
+            continue
+        seen.add(key)
+        page_str = f"p. {sp}" if sp == ep else f"pp. {sp}-{ep}"
+        parts.append(f"{title} ({page_str})")
+        if len(parts) >= 2:
+            break
+
+    if not parts:
+        return ""
+    if len(parts) == 1:
+        return f"\n\n*Based on {parts[0]}.*"
+    return f"\n\n*Based on {parts[0]} and {parts[1]}.*"
 

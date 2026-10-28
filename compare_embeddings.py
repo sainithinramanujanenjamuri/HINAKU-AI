@@ -165,7 +165,7 @@ def evaluate(embed, host, label, model, qpre, dpre, verbose):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--host", default="http://localhost:11434")
+    ap.add_argument("--host", default="http://127.0.0.1:11434")
     ap.add_argument("--verbose", action="store_true")
     ap.add_argument("--selftest", action="store_true", help="run with a fake embedder to check the script")
     ap.add_argument("--out", default="embedding_comparison.json")

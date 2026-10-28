@@ -10,7 +10,7 @@ client = TestClient(app)
 
 @pytest.mark.asyncio
 async def test_ollama_adapter_is_model_loaded():
-    adapter = OllamaAdapter(host="http://localhost:11434", default_model="gemma3:4b")
+    adapter = OllamaAdapter(host="http://127.0.0.1:11434", default_model="gemma3:4b")
 
     mock_resp_loaded = MagicMock()
     mock_resp_loaded.status_code = 200

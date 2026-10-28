@@ -55,7 +55,7 @@ SAMPLE_MEMORIES = [
     "Prefers short direct answers"
 ]
 
-def run_ollama_stop(model_name: str, host: str = "http://localhost:11434"):
+def run_ollama_stop(model_name: str, host: str = "http://127.0.0.1:11434"):
     try:
         subprocess.run(["ollama", "stop", model_name], capture_output=True, text=True, timeout=10)
     except Exception as e:
@@ -101,7 +101,7 @@ def get_nvidia_smi_snapshot() -> Dict[str, Any]:
             "summary": f"Unavailable ({e})"
         }
 
-def get_ollama_ps_snapshot(host: str = "http://localhost:11434") -> Dict[str, Any]:
+def get_ollama_ps_snapshot(host: str = "http://127.0.0.1:11434") -> Dict[str, Any]:
     try:
         url = f"{host.rstrip('/')}/api/ps"
         req = urllib.request.Request(url)

@@ -90,7 +90,7 @@ for idx, sec in enumerate(unit1_sections, 1):
 
     t0 = time.perf_counter()
     req = urllib.request.Request(
-        "http://localhost:11434/api/chat",
+        "http://127.0.0.1:11434/api/chat",
         data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json"}
     )
@@ -118,7 +118,7 @@ for idx, sec in enumerate(unit1_sections, 1):
         ]
         t_reg = time.perf_counter()
         req_reg = urllib.request.Request(
-            "http://localhost:11434/api/chat",
+            "http://127.0.0.1:11434/api/chat",
             data=json.dumps(regen_payload).encode("utf-8"),
             headers={"Content-Type": "application/json"}
         )
