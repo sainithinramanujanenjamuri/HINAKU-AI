@@ -1,0 +1,313 @@
+COMMAND: python scripts/evaluate_document_qa_20.py
+TIMESTAMP: 2026-10-30T20:25:07.890294
+================================================================================
+STRICT DOCUMENT Q&A RETRIEVAL & ANSWER ACCURACY EVALUATION (20 QUESTIONS)
+Target Constraints: Retrieval Hit Rate >= 90%, Grounded Accuracy >= 80%
+================================================================================
+
+[Environment 1] Uploaded Security Notes PDF (Security, Ethics & Regulations in AI - Midterm Notes.pdf) to Conversation a3c36227-5083-4e73-bff5-79b995845960
+[Environment 2] Uploaded Game Mechanics PDF (Game Mechanics, Design & Development - Midterm Notes for Units 1 and 2.pdf) to Conversation fce913df-f650-4ac7-a94d-c6b1619c2f40
+--------------------------------------------------------------------------------
+
+>>> [Q1] [CONTENT_WORDS] Doc: Security Notes
+Query: From the AI security notes, what are the three pillars of the AI Triad and what does each focus on?
+Target Section: Topic 1 — AI Triad: Security, Ethics, and Regulation
+Expected Items: ['security', 'ethics', 'regulation']
+Gate Info: decision='retrieve', similarity=0.6607, reason='hybrid_match_above_threshold'
+Retrieved Sections: ['Sessions 12–14 — End-to-End MLSecOps, AI Security Case Studies & Unit Review', 'Topic 1 — AI Triad: Security, Ethics, and Regulation', 'Quick-Reference Glossary', 'Topic 2 — AI System Lifecycle and Associated Risks']
+Retrieved Pages: [1, 2, 11, 12]
+Retrieval Verdict: PASS (Target Rank: 2, Precision@k: 0.5000)
+Model Answer (3.88s):
+The AI Triad consists of Security, Ethics, and Regulation. Security focuses on protecting AI systems for confidentiality, integrity, availability, and trustworthiness. Ethics focuses on responsible AI practices like fairness, accountability, transparency, and privacy. Regulation focuses on legal compliance.
+Answer Correctness: PASS (Matched 3/3 items: ['security', 'ethics', 'regulation'])
+Answer Grounding: PASS (Retrieved target hit + distinctive overlap)
+--------------------------------------------------------------------------------
+
+>>> [Q2] [CONTENT_WORDS] Doc: Security Notes
+Query: Explain the difference between evasion attacks and poisoning attacks according to the notes.
+Target Section: Topic 5 — Evasion & Poisoning Attacks
+Expected Items: ['evasion', 'poisoning', 'inference', 'training']
+Gate Info: decision='retrieve', similarity=0.6552, reason='hybrid_match_above_threshold'
+Retrieved Sections: ['Topic 8 — LLM and RAG Vulnerabilities: Data Poisoning, Supply Chain, Vector DB Issues', 'Topic 5 — Evasion & Poisoning Attacks', 'Topic 6 — Inference and Extraction Attacks: Stealing Secrets', 'Topic 9 — Frameworks for Understanding AI Threats: MITRE ATLAS', 'Quick-Reference: Attack Comparison']
+Retrieved Pages: [4, 5, 6, 7, 13]
+Retrieval Verdict: PASS (Target Rank: 2, Precision@k: 0.5000)
+Model Answer (4.90s):
+Evasion is an inference-time attack where the attacker manipulates input (e.g., adversarial examples) to trick a deployed model into producing a wrong output, but the model's internal knowledge remains unchanged. Poisoning is a training or indexing-time attack where malicious or mislabeled data is injected during fine-tuning or RAG retrieval, permanently altering the model's behavior or embedding space so it learns bad patterns.
+
+The core distinction lies in when the attacker intervenes: evasion affects the input at inference time, while poisoning corrupts the learning process itself.
+Answer Correctness: PASS (Matched 4/4 items: ['evasion', 'poisoning', 'inference', 'training'])
+Answer Grounding: PASS (Retrieved target hit + distinctive overlap)
+--------------------------------------------------------------------------------
+
+>>> [Q3] [NAMED_SECTION] Doc: Security Notes
+Query: According to Session 8, what are the main lifecycle stages of MLSecOps?
+Target Section: Session 8 — Introduction to MLSecOps
+Expected Items: ['scope', 'data', 'train', 'validate', 'package', 'deploy', 'monitor', 're-evaluate', 'retire']
+Gate Info: decision='retrieve', similarity=0.6465, reason='hybrid_match_above_threshold'
+Retrieved Sections: ['Topic 2 — AI System Lifecycle and Associated Risks', 'Topic 8 — LLM and RAG Vulnerabilities: Data Poisoning, Supply Chain, Vector DB Issues', 'Session 8 — Introduction to MLSecOps', 'Sessions 12–14 — End-to-End MLSecOps, AI Security Case Studies & Unit Review', 'Session 11 — Secure Deployment and Monitoring', 'Session 9 — Secure Data Management and Provenance']
+Retrieved Pages: [2, 6, 8, 9, 11]
+Retrieval Verdict: PASS (Target Rank: 3, Precision@k: 0.3333)
+Model Answer (3.89s):
+The main lifecycle stages of MLSecOps are: Scope → Data → Train → Validate → Package → Deploy → Monitor → Re-evaluate → Retire.
+Answer Correctness: PASS (Matched 9/9 items: ['scope', 'data', 'train', 'validate', 'package', 'deploy', 'monitor', 're-evaluate', 'retire'])
+Answer Grounding: PASS (Retrieved target hit + distinctive overlap)
+
+--- Session 8 Consistency Test (Runs 2 & 3) ---
+Session 8 Run 2: Matched 7/9 stages (PASS): ['scope', 'data', 'train', 'validate', 'package', 'deploy', 'monitor']
+Preview: The seven lifecycle stages for an ML system are: Scope → Data → Train → Validate → Package → Deploy → Monitor. Each stage requires its own security controls and evidence....
+Session 8 Run 3: Matched 9/9 stages (PASS): ['scope', 'data', 'train', 'validate', 'package', 'deploy', 'monitor', 're-evaluate', 'retire']
+Preview: Session 8 defines the AI Security Lifecycle as: Scope → Data → Train → Validate → Package → Deploy → Monitor → Re-evaluate → Retire. Each stage has assets, threats, evidence, and owners with continuou...
+--------------------------------------------------------------------------------
+
+>>> [Q4] [NAMED_SECTION] Doc: Security Notes
+Query: What are the common LLM vulnerabilities discussed in Topic 7 of the notes?
+Target Section: Topic 7 — LLM and Transformer Vulnerabilities: Prompt Injection and Jailbreaking
+Expected Items: ['prompt injection', 'jailbreaking', 'poisoning']
+Gate Info: decision='retrieve', similarity=0.6723, reason='hybrid_match_above_threshold'
+Retrieved Sections: ['Topic 7 — LLM and Transformer Vulnerabilities: Prompt Injection and Jailbreaking', 'Topic 8 — LLM and RAG Vulnerabilities: Data Poisoning, Supply Chain, Vector DB Issues', 'Topic 9 — Frameworks for Understanding AI Threats: MITRE ATLAS', 'Topic 5 — Evasion & Poisoning Attacks']
+Retrieved Pages: [4, 6, 7]
+Retrieval Verdict: PASS (Target Rank: 1, Precision@k: 1.0000)
+Model Answer (4.98s):
+Topic 7 identifies five main vulnerabilities: prompt injection, jailbreaking, system prompt leakage, sensitive information disclosure, improper output handling, and excessive agency. Prompt injection occurs via direct or indirect manipulation through user prompts, external context, or tools. Jailbreaking attempts to bypass safety constraints, often overlapping with injection techniques like role manipulation or obfuscation.
+
+The document notes that fine-tuning and RAG do not eliminate these risks. Defense-in-depth requires separating instructions from data, validating inputs, limiting tool access, and monitoring behavior.
+Answer Correctness: PASS (Matched 2/3 items: ['prompt injection', 'jailbreaking'])
+Answer Grounding: PASS (Retrieved target hit + distinctive overlap)
+--------------------------------------------------------------------------------
+
+>>> [Q5] [CONTENT_WORDS] Doc: Security Notes
+Query: What are the likely exam themes highlighted in the AI security notes?
+Target Section: Likely Exam Themes
+Expected Items: ['definitions', 'distinctions', 'lifecycle', 'governance']
+Gate Info: decision='retrieve', similarity=0.6216, reason='hybrid_match_above_threshold'
+Retrieved Sections: ['Sessions 12–14 — End-to-End MLSecOps, AI Security Case Studies & Unit Review', 'Topic 1 — AI Triad: Security, Ethics, and Regulation', 'Likely Exam Themes', 'Quick-Reference: Attack Comparison', 'Quick-Reference Glossary', 'Topic 2 — AI System Lifecycle and Associated Risks']
+Retrieved Pages: [1, 2, 11, 12, 13, 14]
+Retrieval Verdict: PASS (Target Rank: 3, Precision@k: 0.3333)
+Model Answer (4.64s):
+The notes highlight seven likely exam themes: definitions and distinctions between attack types; mapping risks to the seven-stage AI lifecycle or MLSecOps pipeline; governance frameworks like NIST AI RMF and ISO/IEC 42001; risk assessment using likelihood × impact scoring; defense-in-depth reasoning applied to specific scenarios; FAT* case applications identifying privacy/fairness/accountability/transparency risks; and vector DB/RAG security specifics.
+Answer Correctness: PASS (Matched 4/4 items: ['definitions', 'distinctions', 'lifecycle', 'governance'])
+Answer Grounding: PASS (Retrieved target hit + distinctive overlap)
+--------------------------------------------------------------------------------
+
+>>> [Q6] [NAMED_SECTION] Doc: Security Notes
+Query: In Unit 1 Topic 9, how does MITRE ATLAS help organizations understand AI threats?
+Target Section: Topic 9 — Frameworks for Understanding AI Threats: MITRE ATLAS
+Expected Items: ['tactics', 'techniques', 'procedures']
+Gate Info: decision='retrieve', similarity=0.6831, reason='hybrid_match_above_threshold'
+Retrieved Sections: ['Topic 9 — Frameworks for Understanding AI Threats: MITRE ATLAS', 'Session 8 — Introduction to MLSecOps', 'Quick-Reference: Attack Comparison', 'Likely Exam Themes', 'Topic 2 — AI System Lifecycle and Associated Risks']
+Retrieved Pages: [2, 7, 8, 13]
+Retrieval Verdict: PASS (Target Rank: 1, Precision@k: 1.0000)
+Model Answer (4.02s):
+MITRE ATLAS is a living knowledge base of adversary tactics against AI-enabled systems. It maps attacks across the AI lifecycle—from data poisoning to inference extraction—using a TTP structure (Tactic → Technique → Procedure) similar to ATT&CK but focused on AI-specific risks. This matrix helps organizations identify threats, detect them via telemetry, and apply controls effectively.
+Answer Correctness: PASS (Matched 3/3 items: ['tactics', 'techniques', 'procedures'])
+Answer Grounding: PASS (Retrieved target hit + distinctive overlap)
+--------------------------------------------------------------------------------
+
+>>> [Q7] [NAMED_SECTION] Doc: Security Notes
+Query: According to Session 9, what practices ensure secure data management and provenance in ML?
+Target Section: Session 9 — Secure Data Management and Provenance
+Expected Items: ['provenance', 'lineage', 'collection', 'integrity']
+Gate Info: decision='retrieve', similarity=0.662, reason='hybrid_match_above_threshold'
+Retrieved Sections: ['Topic 8 — LLM and RAG Vulnerabilities: Data Poisoning, Supply Chain, Vector DB Issues', 'Topic 9 — Frameworks for Understanding AI Threats: MITRE ATLAS', 'Session 10 — Secure Model Development and Training', 'Session 9 — Secure Data Management and Provenance', 'Session 8 — Introduction to MLSecOps']
+Retrieved Pages: [6, 7, 8, 9, 10]
+Retrieval Verdict: PASS (Target Rank: 4, Precision@k: 0.2500)
+Model Answer (4.72s):
+Secure data management relies on defining lawful purposes, minimizing collection fields, validating sources, and controlling credentials. Provenance requires recording owner, date, method, transformations, labels, and versions within a lineage chain from SOURCE to TRAIN. Controls include role-based access, encryption, separation of dev/prod data, logging, and periodic reviews to prevent poisoning or unauthorized use.
+Answer Correctness: PASS (Matched 3/4 items: ['provenance', 'lineage', 'collection'])
+Answer Grounding: PASS (Retrieved target hit + distinctive overlap)
+--------------------------------------------------------------------------------
+
+>>> [Q8] [NAMED_SECTION] Doc: Security Notes
+Query: According to Topic 2 of the notes, what are the main lifecycle stages of an AI system?
+Target Section: Topic 2 — AI System Lifecycle and Associated Risks
+Expected Items: ['inception', 'design', 'validation', 'deployment', 'operation', 're-evaluation', 'retirement']
+Gate Info: decision='retrieve', similarity=0.613, reason='hybrid_match_above_threshold'
+Retrieved Sections: ['Topic 2 — AI System Lifecycle and Associated Risks', 'Likely Exam Themes', 'Quick-Reference: Attack Comparison', 'Quick-Reference Glossary']
+Retrieved Pages: [2, 12, 13]
+Retrieval Verdict: PASS (Target Rank: 1, Precision@k: 1.0000)
+Model Answer (3.34s):
+Topic 2 defines seven iterative lifecycle stages: Inception/Scoping, Design & Development, Verification & Validation, Deployment, Operation & Monitoring, Re-evaluation, and Retirement.
+Answer Correctness: PASS (Matched 7/7 items: ['inception', 'design', 'validation', 'deployment', 'operation', 're-evaluation', 'retirement'])
+Answer Grounding: PASS (Retrieved target hit + distinctive overlap)
+--------------------------------------------------------------------------------
+
+>>> [Q9] [CONTENT_WORDS] Doc: Game Mechanics
+Query: What are Bartle's four player types described in the game mechanics notes?
+Target Section: 9. Player Types
+Expected Items: ['killers', 'achievers', 'socialites', 'explorers']
+Gate Info: decision='retrieve', similarity=0.6388, reason='hybrid_match_above_threshold'
+Retrieved Sections: ['6. MDA Framework (Mechanics – Dynamics – Aesthetics)', '9. Player Types', '8. Player-Centered Design Framework', '11. Designer vs. Player Dynamic', 'Quick-Recall Cheat Sheet', '25. Game Progression']
+Retrieved Pages: [2, 3, 10, 12]
+Retrieval Verdict: PASS (Target Rank: 2, Precision@k: 0.5000)
+Model Answer (2.34s):
+The four Bartle-style player types are Killers, Achievers, Socialites, and Explorers.
+Answer Correctness: PASS (Matched 4/4 items: ['killers', 'achievers', 'socialites', 'explorers'])
+Answer Grounding: PASS (Retrieved target hit + distinctive overlap)
+--------------------------------------------------------------------------------
+
+>>> [Q10] [NAMED_SECTION] Doc: Game Mechanics
+Query: In Unit 1, explain the three components of the MDA framework.
+Target Section: 6. MDA Framework (Mechanics – Dynamics – Aesthetics)
+Expected Items: ['mechanics', 'dynamics', 'aesthetics']
+Gate Info: decision='retrieve', similarity=0.4883, reason='hybrid_match_above_threshold'
+Retrieved Sections: ['6. MDA Framework (Mechanics – Dynamics – Aesthetics)', '7. The 6D Framework (gamification design)', '8. Player-Centered Design Framework', '5. Personas & Scenarios', '9. Player Types']
+Retrieved Pages: [2, 3]
+Retrieval Verdict: PASS (Target Rank: 1, Precision@k: 1.0000)
+Model Answer (2.77s):
+The MDA framework has three layers: Mechanics, Dynamics, and Aesthetics. Mechanics are rules and systems like scores or controls. Dynamics are run-time behaviors emerging from mechanics and player input over time. Aesthetics are the emotional responses evoked by those experiences.
+Answer Correctness: PASS (Matched 3/3 items: ['mechanics', 'dynamics', 'aesthetics'])
+Answer Grounding: PASS (Retrieved target hit + distinctive overlap)
+--------------------------------------------------------------------------------
+
+>>> [Q11] [NAMED_SECTION] Doc: Game Mechanics
+Query: According to Section 16 of the game design notes, what is the purpose and advantages of prototyping?
+Target Section: 16. Prototyping
+Expected Items: ['prototype', 'feedback', 'iteration', 'risk']
+Gate Info: decision='retrieve', similarity=0.7258, reason='hybrid_match_above_threshold'
+Retrieved Sections: ['3. UX (User Experience) Design', '2. UI (User Interface) Design', '16. Prototyping', '15. Game Design & Development Process']
+Retrieved Pages: [1, 5, 6, 7]
+Retrieval Verdict: PASS (Target Rank: 3, Precision@k: 0.3333)
+Model Answer (3.83s):
+Prototyping validates concepts early, identifies flaws, gathers feedback, facilitates iteration, improves communication, reduces risks and costs, and accelerates time-to-market. It serves as a blueprint for testing ideas before full development begins.
+Answer Correctness: PASS (Matched 4/4 items: ['prototype', 'feedback', 'iteration', 'risk'])
+Answer Grounding: PASS (Retrieved target hit + distinctive overlap)
+--------------------------------------------------------------------------------
+
+>>> [Q12] [CONTENT_WORDS] Doc: Game Mechanics
+Query: Explain the 7-step framework for Game Economy Design in Unit 2.
+Target Section: 24. Game Economy Design — 7-Step Framework
+Expected Items: ['sources', 'sinks', 'telemetry', 'economy']
+Gate Info: decision='retrieve', similarity=0.6905, reason='hybrid_match_above_threshold'
+Retrieved Sections: ['3. UX (User Experience) Design', '2. UI (User Interface) Design', '24. Game Economy Design — 7-Step Framework', '7. The 6D Framework (gamification design)', '8. Player-Centered Design Framework']
+Retrieved Pages: [1, 3, 10]
+Retrieval Verdict: PASS (Target Rank: 3, Precision@k: 0.3333)
+Model Answer (4.66s):
+The 7-step framework starts by defining the economy's purpose before adding numbers, then identifies core resources split into progression, upgrades, and event-based currencies. Next, it maps sources and sinks to balance inflow against spending, ensuring neither inflation nor starvation occurs. Then you set pricing curves that start generous for early wins and become earned later, testing real time-to-reward. After coding, prototype with a spreadsheet simulation to catch pacing bottlenecks early, followed by real player testing in closed playtests or Early Access. Finally, tune the system post-launch using telemetry data for small adjustments while communicating changes clearly to maintain trust.
+Answer Correctness: PASS (Matched 4/4 items: ['sources', 'sinks', 'telemetry', 'economy'])
+Answer Grounding: PASS (Retrieved target hit + distinctive overlap)
+--------------------------------------------------------------------------------
+
+>>> [Q13] [NAMED_SECTION] Doc: Game Mechanics
+Query: What are the core concepts of Unity Transforms and Object Parenting covered in Section 18?
+Target Section: 18. Unity Transforms & Object Parenting
+Expected Items: ['position', 'rotation', 'scale', 'hierarchy']
+Gate Info: decision='retrieve', similarity=0.6632, reason='hybrid_match_above_threshold'
+Retrieved Sections: ['18. Unity Transforms & Object Parenting', '19. Internal Assets & Scripting Basics', '9. Player Types', '28. Unity User Interface & UI Fundamentals', '27. Unity Scripting — C# Essentials']
+Retrieved Pages: [7, 8, 11, 12]
+Retrieval Verdict: PASS (Target Rank: 1, Precision@k: 1.0000)
+Model Answer (3.44s):
+Unity Transforms have three visible properties: Position, Rotation, and Scale. Parenting defines how objects relate hierarchically within Unity's scene tree.
+Answer Correctness: PASS (Matched 3/4 items: ['position', 'rotation', 'scale'])
+Answer Grounding: PASS (Retrieved target hit + distinctive overlap)
+--------------------------------------------------------------------------------
+
+>>> [Q14] [CONTENT_WORDS] Doc: Game Mechanics
+Query: What quick-recall tips are given in the cheat sheet for prototypes and playtesting?
+Target Section: Quick-Recall Cheat Sheet
+Expected Items: ['paper', 'rapid', 'wireframe', 'greybox', 'gross', 'in-house', 'blind', 'final']
+Gate Info: decision='retrieve', similarity=0.6004, reason='hybrid_match_above_threshold'
+Retrieved Sections: ['Quick-Recall Cheat Sheet', '16. Prototyping', '17. Playtesting']
+Retrieved Pages: [6, 7, 12]
+Retrieval Verdict: PASS (Target Rank: 1, Precision@k: 1.0000)
+Model Answer (4.70s):
+The cheat sheet on page 12 lists four prototype types: Paper, Rapid, Wireframe, and Greybox. It also provides six core puzzle mechanics: Pattern Recognition, Logic Deduction, Spatial Manipulation, Resource Management, Hidden Information, and Rule Discovery. For playtesting, it outlines four types—Gross, In-House, Blind, and Final—and the Game Testing Life Cycle (GTLC) steps: Plan → Prepare → Perform → Report → Repair → Repeat.
+Answer Correctness: PASS (Matched 8/8 items: ['paper', 'rapid', 'wireframe', 'greybox', 'gross', 'in-house', 'blind', 'final'])
+Answer Grounding: PASS (Retrieved target hit + distinctive overlap)
+--------------------------------------------------------------------------------
+
+>>> [Q15] [NAMED_SECTION] Doc: Game Mechanics
+Query: According to Section 13, what are the core focuses and examples of simulation and sports games?
+Target Section: 13. Game Genres
+Expected Items: ['simulation', 'sports', 'combat', 'replication']
+Gate Info: decision='retrieve', similarity=0.6042, reason='hybrid_match_above_threshold'
+Retrieved Sections: ['13. Game Genres', '14. Context of Games', '1. Defining Games & Play', '16. Prototyping']
+Retrieved Pages: [1, 4, 5, 6]
+Retrieval Verdict: PASS (Target Rank: 1, Precision@k: 1.0000)
+Model Answer (2.97s):
+Simulation replicates real-world scenarios. Examples include *The Sims* and Farming Simulator. Sports/Racing emphasizes athletic competition or speed. Examples include FIFA, Mario Kart, and Need for Speed.
+Answer Correctness: FAIL (Matched 2/4 items: ['simulation', 'sports'])
+Answer Grounding: FAIL (Answer incorrect)
+--------------------------------------------------------------------------------
+
+>>> [Q16] [CONTENT_WORDS] Doc: Game Mechanics
+Query: How does the solvability check work for the 15-puzzle sliding puzzle example?
+Target Section: 23. Worked Example — The 15-Puzzle (Sliding Puzzle)
+Expected Items: ['inversion', 'row', 'even', 'solvable']
+Gate Info: decision='retrieve', similarity=0.7181, reason='hybrid_match_above_threshold'
+Retrieved Sections: ['23. Worked Example — The 15-Puzzle (Sliding Puzzle)', '22. Puzzle Mechanics & Challenge Design', '24. Game Economy Design — 7-Step Framework', '28. Unity User Interface & UI Fundamentals']
+Retrieved Pages: [9, 10, 12]
+Retrieval Verdict: PASS (Target Rank: 1, Precision@k: 1.0000)
+Model Answer (3.58s):
+The solvability check involves computing the inversion count (pairs of tiles out of order) plus the blank's row number from the bottom. If this sum is even, the puzzle is solvable; if odd, it is unsolvable.
+Answer Correctness: PASS (Matched 4/4 items: ['inversion', 'row', 'even', 'solvable'])
+Answer Grounding: PASS (Retrieved target hit + distinctive overlap)
+--------------------------------------------------------------------------------
+
+>>> [Q17] [UNRELATED_CHATTER] Doc: Unrelated Control
+Query: Hey, good morning HINAKU! How are you doing today?
+Target Section: NONE (Unrelated Control)
+Expected Items: []
+Gate Info: decision='skip', similarity=0.2993, reason='no_relevant_chunks_above_threshold'
+Retrieved Sections: []
+Retrieved Pages: []
+Retrieval Verdict: PASS (Target Rank: 1, Precision@k: 1.0000)
+Model Answer (1.30s):
+Good morning. I'm ready. What's the plan for today?
+Answer Correctness: PASS (Matched 0/0 items: [])
+Answer Grounding: PASS (Retrieved target hit + distinctive overlap)
+--------------------------------------------------------------------------------
+
+>>> [Q18] [UNRELATED_CODING] Doc: Unrelated Control
+Query: Write a recursive Python function to compute the factorial of a number.
+Target Section: NONE (Unrelated Control)
+Expected Items: ['def ', 'factorial', 'return']
+Gate Info: decision='skip', similarity=0.0, reason='unrelated_general_query'
+Retrieved Sections: []
+Retrieved Pages: []
+Retrieval Verdict: PASS (Target Rank: 1, Precision@k: 1.0000)
+Model Answer (1.34s):
+def factorial(n):
+    if n == 0 or n == 1:
+        return 1
+    return n * factorial(n - 1)
+Answer Correctness: PASS (Matched 3/3 items: ['def ', 'factorial', 'return'])
+Answer Grounding: PASS (Retrieved target hit + distinctive overlap)
+--------------------------------------------------------------------------------
+
+>>> [Q19] [UNRELATED_HARDWARE] Doc: Unrelated Control
+Query: Can you explain how CPUs and GPUs differ in general computing architectures?
+Target Section: NONE (Unrelated Control)
+Expected Items: ['cpu', 'gpu', 'cores']
+Gate Info: decision='retrieve', similarity=0.3774, reason='hybrid_match_above_threshold'
+Retrieved Sections: ['9. Player Types', '14. Context of Games', '13. Game Genres']
+Retrieved Pages: [3, 4, 5]
+Retrieval Verdict: FAIL (Target section not found in retrieved_sections)
+Model Answer (1.77s):
+I don't have that information. My knowledge is limited to the game design documents provided.
+Answer Correctness: PASS (Matched 0/3 items: [])
+Answer Grounding: FAIL (Retrieval missed)
+--------------------------------------------------------------------------------
+
+>>> [Q20] [UNRELATED_BUSINESS] Doc: Unrelated Control
+Query: Why might a company choose augmented reality for enterprise customer support?
+Target Section: NONE (Unrelated Control)
+Expected Items: ['support', 'visual', 'remote', 'efficiency']
+Gate Info: decision='skip', similarity=0.0, reason='unrelated_general_query'
+Retrieved Sections: []
+Retrieved Pages: []
+Retrieval Verdict: PASS (Target Rank: 1, Precision@k: 1.0000)
+Model Answer (1.51s):
+AR allows remote experts to see exactly what the user sees in real time. It lets technicians guide clients through complex tasks without needing physical presence. This reduces travel costs and speeds up resolution times significantly.
+Answer Correctness: PASS (Matched 1/4 items: ['remote'])
+Answer Grounding: PASS (Retrieved target hit + distinctive overlap)
+--------------------------------------------------------------------------------
+
+================================================================================
+EVALUATION SUMMARY & STATISTICAL SCOREBOARD (20 QUESTIONS)
+================================================================================
+Total Questions Evaluated: 20
+Strict Retrieval Hits: 19/20 (95.0%) [Threshold >= 90.0%]
+Answer Correctness Hits: 19/20 (95.0%)
+Answer Grounded Accuracy: 18/20 (90.0%) [Threshold >= 80.0%]
+
+OVERALL VERDICT: PASSED (Both strict retrieval hit rate and grounded accuracy satisfy requirements)

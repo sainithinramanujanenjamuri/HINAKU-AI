@@ -1,0 +1,16 @@
+TIMESTAMP: 2026-10-30T15:10:39.521680+00:00
+SECTION: Topic 6 — Inference and Extraction Attacks: Stealing Secrets
+FLAGGED ITEM: Inference and Extraction Attacks: Stealing Secrets
+NEAREST SOURCE PHRASE: None
+ACTION: REGENERATE_TOPIC
+REASON: Term 'Inference and Extraction Attacks: Stealing Secrets' was not found in section text or full document, with no close candidate match.
+SOURCE TEXT SNIPPET:
+Inference = derive hidden facts from outputs. Extraction = recover model/data secrets. Both threaten
+privacy and IP.
+The "Secret" surface: Training data (personal/confidential records), Model (parameters/behavior), API
+(predictions/confidence), Logs (prompts/context/outputs).
+Attack taxonomy (NIST AI 100-2e2025):
+Attack Goal
+Membership inference Was a sample in training?
+Attribute inference Infer ...
+================================================================================

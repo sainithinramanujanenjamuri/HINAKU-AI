@@ -122,7 +122,15 @@ with client.stream("POST", "/api/chat", json=payload) as resp:
                 ms = call.get("ms")
                 tokens = call.get("tokens", "-")
                 load_ms = call.get("load_duration_ms", "-")
-                lines.append(f"    - Call: {c_type:<22} | duration={ms:>6} ms | tokens={str(tokens):>4} | load_duration={str(load_ms):>6} ms")
+                extra = []
+                if "missing_terms" in call and call["missing_terms"]:
+                    extra.append(f"missing_terms={call['missing_terms']}")
+                if call.get("fixed"):
+                    extra.append(f"count_fixes={call.get('fixes')}")
+                if call.get("missing_parts"):
+                    extra.append(f"style_missing={call.get('missing_parts')}")
+                extra_str = f" | {', '.join(extra)}" if extra else ""
+                lines.append(f"    - Call: {c_type:<22} | duration={ms:>6} ms | tokens={str(tokens):>4} | load_duration={str(load_ms):>6} ms{extra_str}")
         elif evt_type == "citation":
             citations.append(event)
         elif evt_type == "done":

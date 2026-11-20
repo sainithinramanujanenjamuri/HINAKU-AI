@@ -1,0 +1,34 @@
+TIMESTAMP: 2026-10-30T15:10:21.222155+00:00
+SECTION: Topic 5 — Evasion & Poisoning Attacks
+FLAGGED ITEM: untargeted evasion
+NEAREST SOURCE PHRASE: None
+ACTION: REGENERATE_TOPIC
+REASON: Term 'untargeted evasion' was not found in section text or full document, with no close candidate match.
+SOURCE TEXT SNIPPET:
+Core distinction — WHEN the attacker intervenes:
+Evasion Poisoning
+When Inference-time Training/fine-tuning time
+Target Input Learning process
+Persistence Often per-input Can persist in the model
+Security property Integrity (mainly) Integrity
+Defense Robustness/testing Provenance/validation
+Evasion: clean input → strategically manipulated → same deployed model → different (attacker-useful)
+predict...
+================================================================================
+TIMESTAMP: 2026-10-30T15:10:21.242460+00:00
+SECTION: Topic 5 — Evasion & Poisoning Attacks
+FLAGGED ITEM: training phase
+NEAREST SOURCE PHRASE: None
+ACTION: REGENERATE_TOPIC
+REASON: Term 'training phase' was not found in section text or full document, with no close candidate match.
+SOURCE TEXT SNIPPET:
+Core distinction — WHEN the attacker intervenes:
+Evasion Poisoning
+When Inference-time Training/fine-tuning time
+Target Input Learning process
+Persistence Often per-input Can persist in the model
+Security property Integrity (mainly) Integrity
+Defense Robustness/testing Provenance/validation
+Evasion: clean input → strategically manipulated → same deployed model → different (attacker-useful)
+predict...
+================================================================================
