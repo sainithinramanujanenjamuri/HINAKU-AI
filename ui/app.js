@@ -3,6 +3,48 @@ import { createUserMessageElement, createAssistantMessageElement, updateMetaRow,
 import { attachCodeBlockCopyHandlers, formatMarkdown } from "/static/js/markdown.js";
 import { renderMemoryPage, renderRatingsPage, renderDatasetPage, renderSettingsPage } from "/static/js/pages.js";
 
+// Session Authorization Bridge
+let sessionAuthToken = null;
+
+async function getSessionAuthToken() {
+  if (sessionAuthToken) return sessionAuthToken;
+  if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.get_session_token === "function") {
+    try {
+      sessionAuthToken = await window.pywebview.api.get_session_token();
+      return sessionAuthToken;
+    } catch (e) {
+      console.warn("Could not retrieve desktop session token", e);
+    }
+  }
+  return null;
+}
+
+window.addEventListener("pywebviewready", async () => {
+  await getSessionAuthToken();
+});
+
+// Intercept window.fetch to attach X-Hinaku-Token for local desktop authorization
+const originalFetch = window.fetch;
+window.fetch = async function(url, options = {}) {
+  options = options || {};
+  options.headers = options.headers || {};
+  const token = await getSessionAuthToken();
+  if (token) {
+    if (options.headers instanceof Headers) {
+      if (!options.headers.has("X-Hinaku-Token")) {
+        options.headers.set("X-Hinaku-Token", token);
+      }
+    } else if (Array.isArray(options.headers)) {
+      options.headers.push(["X-Hinaku-Token", token]);
+    } else {
+      if (!options.headers["X-Hinaku-Token"]) {
+        options.headers["X-Hinaku-Token"] = token;
+      }
+    }
+  }
+  return originalFetch(url, options);
+};
+
 // Main application state
 const state = {
   conversations: [],

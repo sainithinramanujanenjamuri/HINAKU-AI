@@ -1,10 +1,11 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 
 from backend.scheduler.service import SelfBuildScheduler
 from backend.scheduler.coordinator import SelfBuildCoordinator
 from backend.scheduler.activity import check_training_activity_and_power
+from backend.security.auth import require_session_auth
 
 router = APIRouter(prefix="/self-build", tags=["self-build"])
 
@@ -22,7 +23,7 @@ class TriggerRunRequest(BaseModel):
     version: Optional[str] = None
 
 @router.get("/status")
-async def get_self_build_status_endpoint():
+async def get_self_build_status_endpoint(_auth: str = Depends(require_session_auth)):
     sched = get_scheduler()
     status = sched.get_status()
     activity = check_training_activity_and_power()
@@ -30,17 +31,17 @@ async def get_self_build_status_endpoint():
     return status
 
 @router.get("/check-due")
-async def check_self_build_due_endpoint():
+async def check_self_build_due_endpoint(_auth: str = Depends(require_session_auth)):
     sched = get_scheduler()
     return sched.check_run_due()
 
 @router.post("/remind-later")
-async def remind_later_endpoint():
+async def remind_later_endpoint(_auth: str = Depends(require_session_auth)):
     sched = get_scheduler()
     return sched.remind_me_later()
 
 @router.post("/run")
-async def trigger_self_build_endpoint(req: Optional[TriggerRunRequest] = None):
+async def trigger_self_build_endpoint(req: Optional[TriggerRunRequest] = None, _auth: str = Depends(require_session_auth)):
     sched = get_scheduler()
     force = req.force if req else True
     dry_run = req.dry_run if req else True
@@ -53,12 +54,12 @@ async def trigger_self_build_endpoint(req: Optional[TriggerRunRequest] = None):
     }
 
 @router.get("/reports")
-async def get_self_build_reports_endpoint():
+async def get_self_build_reports_endpoint(_auth: str = Depends(require_session_auth)):
     sched = get_scheduler()
     return sched.coordinator.get_reports()
 
 @router.get("/reports/latest")
-async def get_latest_self_build_report_endpoint():
+async def get_latest_self_build_report_endpoint(_auth: str = Depends(require_session_auth)):
     sched = get_scheduler()
     rep = sched.coordinator.get_latest_report()
     if not rep:

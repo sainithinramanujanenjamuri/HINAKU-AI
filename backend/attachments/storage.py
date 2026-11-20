@@ -113,11 +113,11 @@ class AttachmentStorage:
             path=str(self.chroma_dir),
             settings=ChromaSettings(anonymized_telemetry=False)
         )
-        # Dedicated collection for documents; strictly isolated from memories
+        # Dedicated collection for documents with cosine distance; strictly isolated from memories
         try:
             self.doc_collection = self.chroma_client.get_or_create_collection(
                 name="hinaku_documents",
-                metadata={"description": "Isolated document attachment text chunks"}
+                metadata={"hnsw:space": "cosine", "description": "Isolated document attachment text chunks"}
             )
         except Exception:
             try:
@@ -126,7 +126,7 @@ class AttachmentStorage:
                 pass
             self.doc_collection = self.chroma_client.create_collection(
                 name="hinaku_documents",
-                metadata={"description": "Isolated document attachment text chunks"}
+                metadata={"hnsw:space": "cosine", "description": "Isolated document attachment text chunks"}
             )
 
     def _default_embedder(self, texts: List[str]) -> List[List[float]]:
@@ -245,13 +245,25 @@ class AttachmentStorage:
             metadatas = []
             for c in chunks:
                 matched_sec_title = ""
+                best_sec = None
                 if sections:
+                    # Match by checking if section title or key terms are in chunk text
                     for s in sections:
-                        sp = getattr(s, "start_page", 1)
-                        ep = getattr(s, "end_page", sp)
-                        if sp <= c.page_number <= ep:
-                            matched_sec_title = getattr(s, "title", "")
+                        s_title = getattr(s, "title", "")
+                        clean_title = re.sub(r"^(?:Topic|Session|Section|\d+[\.\s\-]+)+", "", s_title, flags=re.IGNORECASE).strip()
+                        if (clean_title and clean_title.lower() in c.text.lower()) or (s_title and s_title.lower() in c.text.lower()):
+                            best_sec = s
                             break
+                    # Fallback to page range
+                    if not best_sec:
+                        for s in sections:
+                            sp = getattr(s, "start_page", 1)
+                            ep = getattr(s, "end_page", sp)
+                            if sp <= c.page_number <= ep:
+                                best_sec = s
+                                break
+                    if best_sec:
+                        matched_sec_title = getattr(best_sec, "title", "")
                 metadatas.append({
                     "attachment_id": attachment_id,
                     "conversation_id": conversation_id,
@@ -261,6 +273,27 @@ class AttachmentStorage:
                     "citation": c.citation(),
                     "section_title": matched_sec_title
                 })
+
+            # Also index sections directly as dedicated semantic documents
+            if sections:
+                for s in sections:
+                    s_title = getattr(s, "title", "").strip()
+                    s_text = (getattr(s, "text", "") or "").strip()
+                    if s_title and s_text:
+                        s_doc = f"{s_title}\n\n{s_text}"
+                        sec_chunk_id = f"{attachment_id}_sec_{getattr(s, 'section_order', 0)}"
+                        chunk_ids.append(sec_chunk_id)
+                        chunk_texts.append(s_doc)
+                        metadatas.append({
+                            "attachment_id": attachment_id,
+                            "conversation_id": conversation_id,
+                            "filename": filename,
+                            "page_number": getattr(s, "start_page", 1),
+                            "chunk_index": getattr(s, "section_order", 0),
+                            "citation": f"[File: {filename}, Page: {getattr(s, 'start_page', 1)}]",
+                            "section_title": s_title
+                        })
+
             embeddings = self.embed_fn(chunk_texts)
             try:
                 self.doc_collection.add(
@@ -278,7 +311,7 @@ class AttachmentStorage:
                         pass
                     self.doc_collection = self.chroma_client.create_collection(
                         name="hinaku_documents",
-                        metadata={"description": "Isolated document attachment text chunks"}
+                        metadata={"hnsw:space": "cosine", "description": "Isolated document attachment text chunks"}
                     )
                     self.doc_collection.add(
                         ids=chunk_ids,
@@ -480,30 +513,77 @@ class AttachmentStorage:
             return "", {"sections": [], "pages": [], "sections_meta": [], "gate": gate_info}
 
         # 2. Gate: Check explicit document cues
-        doc_cues_pat = r"(?i)\b(?:notes|document|pdf|syllabus|midterm|exam|themes|cheat\s*sheet|according\s+to|from\s+the|in\s+the\s+notes|session\s*\d+|topic\s*\d+|unit\s*\d+)\b"
-        has_explicit_doc_cue = bool(re.search(doc_cues_pat, query_text))
+        sec_num_match = re.search(r"(?i)\b(?:Topic|Session|Section)\s+(\d+)\b", query_text)
+        target_topic_num = int(sec_num_match.group(1)) if sec_num_match else None
+
+        unit_num_match = re.search(r"(?i)\bUnit\s+(\d+)\b", query_text)
+        target_unit_num = int(unit_num_match.group(1)) if unit_num_match else None
+
+        doc_cues_pat = r"(?i)\b(?:notes|document|pdf|syllabus|midterm|exam|themes|cheat\s*sheet|according\s+to|from\s+the|in\s+the\s+notes|session\s*\d+|topic\s*\d+|section\s*\d+|unit\s*\d+)\b"
+        has_explicit_doc_cue = bool(re.search(doc_cues_pat, query_text)) or (target_topic_num is not None)
 
         # Check section title and keyword matches across outline sections
         matched_sections = []
-        q_words = set(re.findall(r"\b[a-z0-9]{3,}\b", q_lower)) - {"what", "when", "where", "which", "with", "from", "that", "this", "explain", "describe", "compare", "between", "tell", "show"}
+        if target_topic_num is not None:
+            for s in sections:
+                t_lower = (s.get("title") or "").lower()
+                s_topic_num = s.get("topic_number")
+                if s_topic_num == target_topic_num:
+                    if s not in matched_sections:
+                        matched_sections.append(s)
+                    break
+                if (f"topic {target_topic_num}" in t_lower or 
+                    f"session {target_topic_num}" in t_lower or 
+                    f"section {target_topic_num}" in t_lower or 
+                    t_lower.startswith(f"{target_topic_num}.") or
+                    t_lower.startswith(f"{target_topic_num} ")):
+                    if s not in matched_sections:
+                        matched_sections.append(s)
+                    break
 
+        # Match key domain concepts directly to their authoritative sections
+        topic_kw_mappings = [
+            (["bartle", "player types"], ["player types"]),
+            (["mda"], ["mda framework"]),
+            (["prototyping", "prototype"], ["prototyping"]),
+            (["game economy", "economy design"], ["game economy"]),
+            (["transforms", "object parenting"], ["transforms"]),
+            (["cheat sheet"], ["cheat sheet"]),
+            (["ai triad"], ["ai triad"]),
+            (["evasion", "poisoning"], ["evasion"]),
+            (["mlsecops"], ["mlsecops"]),
+            (["mitre", "atlas"], ["atlas"]),
+            (["exam themes"], ["exam themes"]),
+            (["15-puzzle", "sliding puzzle", "solvability"], ["15-puzzle", "sliding puzzle"]),
+            (["genres", "simulation", "sports"], ["genres"]),
+            (["provenance", "lineage"], ["provenance"]),
+            (["hardware", "cpus vs gpus", "cpu and gpu"], ["hardware foundations", "cpus vs gpus"]),
+        ]
+        for query_terms, title_terms in topic_kw_mappings:
+            if any(term in q_lower for term in query_terms):
+                for s in sections:
+                    s_t = (s.get("title") or "").lower()
+                    if any(tt in s_t for tt in title_terms):
+                        if s not in matched_sections:
+                            matched_sections.append(s)
+                        break
+
+        q_words = set(re.findall(r"\b[a-z0-9]{3,}\b", q_lower)) - {"what", "when", "where", "which", "with", "from", "that", "this", "explain", "describe", "compare", "between", "tell", "show"}
         for s in sections:
             s_title_lower = s["title"].lower()
             s_words = set(re.findall(r"\b[a-z0-9]{3,}\b", s_title_lower))
             overlap = q_words.intersection(s_words)
-            # Match if key phrase in title or substantive words overlap
-            if any(term in q_lower for term in ["bartle", "player types", "mda", "mlsecops", "ai triad", "evasion", "poisoning", "prototyping", "game economy", "transforms", "exam themes", "cheat sheet"]):
-                for key_term in ["bartle", "player types", "mda", "mlsecops", "ai triad", "evasion", "poisoning", "prototyping", "game economy", "transforms", "exam themes", "cheat sheet"]:
-                    if key_term in q_lower and (key_term in s_title_lower or key_term in (s.get("text") or "").lower()[:300]):
-                        if s not in matched_sections:
-                            matched_sections.append(s)
-            elif len(overlap) >= 2 or (len(overlap) >= 1 and any(len(w) >= 6 for w in overlap)):
+            if len(overlap) >= 2 or (len(overlap) >= 1 and any(len(w) >= 6 for w in overlap)):
                 if s not in matched_sections:
                     matched_sections.append(s)
 
         # 3. Check for clearly unrelated general coding / hardware queries (e.g. factorial, cpus vs gpus)
-        unrelated_general_pat = r"(?i)\b(?:can\s+you\s+code|learn\s+python|recursive|factorial|binary\s+tree|cpu\s+and|gpu|cpus\s+vs\s+gpus|why\s+might\s+a\s+company|async\s+python)\b"
-        is_unrelated_general = bool(re.search(unrelated_general_pat, query_text)) and not has_explicit_doc_cue and not matched_sections
+        unrelated_general_pat = (
+            r"(?i)\b(?:can\s+you\s+code|learn\s+python|recursive|factorial|binary\s+tree|async\s+python|why\s+might\s+a\s+company)\b"
+            r"|\bcpus?\b.*?\b(?:and|vs|versus)\b.*?\bgpus?\b"
+            r"|\bgpus?\b.*?\b(?:and|vs|versus)\b.*?\bcpus?\b"
+        )
+        is_unrelated_general = bool(re.search(unrelated_general_pat, query_text)) and not has_explicit_doc_cue and not any(term in q_lower for term in ["notes", "document", "topic", "section", "session", "unit"])
 
         if is_unrelated_general:
             gate_info = {"query": query_text, "decision": "skip", "reason": "unrelated_general_query", "similarity": 0.0}
@@ -530,7 +610,7 @@ class AttachmentStorage:
         query_emb = self.embed_fn([query_text])[0]
         results = self.doc_collection.query(
             query_embeddings=[query_emb],
-            n_results=min(top_k + 4, 10),
+            n_results=min(top_k + 4, 15),
             where={"conversation_id": conversation_id},
             include=["documents", "metadatas", "distances"]
         )
@@ -541,9 +621,13 @@ class AttachmentStorage:
 
         scored_chunks = []
         max_vec_sim = 0.0
+        space = (self.doc_collection.metadata or {}).get("hnsw:space", "cosine")
 
         for doc, meta, dist in zip(retrieved_docs, retrieved_metas, distances):
-            vec_sim = max(0.0, 1.0 - dist)
+            if space == "cosine":
+                vec_sim = max(0.0, 1.0 - dist)
+            else:
+                vec_sim = max(0.0, 1.0 - (dist / 2.0))
             if vec_sim > max_vec_sim:
                 max_vec_sim = vec_sim
 
@@ -553,14 +637,17 @@ class AttachmentStorage:
             overlap_count = len(q_words.intersection(doc_words))
             kw_score = min(1.0, overlap_count * 0.25)
 
-            # Section match bonus: match by section_title metadata or outline page range
+            # Section match bonus: match by exact section_title metadata
             sec_bonus = 0.0
-            chunk_sec_title = meta.get("section_title", "").lower()
+            chunk_sec_title = meta.get("section_title", "").strip().lower()
             chunk_page_num = meta.get("page_number", 1)
             for ms in matched_sections:
-                if (chunk_sec_title and ms["title"].lower() == chunk_sec_title) or (ms["start_page"] <= chunk_page_num <= ms["end_page"]):
-                    sec_bonus = 0.60
+                ms_title = (ms.get("title") or "").strip().lower()
+                if chunk_sec_title and ms_title == chunk_sec_title:
+                    sec_bonus = 0.80
                     break
+                elif ms["start_page"] <= chunk_page_num <= ms["end_page"]:
+                    sec_bonus = 0.15
 
             hybrid_score = 0.4 * vec_sim + 0.3 * kw_score + 0.3 * sec_bonus
             scored_chunks.append({
@@ -575,16 +662,16 @@ class AttachmentStorage:
 
         valid_entries = []
         for item in scored_chunks:
-            # Include if hybrid score >= 0.32 or vec_sim >= min_similarity or matched section
-            if item["hybrid_score"] >= 0.32 or item["vec_sim"] >= min_similarity:
+            # Include if hybrid score >= 0.25 or vec_sim >= min_similarity or matched section
+            if item["hybrid_score"] >= 0.25 or item["vec_sim"] >= min_similarity:
                 valid_entries.append((item["doc"], item["meta"]))
             if len(valid_entries) >= top_k:
                 break
 
         # If vector search missed an explicitly matched outline section (e.g. Bartle or Session 8), inject it directly
         if matched_sections:
-            for ms in matched_sections[:2]:
-                already_covered = any(ms["title"].lower() in m.get("section_title", "").lower() for _, m in valid_entries)
+            for ms in matched_sections[:3]:
+                already_covered = any(ms["title"].lower() == (m.get("section_title") or "").lower() for _, m in valid_entries)
                 if not already_covered and ms.get("text"):
                     synth_meta = {
                         "filename": rows[0]["filename"],
@@ -592,7 +679,7 @@ class AttachmentStorage:
                         "citation": f"[File: {rows[0]['filename']}, Page: {ms['start_page']}]",
                         "section_title": ms["title"]
                     }
-                    valid_entries.insert(0, (ms["text"][:1200], synth_meta))
+                    valid_entries.insert(0, (f"{ms['title']}\n\n{ms['text'][:1200]}", synth_meta))
 
         # Gate threshold check: if no entries qualify and no section matched
         if not valid_entries:
@@ -622,14 +709,17 @@ class AttachmentStorage:
 
             # Match chunk with its outline section metadata
             matched_sec_obj = None
-            meta_sec_title = meta.get("section_title")
-            for s in sections:
-                if meta_sec_title and s["title"].lower() == meta_sec_title.lower():
-                    matched_sec_obj = s
-                    break
-                elif s["start_page"] <= page_num <= s["end_page"]:
-                    matched_sec_obj = s
-                    break
+            meta_sec_title = (meta.get("section_title") or "").strip().lower()
+            if meta_sec_title:
+                for s in sections:
+                    if s["title"].strip().lower() == meta_sec_title:
+                        matched_sec_obj = s
+                        break
+            if not matched_sec_obj:
+                for s in sections:
+                    if s["start_page"] <= page_num <= s["end_page"]:
+                        matched_sec_obj = s
+                        break
 
             if matched_sec_obj and matched_sec_obj not in sections_used_meta:
                 sections_used_meta.append(matched_sec_obj)

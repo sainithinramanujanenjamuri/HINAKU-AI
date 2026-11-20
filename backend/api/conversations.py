@@ -1,9 +1,10 @@
 from typing import Optional
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from backend.config import get_settings
 from backend.history import ChatHistoryManager
 from backend.attachments import AttachmentManager
+from backend.security.auth import require_session_auth
 
 router = APIRouter()
 settings = get_settings()
@@ -20,25 +21,25 @@ class UpdateConversationRequest(BaseModel):
     pinned: Optional[bool] = None
 
 @router.get("/conversations")
-async def list_conversations():
+async def list_conversations(_auth: str = Depends(require_session_auth)):
     return history_manager.list_conversations()
 
 @router.post("/conversations")
-async def create_conversation(req: CreateConversationRequest):
+async def create_conversation(req: CreateConversationRequest, _auth: str = Depends(require_session_auth)):
     return history_manager.create_conversation(
         title=req.title or "New conversation",
         is_private=req.is_private or False
     )
 
 @router.get("/conversations/{conv_id}")
-async def get_conversation(conv_id: str):
+async def get_conversation(conv_id: str, _auth: str = Depends(require_session_auth)):
     conv = history_manager.get_conversation(conv_id)
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return conv
 
 @router.patch("/conversations/{conv_id}")
-async def update_conversation(conv_id: str, req: UpdateConversationRequest):
+async def update_conversation(conv_id: str, req: UpdateConversationRequest, _auth: str = Depends(require_session_auth)):
     conv = history_manager.get_conversation(conv_id)
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -53,7 +54,7 @@ async def update_conversation(conv_id: str, req: UpdateConversationRequest):
     return conv
 
 @router.delete("/conversations/{conv_id}")
-async def delete_conversation(conv_id: str):
+async def delete_conversation(conv_id: str, _auth: str = Depends(require_session_auth)):
     deleted = history_manager.delete_conversation(conv_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Conversation not found")

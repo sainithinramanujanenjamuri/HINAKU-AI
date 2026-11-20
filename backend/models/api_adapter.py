@@ -2,6 +2,7 @@ import json
 from typing import Any, AsyncGenerator, Dict, List, Optional
 import httpx
 from .thinking_filter import ThinkingFilter, strip_thinking
+from .privacy_gate import OutboundPrivacyGate, OutboundPrivacyViolation
 
 class ApiAdapter:
     """
@@ -40,8 +41,18 @@ class ApiAdapter:
     async def stream_chat(
         self,
         messages: List[Dict[str, str]],
-        model: Optional[str] = None
+        model: Optional[str] = None,
+        is_private: Any = None,
+        has_attachments: Any = None
     ) -> AsyncGenerator[str, None]:
+        # Final Outbound Privacy Gate: inspect full payload immediately before transmission.
+        # Fails closed if is_private or has_attachments is missing, invalid, or True.
+        OutboundPrivacyGate.verify_outbound_payload(
+            messages=messages,
+            is_private=is_private,
+            has_attachments=has_attachments
+        )
+
         if not self.api_key:
             raise ValueError("API key is missing or not configured in environment (HINAKU_API_KEY).")
 
@@ -124,9 +135,17 @@ class ApiAdapter:
         target_model: str,
         thinking_filter: ThinkingFilter
     ) -> AsyncGenerator[str, None]:
-        url = f"{self.base_url}/messages"
+        base = self.base_url.rstrip("/")
+        if base.endswith("/messages"):
+            url = base
+        elif base.endswith("/v1"):
+            url = f"{base}/messages"
+        else:
+            url = f"{base}/v1/messages"
+
         headers = {
             "x-api-key": self.api_key,
+            "Authorization": f"Bearer {self.api_key}",
             "anthropic-version": "2023-06-01",
             "content-type": "application/json"
         }
@@ -187,10 +206,17 @@ class ApiAdapter:
     async def chat(
         self,
         messages: List[Dict[str, str]],
-        model: Optional[str] = None
+        model: Optional[str] = None,
+        is_private: Any = None,
+        has_attachments: Any = None
     ) -> str:
         parts = []
-        async for chunk in self.stream_chat(messages, model=model):
+        async for chunk in self.stream_chat(
+            messages,
+            model=model,
+            is_private=is_private,
+            has_attachments=has_attachments
+        ):
             parts.append(chunk)
         return strip_thinking("".join(parts))
 

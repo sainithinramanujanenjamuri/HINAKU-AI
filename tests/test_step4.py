@@ -1,5 +1,6 @@
 import os
 import pytest
+import httpx
 from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 from backend.main import app
@@ -83,7 +84,8 @@ def test_router_daily_limit_fallback(tmp_path):
     assert decision.target_backend == "local"
     assert "Daily API request limit" in decision.notice
 
-def test_api_adapter_mocked_openai_streaming():
+@pytest.mark.asyncio
+async def test_api_adapter_mocked_openai_streaming():
     adapter = ApiAdapter(
         provider="openai_compatible",
         model="gpt-test",
@@ -119,11 +121,14 @@ def test_api_adapter_mocked_openai_streaming():
             return MockStreamResponse()
 
     with patch("httpx.AsyncClient", MockClient):
-        import asyncio
-        result = asyncio.run(adapter.chat([{"role": "user", "content": "hi"}]))
+        chunks = []
+        async for chunk in adapter.stream_chat([{"role": "user", "content": "hi"}], is_private=False, has_attachments=False):
+            chunks.append(chunk)
+        result = "".join(chunks)
         assert result == "Hello world!"
 
-def test_api_adapter_mocked_anthropic_streaming():
+@pytest.mark.asyncio
+async def test_api_adapter_mocked_anthropic_streaming():
     adapter = ApiAdapter(
         provider="anthropic",
         model="claude-test",
@@ -160,11 +165,13 @@ def test_api_adapter_mocked_anthropic_streaming():
             return MockStreamResponse()
 
     with patch("httpx.AsyncClient", MockClient):
-        import asyncio
-        result = asyncio.run(adapter.chat([
+        chunks = []
+        async for chunk in adapter.stream_chat([
             {"role": "system", "content": "You are HINAKU."},
             {"role": "user", "content": "hi"}
-        ]))
+        ], is_private=False, has_attachments=False):
+            chunks.append(chunk)
+        result = "".join(chunks)
         assert result == "Anthropic reply."
 
 def test_interaction_logging_and_privacy_via_api():

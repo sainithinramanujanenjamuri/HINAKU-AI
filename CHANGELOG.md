@@ -4,6 +4,30 @@ All notable development steps, architectural implementations, and verification r
 
 ---
 
+## [Sprint 0B] - Outbound Privacy Boundary Audit & Final Authorization Correction
+- **Universal State-Changing Authorization:** Enforced `require_session_auth` across all state-changing and action-triggering API endpoints (`POST /api/chat`, `POST /api/conversations`, `PATCH /api/conversations/{conv_id}`, `POST /api/conversations/{id}/attachments`, `POST /api/interactions/{id}/feedback`, `POST /api/messages/{id}/feedback`, `POST /api/messages/{id}/edit`, `POST /api/self-build/remind-later`).
+- **Sensitive Read-Only Endpoint Protection:** Protected all sensitive read endpoints against unauthenticated access (`GET /api/conversations`, `GET /api/conversations/{id}`, `GET /api/conversations/{id}/attachments`, `GET /api/settings`, `GET /api/settings/model-options`, `GET /api/interactions/ratings-by-model`, `GET /api/interactions/{id}`, `GET /api/training/*`, `GET /api/self-build/*`). Public access restricted exclusively to `/`, `/health`, `/api/health/ollama`, `/api/info`, and `/api/demo/*`.
+- **Pre-Execution Authorization Checks:** Dependency checks verify session tokens before endpoint logic executes; rejected requests produce zero database writes, zero file creations, zero model calls, and zero metadata changes.
+- **Scoped Internal Authorization Model:** Added `InternalTokenManager`, `InternalScope`, `validate_internal_scope`, and `assert_owner_session_required` in `backend/security/auth.py`. Background tasks receive narrowly scoped internal tokens that cannot authenticate external HTTP endpoints and cannot execute critical owner actions (model promotion, data wipes, deletions).
+- **Comprehensive Authorization Test Suite:** Created `tests/test_authorization.py` (39 tests covering unauthorized 401 rejections for state-changing and sensitive read endpoints, side-effect prevention, authorized execution, public endpoint accessibility, scoped internal token isolation, and anti-autonomy guards).
+- **Outbound Privacy Gate:** Implemented `backend/models/privacy_gate.py` providing `OutboundPrivacyGate` and `OutboundPrivacyViolation` enforcing fail-closed privacy inspection of all candidate outbound API payloads.
+- **Physical Egress Protection:** Integrated gate into `ApiAdapter.stream_chat()` as the immediate last line of defense before socket connection; direct adapter calls independently enforce privacy rules.
+- **Router Defense:** Updated `ModelRouter.decide_backend()` and `stream_chat()` to scan full conversation history for personal context, block unsafe local-to-API fallbacks, and prevent explicit API model selection from leaking personal data.
+- **Chat History Protection:** Updated `backend/api/chat.py` to inspect multi-turn conversation history for personal statements and prevent follow-up queries from transmitting earlier personal data to external APIs.
+- **Deliberate CORS Policy:** Replaced broad wildcard access in `backend/main.py` with explicit local loopback origin whitelist and regex pattern for desktop shell and pywebview.
+- **Comprehensive Privacy Test Suite:** Created `tests/test_privacy_boundary.py` verifying all 15 required security scenarios with mocked adapters and exact payload assertions. All 15 tests passed.
+
+---
+
+## [Sprint 0A] - Repository Baseline & Authoritative Source Assessment
+- **Authoritative Source Determination:** Established that the Git repository (`origin/main`, commit `38f04c5`) is the authoritative version-control source of truth; demonstrated that `D:\hinaku-ai.zip` is an unversioned working-tree filesystem export containing runtime data.
+- **Tracked File Parity:** Verified 100% byte-for-byte parity across all 275 Git-tracked files between working tree and archive.
+- **Secrets Audit:** Scanned full git history; confirmed zero leaked secrets or credentials. Verified `.gitignore` excludes `.env`, `data/*`, `models/`, and `logs/`.
+- **Working Branch:** Established dedicated branch `sprint-0b-privacy-boundary` to protect the repository baseline without modifying `main`.
+- **Comprehensive Report:** Delivered `docs/SPRINT_0A_REPOSITORY_BASELINE.md`.
+
+---
+
 ## [Phase H] - Polish, Documentation, and Repository Audit
 - Fully updated `README.md` with installation, quickstart, hardware budget guidelines, test runner commands, and architecture overview.
 - Added comprehensive `CHANGELOG.md` detailing all phases from Step 1 through Phase H.

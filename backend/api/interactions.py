@@ -1,8 +1,9 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
 from backend.config import get_settings
 from backend.history import _UNSET
+from backend.security.auth import require_session_auth
 
 router = APIRouter(tags=["interactions"])
 
@@ -18,7 +19,7 @@ def get_history_mgr():
     return history_manager
 
 @router.post("/interactions/{interaction_id}/feedback")
-async def update_interaction_feedback_endpoint(interaction_id: str, req: FeedbackRequest):
+async def update_interaction_feedback_endpoint(interaction_id: str, req: FeedbackRequest, _auth: str = Depends(require_session_auth)):
     if req.feedback is not None and req.feedback not in ("thumbs_up", "thumbs_down"):
         raise HTTPException(status_code=400, detail="Invalid feedback value. Must be 'thumbs_up', 'thumbs_down', or null.")
     
@@ -40,13 +41,13 @@ async def update_interaction_feedback_endpoint(interaction_id: str, req: Feedbac
     }
 
 @router.get("/interactions/ratings-by-model")
-async def ratings_by_model_endpoint():
+async def ratings_by_model_endpoint(_auth: str = Depends(require_session_auth)):
     """Return aggregated feedback and performance metrics per model."""
     hm = get_history_mgr()
     return hm.get_ratings_by_model()
 
 @router.get("/interactions/{interaction_id}")
-async def get_interaction_endpoint(interaction_id: str):
+async def get_interaction_endpoint(interaction_id: str, _auth: str = Depends(require_session_auth)):
     hm = get_history_mgr()
     inter = hm.get_interaction(interaction_id)
     if not inter:
@@ -54,7 +55,7 @@ async def get_interaction_endpoint(interaction_id: str):
     return inter
 
 @router.post("/messages/{message_id}/feedback")
-async def update_message_feedback_endpoint(message_id: str, req: FeedbackRequest):
+async def update_message_feedback_endpoint(message_id: str, req: FeedbackRequest, _auth: str = Depends(require_session_auth)):
     if req.feedback is not None and req.feedback not in ("thumbs_up", "thumbs_down"):
         raise HTTPException(status_code=400, detail="Invalid feedback value. Must be 'thumbs_up', 'thumbs_down', or null.")
     
@@ -81,7 +82,7 @@ async def update_message_feedback_endpoint(message_id: str, req: FeedbackRequest
     }
 
 @router.post("/messages/{message_id}/edit")
-async def edit_message_endpoint(message_id: str, req: EditMessageRequest):
+async def edit_message_endpoint(message_id: str, req: EditMessageRequest, _auth: str = Depends(require_session_auth)):
     edited = req.edited_answer.strip()
     if not edited:
         raise HTTPException(status_code=400, detail="Edited answer cannot be empty")

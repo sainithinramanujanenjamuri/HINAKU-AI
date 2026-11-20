@@ -88,6 +88,16 @@ def main():
     settings = get_settings()
     app_name = settings.app_name
 
+    from backend.security.auth import get_active_session_token
+    session_token = get_active_session_token()
+    os.environ["HINAKU_SESSION_TOKEN"] = session_token
+
+    class DesktopBridge:
+        def get_session_token(self):
+            return session_token
+
+    desktop_bridge = DesktopBridge()
+
     if args.server_only:
         run_server(args.host, args.port)
         return
@@ -193,7 +203,8 @@ def main():
             width=1000,
             height=750,
             min_size=(640, 500),
-            background_color="#06070a"
+            background_color="#06070a",
+            js_api=desktop_bridge
         )
         webview.start()
     except Exception as e:

@@ -7,6 +7,7 @@ import logging
 import yaml
 from pathlib import Path
 from backend.config import get_settings
+from backend.security.auth import require_session_auth
 
 logger = logging.getLogger("hinaku.settings")
 
@@ -35,7 +36,7 @@ def get_router():
     return model_router
 
 @router.get("")
-async def get_settings_endpoint():
+async def get_settings_endpoint(_auth: str = Depends(require_session_auth)):
     settings = get_settings()
     router_inst = get_router()
     mem_mgr, _ = get_memory_mgr()
@@ -57,7 +58,7 @@ async def get_settings_endpoint():
     }
 
 @router.get("/model-options")
-async def get_model_options_endpoint():
+async def get_model_options_endpoint(_auth: str = Depends(require_session_auth)):
     settings = get_settings()
     return {
         "default_local_model": settings.default_local_model,
@@ -66,7 +67,7 @@ async def get_model_options_endpoint():
     }
 
 @router.post("")
-async def update_settings_endpoint(req: UpdateSettingsRequest):
+async def update_settings_endpoint(req: UpdateSettingsRequest, _auth: str = Depends(require_session_auth)):
     settings = get_settings()
     router_inst = get_router()
     mem_mgr, _ = get_memory_mgr()
@@ -112,7 +113,7 @@ async def update_settings_endpoint(req: UpdateSettingsRequest):
     return await get_settings_endpoint()
 
 @router.get("/export")
-async def export_all_data_endpoint():
+async def export_all_data_endpoint(_auth: str = Depends(require_session_auth)):
     history_mgr = get_history_mgr()
     _, mem_storage = get_memory_mgr()
 
@@ -131,7 +132,7 @@ async def export_all_data_endpoint():
     }
 
 @router.post("/clear-memory")
-async def clear_memory_endpoint():
+async def clear_memory_endpoint(_auth: str = Depends(require_session_auth)):
     _, mem_storage = get_memory_mgr()
     count = mem_storage.clear_all()
     return {
@@ -141,7 +142,7 @@ async def clear_memory_endpoint():
     }
 
 @router.post("/wipe-all")
-async def wipe_all_endpoint(req: WipeAllRequest):
+async def wipe_all_endpoint(req: WipeAllRequest, _auth: str = Depends(require_session_auth)):
     if req.confirm != "WIPE_ALL":
         raise HTTPException(status_code=400, detail="Confirmation token must be exactly 'WIPE_ALL'")
 
@@ -159,7 +160,7 @@ async def wipe_all_endpoint(req: WipeAllRequest):
     }
 
 @router.post("/self-build/run")
-async def trigger_self_build_endpoint():
+async def trigger_self_build_endpoint(_auth: str = Depends(require_session_auth)):
     """Manual trigger endpoint for the 6-month self-build cycle."""
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
     return {
