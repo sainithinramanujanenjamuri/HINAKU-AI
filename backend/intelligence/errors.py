@@ -53,3 +53,19 @@ class RepositoryAccessViolation(IntelligenceError):
     """Raised when repository grounding encounters prohibited files (secrets, private databases, credentials) or write attempts."""
     pass
 
+
+class KnowledgeGraphError(IntelligenceError):
+    """Raised when knowledge graph edge operations violate graph consistency or referential integrity."""
+    pass
+
+
+class ContradictionResolutionError(IntelligenceError):
+    """Raised when an automated contradiction resolution attempt fails or produces conflicting states."""
+    pass
+
+
+class CrossDomainLeakageError(DomainIsolationViolation):
+    """Raised when knowledge from one domain (e.g. personal facts) is inappropriately leaked into another (e.g. project context or API egress)."""
+    pass
+
+

@@ -15,6 +15,9 @@ from .errors import (
     ProjectConfidentialityViolation,
     UnauthorizedRepositoryAccessError,
     RepositoryAccessViolation,
+    KnowledgeGraphError,
+    ContradictionResolutionError,
+    CrossDomainLeakageError,
 )
 from .types import (
     KnowledgeDomain,
@@ -37,10 +40,18 @@ from .project_types import (
     RepositoryFileIndex,
     ProjectDiscoveryCandidate,
 )
+from .graph_types import (
+    EdgeRelationship,
+    KnowledgeEdge,
+    ContextBundle,
+)
 from .project_store import ProjectStore
 from .repo_grounding import RepoGrounding
 from .project_discovery import ProjectDiscovery
 from .project_engine import ProjectEngine
+from .knowledge_graph import KnowledgeGraph
+from .contradiction_manager import ContradictionManager
+from .domain_router import DomainRouter
 from .context import IntelligenceContext
 
 __all__ = [
@@ -55,6 +66,9 @@ __all__ = [
     "ProjectConfidentialityViolation",
     "UnauthorizedRepositoryAccessError",
     "RepositoryAccessViolation",
+    "KnowledgeGraphError",
+    "ContradictionResolutionError",
+    "CrossDomainLeakageError",
     # Types & Enums
     "KnowledgeDomain",
     "SourceAuthority",
@@ -74,11 +88,18 @@ __all__ = [
     "ProjectKnowledgeRevision",
     "RepositoryFileIndex",
     "ProjectDiscoveryCandidate",
-    # Project Intelligence Services
+    # Knowledge Graph & Context Types
+    "EdgeRelationship",
+    "KnowledgeEdge",
+    "ContextBundle",
+    # Services & Engines
     "ProjectStore",
     "RepoGrounding",
     "ProjectDiscovery",
     "ProjectEngine",
+    "KnowledgeGraph",
+    "ContradictionManager",
+    "DomainRouter",
     # Context
     "IntelligenceContext",
 ]

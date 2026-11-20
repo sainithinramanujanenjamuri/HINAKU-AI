@@ -34,6 +34,9 @@ class ImplementationStatus(str, Enum):
     IN_PROGRESS = "in_progress" # Implementation active but incomplete
     IMPLEMENTED = "implemented" # Implementation claimed; requires verifiable evidence
     VERIFIED = "verified"       # Independently verified through tests, file existence, or execution
+    REJECTED = "rejected"       # Evaluated and dismissed or declined
+    SUPERSEDED = "superseded"   # Replaced by newer or contradictory verified knowledge
+
 
 
 class TaskPriority(str, Enum):
