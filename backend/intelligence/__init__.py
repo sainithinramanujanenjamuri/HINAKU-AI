@@ -18,6 +18,9 @@ from .errors import (
     KnowledgeGraphError,
     ContradictionResolutionError,
     CrossDomainLeakageError,
+    TaskLifecycleViolation,
+    PlanningDependencyError,
+    CriticalApprovalRequiredError,
 )
 from .types import (
     KnowledgeDomain,
@@ -45,6 +48,23 @@ from .graph_types import (
     KnowledgeEdge,
     ContextBundle,
 )
+from .decision_types import (
+    DecisionStatus,
+    UncertaintyLevel,
+    CriticalActionCategory,
+    AlternativeEvaluation,
+    UncertaintyAssessment,
+    DecisionRecommendation,
+    DecisionRecord,
+)
+from .planning_types import (
+    PlanStatus,
+    DependencyType,
+    TaskDependency,
+    ManagedTask,
+    TaskStateTransition,
+    PlanRecord,
+)
 from .project_store import ProjectStore
 from .repo_grounding import RepoGrounding
 from .project_discovery import ProjectDiscovery
@@ -52,6 +72,9 @@ from .project_engine import ProjectEngine
 from .knowledge_graph import KnowledgeGraph
 from .contradiction_manager import ContradictionManager
 from .domain_router import DomainRouter
+from .decision_engine import DecisionEngine
+from .planning_engine import PlanningEngine
+from .task_manager import TaskManager
 from .context import IntelligenceContext
 
 __all__ = [
@@ -69,6 +92,9 @@ __all__ = [
     "KnowledgeGraphError",
     "ContradictionResolutionError",
     "CrossDomainLeakageError",
+    "TaskLifecycleViolation",
+    "PlanningDependencyError",
+    "CriticalApprovalRequiredError",
     # Types & Enums
     "KnowledgeDomain",
     "SourceAuthority",
@@ -92,6 +118,21 @@ __all__ = [
     "EdgeRelationship",
     "KnowledgeEdge",
     "ContextBundle",
+    # Decision Types
+    "DecisionStatus",
+    "UncertaintyLevel",
+    "CriticalActionCategory",
+    "AlternativeEvaluation",
+    "UncertaintyAssessment",
+    "DecisionRecommendation",
+    "DecisionRecord",
+    # Planning & Task Types
+    "PlanStatus",
+    "DependencyType",
+    "TaskDependency",
+    "ManagedTask",
+    "TaskStateTransition",
+    "PlanRecord",
     # Services & Engines
     "ProjectStore",
     "RepoGrounding",
@@ -100,6 +141,9 @@ __all__ = [
     "KnowledgeGraph",
     "ContradictionManager",
     "DomainRouter",
+    "DecisionEngine",
+    "PlanningEngine",
+    "TaskManager",
     # Context
     "IntelligenceContext",
 ]

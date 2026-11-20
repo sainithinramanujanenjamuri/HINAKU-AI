@@ -69,3 +69,19 @@ class CrossDomainLeakageError(DomainIsolationViolation):
     pass
 
 
+class TaskLifecycleViolation(IntelligenceError):
+    """Raised when an invalid task state transition is attempted or approval preconditions are unmet."""
+    pass
+
+
+class PlanningDependencyError(IntelligenceError):
+    """Raised when a planning operation encounters circular dependencies or missing prerequisite tasks."""
+    pass
+
+
+class CriticalApprovalRequiredError(IntelligenceError):
+    """Raised when an operation requiring explicit owner authorization is initiated without approval."""
+    pass
+
+
+

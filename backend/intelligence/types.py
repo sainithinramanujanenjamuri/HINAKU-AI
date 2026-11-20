@@ -48,13 +48,19 @@ class TaskPriority(str, Enum):
 
 
 class TaskStatus(str, Enum):
-    """Lifecycle states for planned tasks."""
+    """Lifecycle states for managed and planned cognitive tasks."""
+    QUEUED = "queued"                  # Ready in backlog or plan queue
+    ACTIVE = "active"                  # Currently undergoing processing or tracking
+    PAUSED = "paused"                  # Suspended temporarily in favor of higher priority task
+    PENDING_APPROVAL = "pending_approval" # Blocked awaiting explicit owner authorization
+    COMPLETED = "completed"            # Successfully finished
+    FAILED = "failed"                  # Terminated with error or unmet preconditions
+    CANCELLED = "cancelled"            # Aborted by owner or supervisor
+    BLOCKED = "blocked"                # Waiting for prerequisite tasks or external dependency
+    # Backward compatibility aliases
     PENDING = "pending"
     IN_PROGRESS = "in_progress"
-    COMPLETED = "completed"
-    BLOCKED = "blocked"
-    FAILED = "failed"
-    PENDING_APPROVAL = "pending_approval"
+
 
 
 @dataclass
