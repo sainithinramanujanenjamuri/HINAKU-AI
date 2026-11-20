@@ -176,12 +176,30 @@ class Settings:
 
     @property
     def api_base_url(self) -> str:
+        yaml_url = self.api.get("base_url")
+        if yaml_url and str(yaml_url).strip():
+            return str(yaml_url).strip().rstrip("/")
+        import os
+        from dotenv import load_dotenv
+        load_dotenv(ROOT_DIR / ".env")
+        env_url = os.getenv("HINAKU_API_BASE_URL") or os.getenv("API_BASE_URL")
+        if env_url and env_url.strip():
+            return env_url.strip().rstrip("/")
         default_url = "https://api.anthropic.com/v1" if "anthropic" in self.api_provider else "https://api.openai.com/v1"
-        return self.api.get("base_url", default_url).rstrip("/")
+        return default_url
 
     @property
     def api_model(self) -> str:
-        return self.api.get("model", "")
+        yaml_model = self.api.get("model")
+        if yaml_model and str(yaml_model).strip():
+            return str(yaml_model).strip()
+        import os
+        from dotenv import load_dotenv
+        load_dotenv(ROOT_DIR / ".env")
+        env_model = os.getenv("HINAKU_API_MODEL") or os.getenv("MODEL_NAME")
+        if env_model and env_model.strip():
+            return env_model.strip()
+        return ""
 
     @property
     def api_key_env(self) -> str:
@@ -430,10 +448,18 @@ class Settings:
 
 
 _settings_instance: Optional[Settings] = None
+_last_config_mtime: Optional[float] = None
 
 def get_settings(reload: bool = False) -> Settings:
-    global _settings_instance
-    if _settings_instance is None or reload:
+    global _settings_instance, _last_config_mtime
+    try:
+        current_mtime = CONFIG_PATH.stat().st_mtime if CONFIG_PATH.exists() else None
+    except Exception:
+        current_mtime = None
+
+    needs_reload = reload or (_settings_instance is None) or (current_mtime is not None and current_mtime != _last_config_mtime)
+    if needs_reload:
         _settings_instance = Settings(load_settings())
+        _last_config_mtime = current_mtime
     return _settings_instance
 

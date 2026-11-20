@@ -1,10 +1,11 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import List, Optional
 from backend.config import get_settings
 from backend.memory.storage import MemoryStorage
+from backend.security.auth import require_session_auth
 
-router = APIRouter(prefix="/memories", tags=["memories"])
+router = APIRouter(prefix="/memories", tags=["memories"], dependencies=[Depends(require_session_auth)])
 settings = get_settings()
 
 def get_storage():

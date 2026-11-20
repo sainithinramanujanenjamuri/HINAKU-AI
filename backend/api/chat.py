@@ -5,10 +5,11 @@ import time
 import uuid
 import logging
 from typing import List, Optional, Dict, Any, Tuple
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException, Response, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from backend.config import get_settings
+from backend.security.auth import require_session_auth
 from backend.models.ollama_adapter import OllamaAdapter
 from backend.models.api_adapter import ApiAdapter
 from backend.models.router import ModelRouter
@@ -168,7 +169,7 @@ async def get_ollama_health():
     return health
 
 @router.post("/chat")
-async def chat_endpoint(req: ChatRequest, response: Response):
+async def chat_endpoint(req: ChatRequest, response: Response, _auth: str = Depends(require_session_auth)):
     t_req_start = time.perf_counter()
     if not req.messages:
         raise HTTPException(status_code=400, detail="Messages list cannot be empty")
@@ -454,10 +455,18 @@ async def chat_endpoint(req: ChatRequest, response: Response):
             last_backend = m["backend"]
             break
 
-    messages_to_trim = [{"role": m["role"], "content": m["content"]} for m in db_messages]
+    def clean_history_text(txt: str, role: str) -> str:
+        if not txt or role != "assistant":
+            return txt or ""
+        # Exclude citation suffix lines from prior assistant history sent to model
+        c = re.sub(r"(?im)^\s*\*?(?:Based\s+on|Source:)\s+.*?(?:\*|\.)?\s*$", "", txt)
+        c = re.sub(r"(?i)\n+\s*\*?(?:Based\s+on|Source:)\s+.*?(?:\*|\.)?\s*$", "", c)
+        return c.strip()
+
+    messages_to_trim = [{"role": m["role"], "content": clean_history_text(m["content"], m["role"])} for m in db_messages]
     if not messages_to_trim:
         messages_to_trim = [
-            {"role": m.role, "content": m.content}
+            {"role": m.role, "content": clean_history_text(m.content, m.role)}
             for m in req.messages
             if m.role != "system"
         ]
@@ -472,6 +481,20 @@ async def chat_endpoint(req: ChatRequest, response: Response):
     has_attachments = attachment_manager.has_attachments(conv_id)
 
     # Identify target backend for memory retrieval privacy rule
+    from backend.models.router import is_personal_statement
+    from backend.guards import is_sensitive_topic
+    has_personal_history = any(
+        (m.get("role") == "user" and (is_personal_statement(m.get("content", "")) or is_sensitive_topic(m.get("content", ""))[0]))
+        for m in messages_to_trim
+    )
+
+    # Sync fresh settings (dynamic reload on file modification)
+    curr_settings = get_settings()
+    api_adapter.provider = curr_settings.api_provider
+    api_adapter.base_url = curr_settings.api_base_url
+    api_adapter.model = curr_settings.api_model
+    api_adapter.api_key = curr_settings.get_api_key()
+
     t_router_start = time.perf_counter()
     router_decision = model_router.decide_backend(
         latest_user_text,
@@ -479,7 +502,8 @@ async def chat_endpoint(req: ChatRequest, response: Response):
         last_backend=last_backend,
         is_detail=is_detail,
         has_attachments=has_attachments,
-        requested_model=req.model
+        requested_model=req.model,
+        has_personal_context=has_personal_history
     )
     router_ms = int((time.perf_counter() - t_router_start) * 1000)
     is_api = (router_decision.target_backend == "api")
@@ -528,8 +552,10 @@ async def chat_endpoint(req: ChatRequest, response: Response):
     trimmed_messages = trim_history(full_messages, max_tokens=settings.max_context_tokens)
     prompt_assembly_ms = int((time.perf_counter() - t_prompt_start) * 1000)
 
-    # Re-read fresh API key if changed in environment
+    # Re-read fresh API key, base URL, and model if changed in environment / config
     api_adapter.api_key = settings.get_api_key()
+    api_adapter.base_url = settings.api_base_url
+    api_adapter.model = settings.api_model
 
     target_model = req.model if (req.model and (req.model in settings.allowed_local_models or req.model == settings.api_model)) else settings.default_local_model
     target_opts = dict(settings.get_model_options(target_model))
@@ -620,6 +646,7 @@ async def chat_endpoint(req: ChatRequest, response: Response):
                 unit_total_topics = len(unit_sections)
                 # Measured average per topic including draft + style check/addendum + verification
                 measured_avg_per_topic = 19.5
+                rolling_sec_per_topic = measured_avg_per_topic
                 initial_est_seconds = round(measured_avg_per_topic * unit_total_topics)
                 initial_low = round(initial_est_seconds * 0.85)
                 initial_high = round(initial_est_seconds * 1.15)
@@ -1042,16 +1069,23 @@ async def chat_endpoint(req: ChatRequest, response: Response):
             final_reply = re.sub(r"<(script|style|button|a|div|span|p|h[1-6])[^>]*>.*?</\1>", "", final_reply, flags=re.IGNORECASE | re.DOTALL)
             final_reply = re.sub(r"<[^>]+>", "", final_reply).strip()
 
+            grounded_sections_meta = []
             if has_attachments and not is_overview_intent(latest_user_text) and doc_context:
-                from backend.attachments.citations import format_outline_citations
-                coverage_note = format_outline_citations(coverage_meta.get("sections_meta", []))
-                if not coverage_note and coverage_meta and coverage_meta.get("sections"):
-                    sec_names = ", ".join(coverage_meta["sections"][:2])
-                    p_nums = ", ".join(map(str, coverage_meta["pages"][:2]))
-                    coverage_note = f"\n\n*Based on {sec_names} (pp. {p_nums}).*"
+                from backend.attachments.citations import format_outline_citations, check_section_answer_overlap
+                all_conv_secs = attachment_manager.get_sections(conv_id)
+                for sm in coverage_meta.get("sections_meta", []):
+                    sec_title = sm.get("title", "")
+                    sec_text = sm.get("text", "")
+                    if not sec_text:
+                        for so in all_conv_secs:
+                            if so.get("title", "").strip().lower() == sec_title.strip().lower():
+                                sec_text = so.get("text", "")
+                                break
+                    if check_section_answer_overlap(final_reply, sec_text, sec_title):
+                        grounded_sections_meta.append(sm)
 
+                coverage_note = format_outline_citations(grounded_sections_meta)
                 if coverage_note:
-                    final_reply += coverage_note
                     yield f"data: {json.dumps({'type': 'chunk', 'chunk': coverage_note, 'backend': used_backend, 'model': used_model, 'conversation_id': conv_id})}\n\n"
                     # Emit structured action chip only for document answers
                     message_actions = [{"label": "Explain the whole document →", "prompt": "explain this document to me", "style": "secondary"}]
@@ -1062,14 +1096,20 @@ async def chat_endpoint(req: ChatRequest, response: Response):
             ast_msg = None
             inter_id = None
             if final_reply.strip():
-                # Persist message with model & backend
+                # Persist message with model & backend and citations in metadata
+                msg_meta = {}
+                if message_actions:
+                    msg_meta["actions"] = message_actions
+                if grounded_sections_meta:
+                    msg_meta["citations"] = grounded_sections_meta
+
                 ast_msg = history_manager.add_message(
                     conv_id,
                     "assistant",
                     final_reply,
                     model=used_model,
                     backend=used_backend,
-                    metadata={"actions": message_actions} if message_actions else None
+                    metadata=msg_meta if msg_meta else None
                 )
                 # Log interaction
                 inter_id = history_manager.log_interaction(
@@ -1206,21 +1246,30 @@ async def chat_endpoint(req: ChatRequest, response: Response):
             is_detail=is_detail,
             local_adapter=local_adapter,
             settings=settings,
-            messages_for_regen=trimmed_messages
+            messages_for_regen=trimmed_messages,
+            has_attachments=has_attachments
         )
 
-        from backend.attachments.citations import strip_wrapper_tags_and_extract_citations, format_outline_citations
+        from backend.attachments.citations import strip_wrapper_tags_and_extract_citations, format_outline_citations, check_section_answer_overlap
         final_reply, doc_citations = strip_wrapper_tags_and_extract_citations(final_reply)
 
         message_actions = None
+        grounded_sections_meta = []
         if has_attachments and not is_overview_intent(latest_user_text) and doc_context:
-            coverage_note = format_outline_citations(coverage_meta.get("sections_meta", []))
-            if not coverage_note and coverage_meta and coverage_meta.get("sections"):
-                sec_names = ", ".join(coverage_meta["sections"][:2])
-                p_nums = ", ".join(map(str, coverage_meta["pages"][:2]))
-                coverage_note = f"\n\n*Based on {sec_names} (pp. {p_nums}).*"
+            all_conv_secs = attachment_manager.get_sections(conv_id)
+            for sm in coverage_meta.get("sections_meta", []):
+                sec_title = sm.get("title", "")
+                sec_text = sm.get("text", "")
+                if not sec_text:
+                    for so in all_conv_secs:
+                        if so.get("title", "").strip().lower() == sec_title.strip().lower():
+                            sec_text = so.get("text", "")
+                            break
+                if check_section_answer_overlap(final_reply, sec_text, sec_title):
+                    grounded_sections_meta.append(sm)
+
+            coverage_note = format_outline_citations(grounded_sections_meta)
             if coverage_note:
-                final_reply += coverage_note
                 message_actions = [{"label": "Explain the whole document →", "prompt": "explain this document to me", "style": "secondary"}]
 
         latency_breakdown = {
@@ -1230,13 +1279,19 @@ async def chat_endpoint(req: ChatRequest, response: Response):
             "memory_ms": memory_ms
         }
 
+        msg_meta = {}
+        if message_actions:
+            msg_meta["actions"] = message_actions
+        if grounded_sections_meta:
+            msg_meta["citations"] = grounded_sections_meta
+
         ast_msg = history_manager.add_message(
             conv_id,
             "assistant",
             final_reply,
             model=used_model,
             backend=used_backend,
-            metadata={"actions": message_actions} if message_actions else None
+            metadata=msg_meta if msg_meta else None
         )
         inter_id = history_manager.log_interaction(
             conv_id=conv_id,

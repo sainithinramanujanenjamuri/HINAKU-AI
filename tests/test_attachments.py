@@ -331,7 +331,8 @@ def test_api_attachments_crud():
             {"filename": "spec.txt", "content_base64": b64, "mime_type": "text/plain"}
         ]
     }
-    res_upload = client.post(f"/api/conversations/{conv_id}/attachments", json=payload)
+    with patch("backend.attachments.manager.check_disk_space"):
+        res_upload = client.post(f"/api/conversations/{conv_id}/attachments", json=payload)
     assert res_upload.status_code == 200
     data = res_upload.json()
     assert data["status"] == "success"

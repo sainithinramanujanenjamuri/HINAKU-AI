@@ -67,15 +67,74 @@ def strip_wrapper_tags_and_extract_citations(text: str) -> Tuple[str, List[Dict[
     # 3. Strip any dangling open/close <document_reference> tags
     cleaned = WRAPPER_TAG_REGEX.sub("", cleaned)
 
-    # 4. Strip any model-written citations or pseudo-citations
-    cleaned = re.sub(r"(?i)\n*\s*\*?Based\s+on\s+.*?(?:\(pp?\.?\s*\d+(?:[–\-]\d+)?\))?\*?\s*$", "", cleaned).strip()
-    cleaned = re.sub(r"(?i)\n*\s*\*?Based\s+on\s+(?:Topic|Session)\s+\d+.*?\*?\s*", "", cleaned).strip()
+    # 4. Strip any model-written citations or pseudo-citations with tolerant patterns
+    # Tolerant pattern matches: "*Based on ...*", "Based on ...", "*Source: ...*", "According to ...", etc.
+    cleaned = re.sub(r"(?im)^\s*\*?(?:Based\s+on|Source:|According\s+to|References?:|Ref:)\s+.*?(?:\*|\.)?\s*$", "", cleaned)
+    cleaned = re.sub(r"(?i)\n+\s*\*?(?:Based\s+on|Source:|According\s+to)\s+.*?(?:\*|\.)?\s*$", "", cleaned)
     cleaned = re.sub(r"\[Explain the whole document\]\([^)]*\)", "", cleaned).strip()
 
     # 5. Clean up excessive trailing newlines
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
 
     return cleaned, citations
+
+
+def check_section_answer_overlap(
+    answer: str,
+    section_text: str,
+    section_title: str = "",
+    min_distinctive_ngrams: int = 2
+) -> bool:
+    """
+    Verifies that the answer actually used/grounded in this section's content:
+    Checks for distinctive content words/n-grams between the section and the answer.
+    Prevents citing sections that were retrieved but not actually used by the model
+    (e.g., citing Unity UI when answering about Player Types, or Topic 6 when answering Topic 7).
+    """
+    if not answer or not (section_text or section_title):
+        return False
+
+    a_lower = answer.lower()
+    t_lower = (section_title or "").lower()
+    s_lower = (section_text or "").lower()
+
+    stopwords = {
+        "this", "that", "these", "those", "with", "from", "have", "been", "were",
+        "they", "what", "when", "where", "which", "will", "would", "could", "should",
+        "about", "their", "there", "other", "after", "before", "between", "under",
+        "above", "notes", "based", "according", "document", "unit", "section", "topic",
+        "also", "into", "over", "such", "than", "more", "most", "some", "many", "each"
+    }
+
+    # Distinctive words from section (length >= 4, non-stopword)
+    combined = t_lower + " " + s_lower
+    sec_words = [w for w in re.findall(r"\b[a-z]{4,}\b", combined) if w not in stopwords]
+    if not sec_words:
+        return False
+
+    # Check for distinctive bigrams
+    bigrams = set()
+    for i in range(len(sec_words) - 1):
+        w1, w2 = sec_words[i], sec_words[i+1]
+        if w1 != w2:
+            bigrams.add(f"{w1} {w2}")
+
+    shared_bigrams = [bg for bg in bigrams if bg in a_lower]
+    if len(shared_bigrams) >= min_distinctive_ngrams:
+        return True
+
+    # Check for distinctive terms (length >= 6)
+    distinct_terms = set(w for w in sec_words if len(w) >= 6)
+    shared_terms = [w for w in distinct_terms if re.search(r"\b" + re.escape(w) + r"\b", a_lower)]
+    if len(shared_terms) >= 3:
+        return True
+
+    # Check if key title phrase appears in answer (e.g. "player types", "mda framework", "mlsecops", "evasion")
+    clean_title = re.sub(r"^(?:Topic|Session|Section|\d+[\.\s\-]+)+", "", section_title, flags=re.IGNORECASE).strip().lower()
+    if len(clean_title) >= 5 and clean_title in a_lower:
+        return True
+
+    return False
 
 
 def format_outline_citations(sections_meta: List[Dict[str, Any]]) -> str:

@@ -1,5 +1,5 @@
 from pathlib import Path
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 
@@ -9,6 +9,7 @@ from backend.training.train import QLoRATrainer
 from backend.training.evaluate import EvaluationHarness
 from backend.training.promote import ModelPromoter
 from backend.config import get_settings
+from backend.security.auth import require_session_auth
 
 router = APIRouter(prefix="/training", tags=["training"])
 
@@ -46,13 +47,13 @@ def get_promoter() -> ModelPromoter:
     return ModelPromoter()
 
 @router.get("/curate")
-async def get_curation_summary_endpoint():
+async def get_curation_summary_endpoint(_auth: str = Depends(require_session_auth)):
     curator = get_curator()
     summary = curator.get_curation_summary()
     return summary
 
 @router.post("/curate/exclude")
-async def exclude_interaction_endpoint(req: ExcludeRequest):
+async def exclude_interaction_endpoint(req: ExcludeRequest, _auth: str = Depends(require_session_auth)):
     curator = get_curator()
     ok = curator.exclude_interaction(req.interaction_id)
     if not ok:
@@ -60,7 +61,7 @@ async def exclude_interaction_endpoint(req: ExcludeRequest):
     return {"status": "excluded", "interaction_id": req.interaction_id}
 
 @router.post("/datasets/build")
-async def build_dataset_endpoint(req: BuildDatasetRequest):
+async def build_dataset_endpoint(req: BuildDatasetRequest, _auth: str = Depends(require_session_auth)):
     curator = get_curator()
     jsonl_path, metadata = curator.build_dataset(
         excluded_ids=req.excluded_interaction_ids,
@@ -73,17 +74,17 @@ async def build_dataset_endpoint(req: BuildDatasetRequest):
     }
 
 @router.get("/datasets")
-async def list_datasets_endpoint():
+async def list_datasets_endpoint(_auth: str = Depends(require_session_auth)):
     curator = get_curator()
     return curator.list_datasets()
 
 @router.get("/preflight")
-async def get_preflight_endpoint():
+async def get_preflight_endpoint(_auth: str = Depends(require_session_auth)):
     trainer = get_trainer()
     return trainer.run_preflight_check()
 
 @router.post("/export-cloud")
-async def export_cloud_bundle_endpoint(req: ExportCloudRequest):
+async def export_cloud_bundle_endpoint(req: ExportCloudRequest, _auth: str = Depends(require_session_auth)):
     settings = get_settings()
     dataset_path = settings.datasets_dir / req.version / "train.jsonl"
     if not dataset_path.exists():
@@ -97,7 +98,7 @@ async def export_cloud_bundle_endpoint(req: ExportCloudRequest):
     }
 
 @router.get("/promotions")
-async def get_promotions_endpoint():
+async def get_promotions_endpoint(_auth: str = Depends(require_session_auth)):
     promoter = get_promoter()
     return {
         "active_model": promoter.get_active_model(),
@@ -105,19 +106,19 @@ async def get_promotions_endpoint():
     }
 
 @router.get("/pending-approval")
-async def get_pending_approval_endpoint():
+async def get_pending_approval_endpoint(_auth: str = Depends(require_session_auth)):
     promoter = get_promoter()
     candidate = promoter.get_pending_candidate()
     return candidate or {"status": "none"}
 
 @router.post("/reject-pending")
-async def reject_pending_endpoint():
+async def reject_pending_endpoint(_auth: str = Depends(require_session_auth)):
     promoter = get_promoter()
     promoter.clear_pending_candidate()
     return {"status": "rejected"}
 
 @router.post("/promote")
-async def promote_model_endpoint(req: PromoteRequest):
+async def promote_model_endpoint(req: PromoteRequest, _auth: str = Depends(require_session_auth)):
     promoter = get_promoter()
     if not req.confirmed:
         raise HTTPException(
@@ -137,7 +138,7 @@ async def promote_model_endpoint(req: PromoteRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.post("/rollback")
-async def rollback_model_endpoint(req: RollbackRequest):
+async def rollback_model_endpoint(req: RollbackRequest, _auth: str = Depends(require_session_auth)):
     promoter = get_promoter()
     try:
         record = promoter.rollback(target_version=req.target_version)

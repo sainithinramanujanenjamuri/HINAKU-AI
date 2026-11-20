@@ -8,6 +8,36 @@ root_dir = Path(__file__).resolve().parent.parent
 if str(root_dir) not in sys.path:
     sys.path.insert(0, str(root_dir))
 
+from fastapi.testclient import TestClient
+from httpx import AsyncClient
+from backend.security.auth import get_active_session_token
+
+_orig_test_client_init = TestClient.__init__
+
+def _patched_test_client_init(self, app, *args, **kwargs):
+    headers = kwargs.get("headers")
+    if headers is None:
+        headers = {}
+    if "X-Hinaku-Token" not in headers and "x-hinaku-token" not in headers:
+        headers["X-Hinaku-Token"] = get_active_session_token()
+    kwargs["headers"] = headers
+    _orig_test_client_init(self, app, *args, **kwargs)
+
+TestClient.__init__ = _patched_test_client_init
+
+_orig_async_client_init = AsyncClient.__init__
+
+def _patched_async_client_init(self, *args, **kwargs):
+    headers = kwargs.get("headers")
+    if headers is None:
+        headers = {}
+    if isinstance(headers, dict) and "X-Hinaku-Token" not in headers and "x-hinaku-token" not in headers:
+        headers["X-Hinaku-Token"] = get_active_session_token()
+    kwargs["headers"] = headers
+    _orig_async_client_init(self, *args, **kwargs)
+
+AsyncClient.__init__ = _patched_async_client_init
+
 REAL_DB_PATH = root_dir / "data" / "hinaku.db"
 REAL_DATA_DIR = root_dir / "data"
 

@@ -26,11 +26,22 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="HINAKU API", version="0.1.0", lifespan=lifespan)
 
+LOCAL_ALLOWED_ORIGINS = [
+    "http://127.0.0.1:8000",
+    "http://localhost:8000",
+    "http://127.0.0.1:5173",
+    "http://localhost:5173",
+    "pywebview://localhost",
+    "app://localhost",
+    "null",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=LOCAL_ALLOWED_ORIGINS,
+    allow_origin_regex=r"^https?://(127\.0\.0\.1|localhost)(:\d+)?$",
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 

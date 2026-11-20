@@ -3,6 +3,8 @@ import re
 from typing import Any, AsyncGenerator, Dict, List, NamedTuple, Optional
 from .ollama_adapter import OllamaAdapter
 from .api_adapter import ApiAdapter
+from .privacy_gate import OutboundPrivacyGate, OutboundPrivacyViolation
+from backend.guards import is_sensitive_topic
 
 logger = logging.getLogger("hinaku.router")
 
@@ -234,7 +236,8 @@ class ModelRouter:
         last_backend: Optional[str] = None,
         is_detail: bool = False,
         has_attachments: bool = False,
-        requested_model: Optional[str] = None
+        requested_model: Optional[str] = None,
+        has_personal_context: bool = False
     ) -> RouterDecision:
         # Strict privacy: conversations with attachments are locked to local model under all modes
         if has_attachments:
@@ -245,13 +248,23 @@ class ModelRouter:
                 notice="Attachment present: locked to local model."
             )
 
-        # Private chats NEVER use API
+        # Private chats NEVER use API under any mode
         if is_private:
             return RouterDecision(
                 target_backend="local",
                 target_model=self.local_adapter.default_model,
                 fallback_allowed=False,
                 notice=None
+            )
+
+        # Personal statements or personal history NEVER use API or fall back to API
+        is_personal = is_personal_statement(user_prompt) or is_sensitive_topic(user_prompt)[0]
+        if is_personal or has_personal_context:
+            return RouterDecision(
+                target_backend="local",
+                target_model=self.local_adapter.default_model,
+                fallback_allowed=False,
+                notice="Personal statements must remain local. Using local model." if (requested_model == self.api_adapter.model or self.mode == "api_only") else None
             )
 
         if self.mode == "local_only":
@@ -373,10 +386,12 @@ class ModelRouter:
                 notice=None
             )
         else:
+            # Fallback allowed only if query does NOT contain personal context
+            allow_fb = self.fallback_on_failure if not (is_personal or has_personal_context) else False
             return RouterDecision(
                 target_backend="local",
                 target_model=self.local_adapter.default_model,
-                fallback_allowed=self.fallback_on_failure,
+                fallback_allowed=allow_fb,
                 notice=None
             )
 
@@ -393,23 +408,48 @@ class ModelRouter:
         has_attachments: bool = False,
         requested_model: Optional[str] = None
     ) -> AsyncGenerator[Dict[str, Any], None]:
+        # Detect if any turn in messages contains personal statements or sensitive topics
+        has_personal_context = any(
+            m.get("role") == "user" and (is_personal_statement(m.get("content", "")) or is_sensitive_topic(m.get("content", ""))[0])
+            for m in messages
+        )
+
         decision = self.decide_backend(
             user_prompt,
             is_private=is_private,
             last_backend=last_backend,
             is_detail=is_detail,
             has_attachments=has_attachments,
-            requested_model=requested_model or override_model
+            requested_model=requested_model or override_model,
+            has_personal_context=has_personal_context
         )
         active_backend = decision.target_backend
         active_model = override_model if (override_model and active_backend == "local") else decision.target_model
         notice = decision.notice
 
+        # Outbound Privacy Gate pre-flight verification if API was selected
+        if active_backend == "api":
+            safety = OutboundPrivacyGate.inspect_payload(
+                messages,
+                is_private=is_private,
+                has_attachments=has_attachments
+            )
+            if not safety.is_safe:
+                logger.warning(f"[Router] Outbound payload blocked by privacy policy: {safety.reason}. Forcing local execution.")
+                active_backend = "local"
+                active_model = override_model or self.local_adapter.default_model
+                notice = "Personal or private context detected; routed locally for privacy."
+
         if active_backend == "api":
             try:
-                # Attempt primary API streaming
+                # Attempt primary API streaming with privacy gate enforced
                 started = False
-                async for chunk in self.api_adapter.stream_chat(messages, model=active_model):
+                async for chunk in self.api_adapter.stream_chat(
+                    messages,
+                    model=active_model,
+                    is_private=is_private,
+                    has_attachments=has_attachments
+                ):
                     started = True
                     yield {
                         "chunk": chunk,
@@ -492,11 +532,35 @@ class ModelRouter:
         except Exception as e:
             logger.error(f"Local backend failed: {e}")
             if active_backend == "local" and decision.fallback_allowed and not is_private and self.api_adapter.api_key:
-                # Fallback to API if local is down
+                # Outbound Privacy Gate inspection BEFORE API fallback
+                safety = OutboundPrivacyGate.inspect_payload(
+                    messages,
+                    is_private=is_private,
+                    has_attachments=has_attachments
+                )
+                if not safety.is_safe:
+                    logger.warning(f"[Router] Refusing API fallback: outbound payload contains private or personal context ({safety.reason}).")
+                    yield {
+                        "type": "error",
+                        "error_type": "local_error",
+                        "chunk": "",
+                        "error": f"Local model failed: {str(e)} (API fallback blocked: payload contains private or personal context)",
+                        "backend": "local",
+                        "model": active_model,
+                        "notice": f"Local model error: {str(e)}"
+                    }
+                    return
+
+                # Fallback to API if local is down and payload is strictly safe
                 fallback_msg = f"Local model offline: {str(e)}. Fell back to API."
                 logger.warning(fallback_msg)
                 try:
-                    async for chunk in self.api_adapter.stream_chat(messages, model=self.api_adapter.model):
+                    async for chunk in self.api_adapter.stream_chat(
+                        messages,
+                        model=self.api_adapter.model,
+                        is_private=is_private,
+                        has_attachments=has_attachments
+                    ):
                         yield {
                             "chunk": chunk,
                             "backend": "api",

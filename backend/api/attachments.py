@@ -10,10 +10,11 @@ FastAPI routes for file attachments:
 import base64
 import logging
 from typing import List, Optional
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
 
 from backend.attachments import AttachmentManager, AttachmentValidationError
+from backend.security.auth import require_session_auth
 
 logger = logging.getLogger("hinaku.api.attachments")
 
@@ -36,7 +37,8 @@ class UploadAttachmentsRequest(BaseModel):
 @router.post("/{conversation_id}/attachments")
 async def upload_attachments(
     conversation_id: str,
-    req: UploadAttachmentsRequest
+    req: UploadAttachmentsRequest,
+    _auth: str = Depends(require_session_auth)
 ):
     if not req.files:
         raise HTTPException(
@@ -98,7 +100,7 @@ async def upload_attachments(
     }
 
 @router.get("/{conversation_id}/attachments")
-async def list_attachments(conversation_id: str):
+async def list_attachments(conversation_id: str, _auth: str = Depends(require_session_auth)):
     mgr = get_attachment_manager()
     attachments = mgr.list_attachments(conversation_id)
     usage = mgr.get_total_storage_usage()
@@ -110,7 +112,7 @@ async def list_attachments(conversation_id: str):
     }
 
 @router.delete("/{conversation_id}/attachments/{attachment_id}")
-async def delete_attachment(conversation_id: str, attachment_id: str):
+async def delete_attachment(conversation_id: str, attachment_id: str, _auth: str = Depends(require_session_auth)):
     mgr = get_attachment_manager()
     success = mgr.delete_attachment(attachment_id)
     if not success:
