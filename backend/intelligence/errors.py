@@ -84,4 +84,25 @@ class CriticalApprovalRequiredError(IntelligenceError):
     pass
 
 
+class ModelSelectionError(IntelligenceError):
+    """Raised when no suitable model can be identified to satisfy task constraints or privacy requirements."""
+    pass
+
+
+class ModelExecutionError(IntelligenceError):
+    """Raised when a selected model fails during execution and all safe fallbacks are exhausted."""
+    pass
+
+
+class HardwareConstraintViolation(IntelligenceError):
+    """Raised when model selection or execution exceeds local hardware capacity (e.g. 6GB VRAM ceiling)."""
+    pass
+
+
+class UnsuitableModelError(IntelligenceError):
+    """Raised when a requested or overridden model lacks mandatory capabilities or violates privacy rules."""
+    pass
+
+
+
 

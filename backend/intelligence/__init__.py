@@ -21,6 +21,10 @@ from .errors import (
     TaskLifecycleViolation,
     PlanningDependencyError,
     CriticalApprovalRequiredError,
+    ModelSelectionError,
+    ModelExecutionError,
+    HardwareConstraintViolation,
+    UnsuitableModelError,
 )
 from .types import (
     KnowledgeDomain,
@@ -32,6 +36,17 @@ from .types import (
     CognitiveTask,
     ReasoningStep,
     ReasoningResult,
+)
+from .orchestrator_types import (
+    ModelExecutionTarget,
+    ModelAvailability,
+    ModelApprovalStatus,
+    ModelCapability,
+    ModelMetadata,
+    TaskRequirements,
+    CapabilityAssessment,
+    ModelSelectionResult,
+    OrchestratedExecutionResult,
 )
 from .project_types import (
     ProjectStatus,
@@ -75,6 +90,9 @@ from .domain_router import DomainRouter
 from .decision_engine import DecisionEngine
 from .planning_engine import PlanningEngine
 from .task_manager import TaskManager
+from .model_registry import ModelRegistry
+from .capability_assessor import CapabilityAssessor
+from .model_orchestrator import ModelOrchestrator
 from .context import IntelligenceContext
 
 __all__ = [
@@ -95,6 +113,10 @@ __all__ = [
     "TaskLifecycleViolation",
     "PlanningDependencyError",
     "CriticalApprovalRequiredError",
+    "ModelSelectionError",
+    "ModelExecutionError",
+    "HardwareConstraintViolation",
+    "UnsuitableModelError",
     # Types & Enums
     "KnowledgeDomain",
     "SourceAuthority",
@@ -105,6 +127,16 @@ __all__ = [
     "CognitiveTask",
     "ReasoningStep",
     "ReasoningResult",
+    # Model Orchestration Types
+    "ModelExecutionTarget",
+    "ModelAvailability",
+    "ModelApprovalStatus",
+    "ModelCapability",
+    "ModelMetadata",
+    "TaskRequirements",
+    "CapabilityAssessment",
+    "ModelSelectionResult",
+    "OrchestratedExecutionResult",
     # Project Intelligence Types
     "ProjectStatus",
     "ProjectConfidentiality",
@@ -144,6 +176,9 @@ __all__ = [
     "DecisionEngine",
     "PlanningEngine",
     "TaskManager",
+    "ModelRegistry",
+    "CapabilityAssessor",
+    "ModelOrchestrator",
     # Context
     "IntelligenceContext",
 ]
