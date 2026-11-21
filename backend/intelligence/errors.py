@@ -104,5 +104,16 @@ class UnsuitableModelError(IntelligenceError):
     pass
 
 
+class SafetyBoundaryViolation(IntelligenceError):
+    """Raised when a self-improvement proposal, learning mechanism, or operation attempts to violate inviolable safety boundaries (core persona, security policies, privacy gates, or unauthorized autonomous execution)."""
+    pass
+
+
+class ImprovementEvaluationError(IntelligenceError):
+    """Raised when an improvement proposal evaluation workflow fails due to test regressions, benchmark errors, or invalid candidate states."""
+    pass
+
+
+
 
 

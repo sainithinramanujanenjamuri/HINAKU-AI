@@ -25,6 +25,8 @@ from .errors import (
     ModelExecutionError,
     HardwareConstraintViolation,
     UnsuitableModelError,
+    SafetyBoundaryViolation,
+    ImprovementEvaluationError,
 )
 from .types import (
     KnowledgeDomain,
@@ -36,6 +38,18 @@ from .types import (
     CognitiveTask,
     ReasoningStep,
     ReasoningResult,
+)
+from .learning_types import (
+    FeedbackType,
+    ErrorCategory,
+    WeaknessSeverity,
+    WeaknessStatus,
+    ProposalChangeCategory,
+    ProposalEvaluationStatus,
+    ProposalApprovalStatus,
+    ExperienceRecord,
+    WeaknessRecord,
+    ImprovementProposal,
 )
 from .orchestrator_types import (
     ModelExecutionTarget,
@@ -93,6 +107,9 @@ from .task_manager import TaskManager
 from .model_registry import ModelRegistry
 from .capability_assessor import CapabilityAssessor
 from .model_orchestrator import ModelOrchestrator
+from .experience_logger import ExperienceLogger
+from .weakness_catalog import WeaknessCatalog
+from .improvement_engine import ImprovementProposalEngine
 from .context import IntelligenceContext
 
 __all__ = [
@@ -117,6 +134,8 @@ __all__ = [
     "ModelExecutionError",
     "HardwareConstraintViolation",
     "UnsuitableModelError",
+    "SafetyBoundaryViolation",
+    "ImprovementEvaluationError",
     # Types & Enums
     "KnowledgeDomain",
     "SourceAuthority",
@@ -127,6 +146,17 @@ __all__ = [
     "CognitiveTask",
     "ReasoningStep",
     "ReasoningResult",
+    # Learning & Experience Types
+    "FeedbackType",
+    "ErrorCategory",
+    "WeaknessSeverity",
+    "WeaknessStatus",
+    "ProposalChangeCategory",
+    "ProposalEvaluationStatus",
+    "ProposalApprovalStatus",
+    "ExperienceRecord",
+    "WeaknessRecord",
+    "ImprovementProposal",
     # Model Orchestration Types
     "ModelExecutionTarget",
     "ModelAvailability",
@@ -179,6 +209,9 @@ __all__ = [
     "ModelRegistry",
     "CapabilityAssessor",
     "ModelOrchestrator",
+    "ExperienceLogger",
+    "WeaknessCatalog",
+    "ImprovementProposalEngine",
     # Context
     "IntelligenceContext",
 ]

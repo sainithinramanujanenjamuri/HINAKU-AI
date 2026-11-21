@@ -22,3 +22,4 @@ Each milestone report must document:
 - [`PHASE_1_MILESTONE_3_COMPLETION_AND_ACCEPTANCE_REPORT.md`](file:///d:/HINAKU-AI/docs/milestone_reports/PHASE_1_MILESTONE_3_COMPLETION_AND_ACCEPTANCE_REPORT.md) — Memory and Knowledge Architecture
 - [`PHASE_1_MILESTONE_4_COMPLETION_AND_ACCEPTANCE_REPORT.md`](file:///d:/HINAKU-AI/docs/milestone_reports/PHASE_1_MILESTONE_4_COMPLETION_AND_ACCEPTANCE_REPORT.md) — Decision and Planning Foundation
 - [`PHASE_1_MILESTONE_5_COMPLETION_AND_ACCEPTANCE_REPORT.md`](file:///d:/HINAKU-AI/docs/milestone_reports/PHASE_1_MILESTONE_5_COMPLETION_AND_ACCEPTANCE_REPORT.md) — Adaptive Model Orchestration
+- [`PHASE_1_MILESTONE_6_COMPLETION_AND_ACCEPTANCE_REPORT.md`](file:///d:/HINAKU-AI/docs/milestone_reports/PHASE_1_MILESTONE_6_COMPLETION_AND_ACCEPTANCE_REPORT.md) — Controlled Learning Foundation
