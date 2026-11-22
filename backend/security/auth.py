@@ -55,6 +55,9 @@ CRITICAL_OWNER_ACTIONS: Set[str] = {
     "delete_conversation",
     "export_all_data",
     "modify_security_settings",
+    "restore_backup",
+    "approve_critical_task",
+    "full_learning_wipe",
 }
 
 

@@ -5,6 +5,9 @@ from .settings import router as settings_router
 from .interactions import router as interactions_router
 from .training import router as training_router
 from .self_build import router as self_build_router
+from .projects import router as projects_router
+from .tasks import router as tasks_router
+from .learning import router as learning_router
 
 __all__ = [
     "chat_router",
@@ -13,5 +16,8 @@ __all__ = [
     "settings_router",
     "interactions_router",
     "training_router",
-    "self_build_router"
+    "self_build_router",
+    "projects_router",
+    "tasks_router",
+    "learning_router",
 ]

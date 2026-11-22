@@ -11,14 +11,36 @@ from backend.api import (
     settings_router,
     interactions_router,
     training_router,
-    self_build_router
+    self_build_router,
+    projects_router,
+    tasks_router,
+    learning_router,
 )
 from backend.api.demo import router as demo_router
 from backend.api.attachments import router as attachments_router
 from backend.config import ROOT_DIR
+from backend.database.backup import get_backup_manager
+import logging
+
+logger = logging.getLogger("hinaku.main")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Milestone 7 Step 1: Startup Multi-Database Integrity Check (Fail-Closed)
+    backup_mgr = get_backup_manager()
+    integrity_result = backup_mgr.verify_startup_integrity()
+    if not integrity_result["ok"]:
+        failed = integrity_result.get("failed_databases", [])
+        logger.critical(
+            f"FATAL: Database startup integrity check failed on database(s): {failed}. "
+            f"Details: {integrity_result}. Application startup halted to preserve damaged files."
+        )
+        raise RuntimeError(
+            f"Database integrity verification failed on startup: {failed}. "
+            "Startup halted to preserve files for recovery."
+        )
+    logger.info("Database startup integrity check passed for both databases.")
+
     import asyncio
     import backend.models.prewarm as prewarm_module
     asyncio.create_task(prewarm_module.prewarm_local_models())
@@ -52,6 +74,9 @@ app.include_router(settings_router, prefix="/api")
 app.include_router(interactions_router, prefix="/api")
 app.include_router(training_router, prefix="/api")
 app.include_router(self_build_router, prefix="/api")
+app.include_router(projects_router, prefix="/api")
+app.include_router(tasks_router, prefix="/api")
+app.include_router(learning_router, prefix="/api")
 app.include_router(demo_router, prefix="/api")
 app.include_router(attachments_router)
 

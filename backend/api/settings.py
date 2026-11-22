@@ -23,6 +23,14 @@ class UpdateSettingsRequest(BaseModel):
 class WipeAllRequest(BaseModel):
     confirm: str
 
+class CreateBackupRequest(BaseModel):
+    description: Optional[str] = None
+
+class BackupRestoreRequest(BaseModel):
+    recovery_set_id: str
+    confirm_destructive_restore: bool = False
+    reason: Optional[str] = ""
+
 def get_history_mgr():
     from backend.api.chat import history_manager
     return history_manager
@@ -168,4 +176,62 @@ async def trigger_self_build_endpoint(_auth: str = Depends(require_session_auth)
         "timestamp": now,
         "message": "Self-build cycle initialized. Ready for dataset curation and evaluation."
     }
+
+@router.post("/backup")
+async def create_backup_endpoint(req: Optional[CreateBackupRequest] = None, _auth: str = Depends(require_session_auth)):
+    """Creates a coordinated recovery set snapshot of both SQLite databases."""
+    from backend.database.backup import get_backup_manager
+    backup_mgr = get_backup_manager()
+    desc = req.description if req else None
+    try:
+        result = backup_mgr.create_coordinated_backup(description=desc)
+        return {
+            "status": "success",
+            "recovery_set": result
+        }
+    except Exception as e:
+        logger.error(f"Failed to create coordinated backup: {e}")
+        raise HTTPException(status_code=500, detail=f"Backup creation failed: {e}")
+
+@router.get("/backup")
+async def list_backups_endpoint(_auth: str = Depends(require_session_auth)):
+    """Lists all available coordinated recovery sets."""
+    from backend.database.backup import get_backup_manager
+    backup_mgr = get_backup_manager()
+    sets = backup_mgr.list_recovery_sets()
+    return {
+        "total_count": len(sets),
+        "retention_count": backup_mgr.retention_count,
+        "recovery_sets": sets
+    }
+
+@router.post("/backup/restore")
+async def restore_backup_endpoint(req: BackupRestoreRequest, _auth: str = Depends(require_session_auth)):
+    """
+    Restores both SQLite databases from a coordinated recovery set.
+    Requires explicit owner confirmation and active desktop session authorization.
+    """
+    if not req.confirm_destructive_restore:
+        raise HTTPException(
+            status_code=400,
+            detail="Destructive restore requires confirm_destructive_restore=True"
+        )
+
+    from backend.database.backup import get_backup_manager
+    backup_mgr = get_backup_manager()
+    try:
+        result = backup_mgr.restore_recovery_set(
+            recovery_set_id=req.recovery_set_id,
+            reason=req.reason or "Owner requested backup restore",
+            has_owner_session=True
+        )
+        return result
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.critical(f"Restore failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 

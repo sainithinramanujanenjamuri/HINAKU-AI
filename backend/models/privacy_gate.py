@@ -77,6 +77,9 @@ FORBIDDEN_SYSTEM_MARKERS = [
     r"</document_reference>",
     r"\[File:\s*[^\]]+,\s*Page:\s*\d+\]",
     r"\[Section:\s*[^\]]+\]",
+    r"### Project Context:.*?\bCONFIDENTIAL\b",
+    r"### Project Context:.*?\bRESTRICTED\b",
+    r"\bConfidentiality\b\s*:\s*(?:CONFIDENTIAL|RESTRICTED)",
 ]
 
 # Sensitive credential patterns from guards that must never leave in unredacted plaintext
@@ -107,7 +110,8 @@ class OutboundPrivacyGate:
         cls,
         messages: Any,
         is_private: Any,
-        has_attachments: Any
+        has_attachments: Any,
+        project_confidentiality: Optional[Union[str, Any]] = None,
     ) -> PrivacyInspectionResult:
         """
         Inspects complete outbound message payload and returns detailed safety evaluation.
@@ -140,6 +144,17 @@ class OutboundPrivacyGate:
                 category="private_conversation",
                 turn_index=None
             )
+
+        # 4. Enforce project confidentiality boundary
+        if project_confidentiality is not None:
+            conf_str = str(getattr(project_confidentiality, "value", project_confidentiality)).lower()
+            if conf_str in ("confidential", "restricted"):
+                return PrivacyInspectionResult(
+                    is_safe=False,
+                    reason=f"Active project is classified as {conf_str.upper()}; external cloud API transmission is strictly prohibited.",
+                    category="confidential_project_boundary",
+                    turn_index=None
+                )
 
         # 4. Enforce attachment boundary
         if has_attachments is True:
@@ -315,10 +330,16 @@ class OutboundPrivacyGate:
         cls,
         messages: Any,
         is_private: Any,
-        has_attachments: Any
+        has_attachments: Any,
+        project_confidentiality: Optional[Union[str, Any]] = None,
     ) -> bool:
         """Convenience boolean check."""
-        result = cls.inspect_payload(messages, is_private=is_private, has_attachments=has_attachments)
+        result = cls.inspect_payload(
+            messages,
+            is_private=is_private,
+            has_attachments=has_attachments,
+            project_confidentiality=project_confidentiality,
+        )
         return result.is_safe
 
     @classmethod
@@ -326,14 +347,20 @@ class OutboundPrivacyGate:
         cls,
         messages: Any,
         is_private: Any,
-        has_attachments: Any
+        has_attachments: Any,
+        project_confidentiality: Optional[Union[str, Any]] = None,
     ) -> None:
         """
         Validates payload or immediately raises OutboundPrivacyViolation.
         Logs sanitized warning without leaking payload contents.
         Fails closed on any violation or missing metadata.
         """
-        result = cls.inspect_payload(messages, is_private=is_private, has_attachments=has_attachments)
+        result = cls.inspect_payload(
+            messages,
+            is_private=is_private,
+            has_attachments=has_attachments,
+            project_confidentiality=project_confidentiality,
+        )
         if not result.is_safe:
             log_msg = f"[PrivacyGate] Blocked external API transmission: {result.reason} (Category: {result.category})"
             logger.warning(log_msg)

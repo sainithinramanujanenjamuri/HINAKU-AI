@@ -1,7 +1,7 @@
 import { groupConversationsByDate, getPrivacyChipInfo, formatModelDisplayName } from "/static/js/utils.js";
 import { createUserMessageElement, createAssistantMessageElement, updateMetaRow, renderCitationChips, renderActionButtons, formatFileSize, getFileIcon } from "/static/js/message.js";
 import { attachCodeBlockCopyHandlers, formatMarkdown } from "/static/js/markdown.js";
-import { renderMemoryPage, renderRatingsPage, renderDatasetPage, renderSettingsPage } from "/static/js/pages.js";
+import { renderMemoryPage, renderRatingsPage, renderDatasetPage, renderSettingsPage, renderProjectsPage, renderTasksPage, renderLearningPage } from "/static/js/pages.js";
 
 // Session Authorization Bridge
 let sessionAuthToken = null;
@@ -60,7 +60,11 @@ const state = {
   isDemoMode: false,
   isApiLoggedByProvider: false,
   activeMessages: [],
-  stagedAttachments: []
+  stagedAttachments: [],
+  activeProjectId: null,
+  activeProjectName: null,
+  activeProjectConfidentiality: null,
+  projectsList: []
 };
 
 // DOM references
@@ -103,7 +107,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   const handleHash = () => {
     const hash = window.location.hash.replace("#", "");
-    if (["memory", "dataset", "ratings", "approval", "settings"].includes(hash)) {
+    if (["projects", "tasks", "learning", "memory", "dataset", "ratings", "approval", "settings"].includes(hash)) {
       openFullPage(hash);
     }
   };
@@ -169,6 +173,29 @@ function initDomReferences() {
     memoryToggleBtn: document.getElementById("memory-toggle-btn"),
     datasetToggleBtn: document.getElementById("dataset-toggle-btn"),
     settingsToggleBtn: document.getElementById("settings-toggle-btn"),
+    projectsToggleBtn: document.getElementById("projects-toggle-btn"),
+    tasksToggleBtn: document.getElementById("tasks-toggle-btn"),
+    learningToggleBtn: document.getElementById("learning-toggle-btn"),
+    topProjectChip: document.getElementById("top-project-chip"),
+    topProjectText: document.getElementById("top-project-text"),
+    topProjectIcon: document.getElementById("top-project-icon"),
+    projectDropdownMenu: document.getElementById("project-dropdown-menu"),
+    actionApprovalModal: document.getElementById("action-approval-modal"),
+    approvalTaskTitle: document.getElementById("approval-task-title"),
+    approvalActionCategory: document.getElementById("approval-action-category"),
+    approvalOperation: document.getElementById("approval-operation"),
+    approvalTargetResource: document.getElementById("approval-target-resource"),
+    approvalScopeParams: document.getElementById("approval-scope-params"),
+    approvalActionHash: document.getElementById("approval-action-hash"),
+    approvalConfirmCheckbox: document.getElementById("approval-confirm-checkbox"),
+    approvalAuthorizeBtn: document.getElementById("approval-authorize-btn"),
+    approvalCancelBtn: document.getElementById("approval-cancel-btn"),
+    approvalModalCloseBtn: document.getElementById("approval-modal-close-btn"),
+    approvalInvalidationNotice: document.getElementById("approval-invalidation-notice"),
+    taskHistoryModal: document.getElementById("task-history-modal"),
+    taskHistoryTitle: document.getElementById("task-history-title"),
+    taskHistoryBody: document.getElementById("task-history-body"),
+    taskHistoryCloseBtn: document.getElementById("task-history-close-btn"),
     noticeBanner: document.getElementById("notice-banner"),
     noticeText: document.getElementById("notice-text"),
     noticeDismissBtn: document.getElementById("notice-dismiss-btn"),
@@ -309,6 +336,13 @@ function setupEventListeners() {
     dom.composerPlusMenu?.classList.add("hidden");
     dom.privacyDropdownMenu?.classList.add("hidden");
     dom.modelDropdownMenu?.classList.add("hidden");
+    dom.projectDropdownMenu?.classList.add("hidden");
+  });
+
+  // Top project chip dropdown toggle
+  dom.topProjectChip?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleProjectDropdown();
   });
 
   // Scroll to bottom button
@@ -359,10 +393,18 @@ function setupEventListeners() {
   });
 
   // Full page view navigation
+  dom.projectsToggleBtn?.addEventListener("click", () => openFullPage("projects"));
+  dom.tasksToggleBtn?.addEventListener("click", () => openFullPage("tasks"));
+  dom.learningToggleBtn?.addEventListener("click", () => openFullPage("learning"));
   dom.memoryToggleBtn?.addEventListener("click", () => openFullPage("memory"));
   dom.datasetToggleBtn?.addEventListener("click", () => openFullPage("dataset"));
   dom.settingsToggleBtn?.addEventListener("click", () => openFullPage("settings"));
   dom.pageBackBtn?.addEventListener("click", closeFullPage);
+
+  // Approval and Audit History Modal Closers
+  dom.approvalModalCloseBtn?.addEventListener("click", closeApprovalModal);
+  dom.approvalCancelBtn?.addEventListener("click", closeApprovalModal);
+  dom.taskHistoryCloseBtn?.addEventListener("click", closeTaskHistoryModal);
 
   document.querySelectorAll(".page-nav-item").forEach(item => {
     item.addEventListener("click", () => {
@@ -997,7 +1039,10 @@ async function handleSendMessage(overrideText = null) {
         const createRes = await fetch("/api/conversations", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title: (text || filesToUpload[0].filename).slice(0, 36) })
+          body: JSON.stringify({
+            title: (text || filesToUpload[0].filename).slice(0, 36),
+            project_id: state.activeProjectId || null
+          })
         });
         if (createRes.ok) {
           const conv = await createRes.json();
@@ -1031,7 +1076,8 @@ async function handleSendMessage(overrideText = null) {
         model: state.activeModel,
         stream: true,
         think_harder: state.thinkHarder,
-        detailed: state.detailed
+        detailed: state.detailed,
+        project_id: state.activeProjectId || null
       }),
       signal: state.abortController.signal
     });
@@ -1245,6 +1291,9 @@ async function loadPageContent(pageName) {
   if (!dom.pageDynamicContent) return;
   if (dom.pageHeaderTitle) {
     const titles = {
+      projects: "Projects & Architecture",
+      tasks: "Tasks & Operational Plan",
+      learning: "Controlled Learning & Evolution",
       memory: "Memories",
       dataset: "Dataset Curation",
       ratings: "Model Ratings",
@@ -1254,7 +1303,54 @@ async function loadPageContent(pageName) {
     dom.pageHeaderTitle.textContent = titles[pageName] || "Page";
   }
 
-  if (pageName === "memory") {
+  if (pageName === "projects") {
+    try {
+      dom.pageDynamicContent.innerHTML = `<div style="color: var(--text-tertiary); padding: 20px 0;">Loading projects...</div>`;
+      const res = await fetch("/api/projects");
+      if (res.ok) {
+        state.projectsList = await res.json();
+        renderProjectsPage(dom.pageDynamicContent, {
+          projects: state.projectsList,
+          activeProjectId: state.activeProjectId,
+          onSelectActiveProject: (id, name, confidentiality) => {
+            setActiveProject(id, name, confidentiality);
+            loadPageContent("projects");
+          },
+          onRefresh: () => loadPageContent("projects")
+        });
+      } else {
+        dom.pageDynamicContent.innerHTML = `<div style="color: var(--color-error);">Could not load projects.</div>`;
+      }
+    } catch (e) {
+      dom.pageDynamicContent.innerHTML = `<div style="color: var(--color-error);">Error: ${e.message}</div>`;
+    }
+  } else if (pageName === "tasks") {
+    try {
+      dom.pageDynamicContent.innerHTML = `<div style="color: var(--text-tertiary); padding: 20px 0;">Loading tasks...</div>`;
+      const [tasksRes, projsRes] = await Promise.all([
+        fetch("/api/tasks"),
+        fetch("/api/projects")
+      ]);
+      const tasks = tasksRes.ok ? await tasksRes.json() : [];
+      const projs = projsRes.ok ? await projsRes.json() : [];
+      state.projectsList = projs;
+
+      renderTasksPage(dom.pageDynamicContent, {
+        tasks,
+        projects: projs,
+        activeProjectId: state.activeProjectId,
+        onRefresh: () => loadPageContent("tasks"),
+        onApprove: (task) => openApprovalModal(task, () => loadPageContent("tasks")),
+        onShowHistory: (taskId, title) => openTaskHistoryModal(taskId, title)
+      });
+    } catch (e) {
+      dom.pageDynamicContent.innerHTML = `<div style="color: var(--color-error);">Error: ${e.message}</div>`;
+    }
+  } else if (pageName === "learning") {
+    renderLearningPage(dom.pageDynamicContent, {
+      onRefresh: () => loadPageContent("learning")
+    });
+  } else if (pageName === "memory") {
     try {
       const endpoint = state.isDemoMode ? "/api/demo/memories" : "/api/memories";
       const res = await fetch(endpoint);
@@ -1432,4 +1528,232 @@ function showNotice(text, showUndo = false) {
     };
     dom.noticeText.appendChild(undoBtn);
   }
+}
+
+// =============================================================================
+// Project Selector & Active Project Domain State
+// =============================================================================
+
+async function toggleProjectDropdown() {
+  if (!dom.projectDropdownMenu) return;
+  if (!dom.projectDropdownMenu.classList.contains("hidden")) {
+    dom.projectDropdownMenu.classList.add("hidden");
+    return;
+  }
+  dom.composerPlusMenu?.classList.add("hidden");
+  dom.privacyDropdownMenu?.classList.add("hidden");
+  dom.modelDropdownMenu?.classList.add("hidden");
+
+  dom.projectDropdownMenu.innerHTML = `<div style="padding: 10px; color: var(--text-tertiary); font-size: 12.5px;">Loading projects...</div>`;
+  dom.projectDropdownMenu.classList.remove("hidden");
+
+  try {
+    const res = await fetch("/api/projects");
+    if (res.ok) {
+      state.projectsList = await res.json();
+      renderProjectDropdownItems(state.projectsList);
+    } else {
+      dom.projectDropdownMenu.innerHTML = `<div style="padding: 10px; color: var(--color-error); font-size: 12.5px;">Failed to load projects</div>`;
+    }
+  } catch (e) {
+    dom.projectDropdownMenu.innerHTML = `<div style="padding: 10px; color: var(--color-error); font-size: 12.5px;">${e.message}</div>`;
+  }
+}
+
+function renderProjectDropdownItems(projects) {
+  if (!dom.projectDropdownMenu) return;
+  dom.projectDropdownMenu.innerHTML = `
+    <div class="project-dropdown-header">Select Active Project</div>
+    <div class="project-option-item ${!state.activeProjectId ? 'active' : ''}" data-project-id="">
+      <span class="project-option-name">Global (No Project)</span>
+      <span class="badge badge-conf-internal">General Context</span>
+    </div>
+  `;
+
+  projects.forEach(p => {
+    const item = document.createElement("div");
+    const isSel = p.project_id === state.activeProjectId;
+    const conf = (p.confidentiality || "internal").toLowerCase();
+    item.className = `project-option-item ${isSel ? 'active' : ''}`;
+    item.dataset.projectId = p.project_id;
+    item.innerHTML = `
+      <span class="project-option-name">${p.name}</span>
+      <span class="badge badge-conf-${conf}">${conf}</span>
+    `;
+    item.onclick = (e) => {
+      e.stopPropagation();
+      setActiveProject(p.project_id, p.name, p.confidentiality);
+      dom.projectDropdownMenu.classList.add("hidden");
+    };
+    dom.projectDropdownMenu.appendChild(item);
+  });
+
+  const globalItem = dom.projectDropdownMenu.querySelector('[data-project-id=""]');
+  if (globalItem) {
+    globalItem.onclick = (e) => {
+      e.stopPropagation();
+      setActiveProject(null, null, null);
+      dom.projectDropdownMenu.classList.add("hidden");
+    };
+  }
+}
+
+function setActiveProject(id, name, confidentiality) {
+  state.activeProjectId = id || null;
+  state.activeProjectName = name || null;
+  state.activeProjectConfidentiality = confidentiality || null;
+
+  if (dom.topProjectText) {
+    dom.topProjectText.textContent = name || "Global";
+  }
+  if (dom.topProjectChip) {
+    dom.topProjectChip.className = "status-chip project-chip";
+    if (id) {
+      const conf = (confidentiality || "internal").toLowerCase();
+      dom.topProjectChip.classList.add(`project-chip-${conf}`);
+      dom.topProjectChip.title = `Active Project: ${name} (${confidentiality}). All chat context will include this project domain.`;
+    } else {
+      dom.topProjectChip.title = "Global: No project bound. Standard general context.";
+    }
+  }
+}
+
+// =============================================================================
+// Scoped Critical Action Approval Modal (Milestone 7 Section 5.2)
+// =============================================================================
+
+let activeApprovalTask = null;
+let activeApprovalCallback = null;
+
+function openApprovalModal(task, onApproved) {
+  if (!dom.actionApprovalModal) return;
+  activeApprovalTask = task;
+  activeApprovalCallback = onApproved;
+
+  if (dom.approvalTaskTitle) dom.approvalTaskTitle.textContent = task.title;
+  if (dom.approvalActionCategory) {
+    dom.approvalActionCategory.textContent = task.critical_action_category || "Critical Operation";
+  }
+  if (dom.approvalOperation) dom.approvalOperation.textContent = task.operation || "execute";
+  if (dom.approvalTargetResource) dom.approvalTargetResource.textContent = task.target_resource || "N/A";
+  if (dom.approvalScopeParams) {
+    dom.approvalScopeParams.textContent = JSON.stringify(task.scope_parameters || {}, null, 2);
+  }
+  if (dom.approvalActionHash) dom.approvalActionHash.textContent = task.action_hash || "N/A";
+
+  if (dom.approvalConfirmCheckbox) {
+    dom.approvalConfirmCheckbox.checked = false;
+  }
+  if (dom.approvalAuthorizeBtn) {
+    dom.approvalAuthorizeBtn.disabled = true;
+    dom.approvalAuthorizeBtn.textContent = "Authorize Operation";
+  }
+  if (dom.approvalInvalidationNotice) {
+    dom.approvalInvalidationNotice.classList.add("hidden");
+    dom.approvalInvalidationNotice.textContent = "";
+  }
+
+  dom.approvalConfirmCheckbox.onchange = () => {
+    if (dom.approvalAuthorizeBtn) {
+      dom.approvalAuthorizeBtn.disabled = !dom.approvalConfirmCheckbox.checked;
+    }
+  };
+
+  dom.approvalAuthorizeBtn.onclick = async () => {
+    dom.approvalAuthorizeBtn.disabled = true;
+    dom.approvalAuthorizeBtn.textContent = "Authorizing...";
+
+    try {
+      const res = await fetch(`/api/tasks/${task.task_id}/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action_hash: task.action_hash,
+          target_resource: task.target_resource,
+          operation: task.operation,
+          scope_parameters: task.scope_parameters || {},
+          confirmed: true
+        })
+      });
+
+      if (res.ok) {
+        closeApprovalModal();
+        if (activeApprovalCallback) activeApprovalCallback();
+      } else {
+        const err = await res.json();
+        if (dom.approvalInvalidationNotice) {
+          dom.approvalInvalidationNotice.textContent = `Approval failed: ${err.detail || "Hash mismatch or task mutation detected."}`;
+          dom.approvalInvalidationNotice.classList.remove("hidden");
+        } else {
+          alert(`Approval failed: ${err.detail}`);
+        }
+        dom.approvalAuthorizeBtn.disabled = false;
+        dom.approvalAuthorizeBtn.textContent = "Authorize Operation";
+      }
+    } catch (e) {
+      alert(`Approval error: ${e.message}`);
+      dom.approvalAuthorizeBtn.disabled = false;
+      dom.approvalAuthorizeBtn.textContent = "Authorize Operation";
+    }
+  };
+
+  dom.actionApprovalModal.classList.remove("hidden");
+}
+
+function closeApprovalModal() {
+  dom.actionApprovalModal?.classList.add("hidden");
+  activeApprovalTask = null;
+  activeApprovalCallback = null;
+}
+
+// =============================================================================
+// Task State Transition Audit History Modal
+// =============================================================================
+
+async function openTaskHistoryModal(taskId, title) {
+  if (!dom.taskHistoryModal) return;
+  if (dom.taskHistoryTitle) {
+    dom.taskHistoryTitle.textContent = `Audit History: ${title}`;
+  }
+  if (dom.taskHistoryBody) {
+    dom.taskHistoryBody.innerHTML = `<div style="color: var(--text-tertiary); padding: 20px 0;">Loading transition history...</div>`;
+  }
+  dom.taskHistoryModal.classList.remove("hidden");
+
+  try {
+    const res = await fetch(`/api/tasks/${taskId}/history`);
+    if (res.ok) {
+      const history = await res.json();
+      if (history.length === 0) {
+        dom.taskHistoryBody.innerHTML = `<div style="color: var(--text-tertiary); font-style: italic; padding: 16px 0;">No transition records logged.</div>`;
+        return;
+      }
+      dom.taskHistoryBody.innerHTML = `
+        <div class="timeline-container">
+          ${history.map(h => `
+            <div class="timeline-item">
+              <div class="timeline-dot"></div>
+              <div class="timeline-content">
+                <div class="timeline-header">
+                  <span class="badge badge-task-status-${(h.from_status || '').toLowerCase()}">${h.from_status}</span>
+                  <span class="timeline-arrow">➔</span>
+                  <span class="badge badge-task-status-${(h.to_status || '').toLowerCase()}">${h.to_status}</span>
+                  <span class="timeline-meta">${new Date((h.timestamp || 0) * 1000).toLocaleString()} · by ${h.changed_by}</span>
+                </div>
+                <div class="timeline-reason">${h.reason || 'No justification specified.'}</div>
+              </div>
+            </div>
+          `).join("")}
+        </div>
+      `;
+    } else {
+      dom.taskHistoryBody.innerHTML = `<div style="color: var(--color-error);">Could not load transition history.</div>`;
+    }
+  } catch (e) {
+    dom.taskHistoryBody.innerHTML = `<div style="color: var(--color-error);">${e.message}</div>`;
+  }
+}
+
+function closeTaskHistoryModal() {
+  dom.taskHistoryModal?.classList.add("hidden");
 }

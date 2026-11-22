@@ -24,6 +24,7 @@ from .learning_types import (
     FeedbackType,
 )
 from .types import KnowledgeProvenance
+from backend.database.backup import coordinated_write
 
 logger = logging.getLogger("hinaku.intelligence.experience_logger")
 
@@ -72,6 +73,7 @@ class ExperienceLogger:
                 CREATE INDEX IF NOT EXISTS idx_exp_created ON experience_records (created_at DESC);
             """)
 
+    @coordinated_write("experience_logger")
     def log_experience(self, record: ExperienceRecord) -> ExperienceRecord:
         """
         Sanitizes sensitive data and transactionally persists an ExperienceRecord.
@@ -236,6 +238,7 @@ class ExperienceLogger:
         with self._get_connection() as conn:
             return conn.execute(query, params).fetchone()[0]
 
+    @coordinated_write("experience_logger")
     def delete_experience(self, experience_id: str) -> bool:
         """Deletes an experience record by ID (supports owner data wipe)."""
         with self._get_connection() as conn:
@@ -245,6 +248,7 @@ class ExperienceLogger:
             )
             return cursor.rowcount > 0
 
+    @coordinated_write("experience_logger")
     def clear_all_experiences(self) -> int:
         """Removes all experience records (privacy full-wipe support)."""
         with self._get_connection() as conn:

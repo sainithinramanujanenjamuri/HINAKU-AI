@@ -16,6 +16,7 @@ from chromadb.config import Settings as ChromaSettings
 
 from backend.config import get_settings
 from backend.models.ollama_shared import get_shared_embedding_settings, log_ollama_call
+from backend.database.backup import get_write_coordinator
 
 logger = logging.getLogger("hinaku.memory.storage")
 
@@ -102,6 +103,30 @@ class MemoryStorage:
         self._init_sqlite()
         self._init_chroma()
 
+        # Register handle release/reopen callbacks with write coordinator
+        try:
+            coord = get_write_coordinator()
+            coord.register_handle_release_callback(self.close)
+            coord.register_handle_reopen_callback(self.reopen)
+        except Exception as e:
+            logger.warning(f"Could not register handle callbacks with coordinator: {e}")
+
+    def close(self):
+        """Release ChromaDB client resources and close open handles."""
+        try:
+            if hasattr(self, "chroma_client") and self.chroma_client is not None:
+                self.chroma_client._system.stop()
+                self.chroma_client = None
+                self.collection = None
+                logger.info("MemoryStorage: Chroma client handles successfully closed.")
+        except Exception as e:
+            logger.warning(f"Error stopping Chroma client during handle release: {e}")
+
+    def reopen(self):
+        """Reopen ChromaDB client after restoration or maintenance."""
+        self._init_chroma()
+        logger.info("MemoryStorage: Chroma client handles successfully re-initialized.")
+
     def _get_connection(self) -> sqlite3.Connection:
         conn = sqlite3.connect(str(self.db_path))
         conn.row_factory = sqlite3.Row
@@ -109,8 +134,9 @@ class MemoryStorage:
         return conn
 
     def _init_sqlite(self):
-        with self._get_connection() as conn:
-            conn.executescript("""
+        with get_write_coordinator().write_permit("memory_storage"):
+            with self._get_connection() as conn:
+                conn.executescript("""
                 CREATE TABLE IF NOT EXISTS memories (
                     id TEXT PRIMARY KEY,
                     text TEXT NOT NULL,
@@ -183,101 +209,104 @@ class MemoryStorage:
         return default_ollama_embedder(self.ollama_host, self.embedding_model, [prefixed], keep_alive=self.embedding_keep_alive, num_ctx=self.embedding_num_ctx)[0]
 
     def add_memory(self, text: str, source_conversation_id: Optional[str] = None) -> Dict[str, Any]:
-        clean_text = text.strip()
-        if not clean_text:
-            raise ValueError("Memory text cannot be empty")
+        with get_write_coordinator().write_permit("memory_storage"):
+            clean_text = text.strip()
+            if not clean_text:
+                raise ValueError("Memory text cannot be empty")
 
-        mem_id = str(uuid.uuid4())
-        now = datetime.now(timezone.utc).isoformat()
+            mem_id = str(uuid.uuid4())
+            now = datetime.now(timezone.utc).isoformat()
 
-        # Insert SQLite record
-        with self._get_connection() as conn:
-            conn.execute(
-                """
-                INSERT INTO memories (id, text, created_at, updated_at, source_conversation_id, deleted)
-                VALUES (?, ?, ?, ?, ?, 0)
-                """,
-                (mem_id, clean_text, now, now, source_conversation_id)
-            )
-            conn.commit()
+            # Insert SQLite record
+            with self._get_connection() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO memories (id, text, created_at, updated_at, source_conversation_id, deleted)
+                    VALUES (?, ?, ?, ?, ?, 0)
+                    """,
+                    (mem_id, clean_text, now, now, source_conversation_id)
+                )
+                conn.commit()
 
-        # Insert ChromaDB vector
-        try:
-            vec = self.embed_documents([clean_text])[0]
-            self.collection.add(
-                ids=[mem_id],
-                documents=[clean_text],
-                embeddings=[vec],
-                metadatas=[{
-                    "created_at": now,
-                    "updated_at": now,
-                    "source_conversation_id": source_conversation_id or ""
-                }]
-            )
-        except Exception as e:
-            logger.error(f"Failed to index memory into ChromaDB: {e}")
+            # Insert ChromaDB vector
+            try:
+                vec = self.embed_documents([clean_text])[0]
+                self.collection.add(
+                    ids=[mem_id],
+                    documents=[clean_text],
+                    embeddings=[vec],
+                    metadatas=[{
+                        "created_at": now,
+                        "updated_at": now,
+                        "source_conversation_id": source_conversation_id or ""
+                    }]
+                )
+            except Exception as e:
+                logger.error(f"Failed to index memory into ChromaDB: {e}")
 
-        return {
-            "id": mem_id,
-            "text": clean_text,
-            "created_at": now,
-            "updated_at": now,
-            "source_conversation_id": source_conversation_id,
-            "deleted": 0
-        }
+            return {
+                "id": mem_id,
+                "text": clean_text,
+                "created_at": now,
+                "updated_at": now,
+                "source_conversation_id": source_conversation_id,
+                "deleted": 0
+            }
 
     def update_memory(self, mem_id: str, new_text: str) -> Optional[Dict[str, Any]]:
-        clean_text = new_text.strip()
-        if not clean_text:
-            raise ValueError("Memory text cannot be empty")
+        with get_write_coordinator().write_permit("memory_storage"):
+            clean_text = new_text.strip()
+            if not clean_text:
+                raise ValueError("Memory text cannot be empty")
 
-        now = datetime.now(timezone.utc).isoformat()
-        with self._get_connection() as conn:
-            cursor = conn.execute(
-                "UPDATE memories SET text = ?, updated_at = ? WHERE id = ? AND deleted = 0",
-                (clean_text, now, mem_id)
-            )
-            conn.commit()
-            if cursor.rowcount == 0:
-                return None
+            now = datetime.now(timezone.utc).isoformat()
+            with self._get_connection() as conn:
+                cursor = conn.execute(
+                    "UPDATE memories SET text = ?, updated_at = ? WHERE id = ? AND deleted = 0",
+                    (clean_text, now, mem_id)
+                )
+                conn.commit()
+                if cursor.rowcount == 0:
+                    return None
 
-        # Re-embed updated text into ChromaDB (ensures typo corrections immediately update Chroma vectors)
-        try:
-            vec = self.embed_documents([clean_text])[0]
-            self.collection.upsert(
-                ids=[mem_id],
-                documents=[clean_text],
-                embeddings=[vec]
-            )
-        except Exception as e:
-            logger.error(f"Failed to update ChromaDB vector for {mem_id}: {e}")
+            # Re-embed updated text into ChromaDB (ensures typo corrections immediately update Chroma vectors)
+            try:
+                vec = self.embed_documents([clean_text])[0]
+                self.collection.upsert(
+                    ids=[mem_id],
+                    documents=[clean_text],
+                    embeddings=[vec]
+                )
+            except Exception as e:
+                logger.error(f"Failed to update ChromaDB vector for {mem_id}: {e}")
 
-        return self.get_memory(mem_id)
+            return self.get_memory(mem_id)
 
     def delete_memory(self, mem_id: str) -> bool:
         """
         Permanently remove memory: hard-delete row from SQLite and remove vector from Chroma.
         No deleted flag left behind. Runs VACUUM on database.
         """
-        with self._get_connection() as conn:
-            cursor = conn.execute("DELETE FROM memories WHERE id = ?", (mem_id,))
-            conn.commit()
-            if cursor.rowcount == 0:
-                return False
+        with get_write_coordinator().write_permit("memory_storage"):
+            with self._get_connection() as conn:
+                cursor = conn.execute("DELETE FROM memories WHERE id = ?", (mem_id,))
+                conn.commit()
+                if cursor.rowcount == 0:
+                    return False
+                try:
+                    old_iso = conn.isolation_level
+                    conn.isolation_level = None
+                    conn.execute("VACUUM")
+                    conn.isolation_level = old_iso
+                except Exception as e:
+                    logger.error(f"Failed to vacuum: {e}")
+
             try:
-                old_iso = conn.isolation_level
-                conn.isolation_level = None
-                conn.execute("VACUUM")
-                conn.isolation_level = old_iso
+                self.collection.delete(ids=[mem_id])
             except Exception as e:
-                logger.error(f"Failed to vacuum: {e}")
+                logger.error(f"Failed to delete memory vector from ChromaDB: {e}")
 
-        try:
-            self.collection.delete(ids=[mem_id])
-        except Exception as e:
-            logger.error(f"Failed to delete memory vector from ChromaDB: {e}")
-
-        return True
+            return True
 
     def get_memory(self, mem_id: str) -> Optional[Dict[str, Any]]:
         with self._get_connection() as conn:
@@ -436,32 +465,33 @@ class MemoryStorage:
         Hard-deletes all memories from SQLite, runs VACUUM, and drops/recreates Chroma collection.
         Returns count of memories deleted.
         """
-        with self._get_connection() as conn:
-            cur = conn.execute("DELETE FROM memories")
-            conn.commit()
-            count = cur.rowcount
+        with get_write_coordinator().write_permit("memory_storage"):
+            with self._get_connection() as conn:
+                cur = conn.execute("DELETE FROM memories")
+                conn.commit()
+                count = cur.rowcount
+                try:
+                    old_iso = conn.isolation_level
+                    conn.isolation_level = None
+                    conn.execute("VACUUM")
+                    conn.isolation_level = old_iso
+                except Exception as e:
+                    logger.error(f"Failed to vacuum: {e}")
+
             try:
-                old_iso = conn.isolation_level
-                conn.isolation_level = None
-                conn.execute("VACUUM")
-                conn.isolation_level = old_iso
+                self.chroma_client.delete_collection("owner_memories")
+                self.collection = self.chroma_client.create_collection(
+                    name="owner_memories",
+                    metadata={
+                        "hnsw:space": "cosine",
+                        "embedding_model": self.embedding_model,
+                        "embedding_dims": self.embedding_dims
+                    }
+                )
             except Exception as e:
-                logger.error(f"Failed to vacuum: {e}")
+                logger.error(f"Error resetting Chroma on clear_all: {e}")
 
-        try:
-            self.chroma_client.delete_collection("owner_memories")
-            self.collection = self.chroma_client.create_collection(
-                name="owner_memories",
-                metadata={
-                    "hnsw:space": "cosine",
-                    "embedding_model": self.embedding_model,
-                    "embedding_dims": self.embedding_dims
-                }
-            )
-        except Exception as e:
-            logger.error(f"Error resetting Chroma on clear_all: {e}")
-
-        return count
+            return count
 
     def add_pending_extraction(
         self,
@@ -470,18 +500,19 @@ class MemoryStorage:
         assistant_message: str,
         is_private: bool = False
     ) -> int:
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                INSERT INTO pending_memory_extractions 
-                (conversation_id, user_message, assistant_message, is_private)
-                VALUES (?, ?, ?, ?)
-                """,
-                (conversation_id, user_message, assistant_message, 1 if is_private else 0)
-            )
-            conn.commit()
-            return cursor.lastrowid
+        with get_write_coordinator().write_permit("memory_storage"):
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    INSERT INTO pending_memory_extractions 
+                    (conversation_id, user_message, assistant_message, is_private)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (conversation_id, user_message, assistant_message, 1 if is_private else 0)
+                )
+                conn.commit()
+                return cursor.lastrowid
 
     def get_pending_extractions(self) -> List[Dict[str, Any]]:
         with self._get_connection() as conn:
@@ -507,11 +538,13 @@ class MemoryStorage:
             ]
 
     def delete_pending_extraction(self, extraction_id: int):
-        with self._get_connection() as conn:
-            conn.execute("DELETE FROM pending_memory_extractions WHERE id = ?", (extraction_id,))
-            conn.commit()
+        with get_write_coordinator().write_permit("memory_storage"):
+            with self._get_connection() as conn:
+                conn.execute("DELETE FROM pending_memory_extractions WHERE id = ?", (extraction_id,))
+                conn.commit()
 
     def clear_pending_extractions(self):
-        with self._get_connection() as conn:
-            conn.execute("DELETE FROM pending_memory_extractions")
-            conn.commit()
+        with get_write_coordinator().write_permit("memory_storage"):
+            with self._get_connection() as conn:
+                conn.execute("DELETE FROM pending_memory_extractions")
+                conn.commit()

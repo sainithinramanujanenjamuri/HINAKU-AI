@@ -25,6 +25,7 @@ from .planning_types import (
 )
 from .task_manager import TaskManager
 from .types import TaskPriority, TaskStatus
+from backend.database.backup import coordinated_write
 
 
 class PlanningEngine:
@@ -73,6 +74,7 @@ class PlanningEngine:
     # Plan Creation & Decomposition
     # --------------------------------------------------------------------------
 
+    @coordinated_write("planning_engine")
     def create_plan(
         self,
         objective: str,
@@ -122,6 +124,7 @@ class PlanningEngine:
 
         return plan
 
+    @coordinated_write("planning_engine")
     def add_task_to_plan(
         self,
         plan_id: str,
@@ -275,6 +278,7 @@ class PlanningEngine:
             "is_complete": all_completed,
         }
 
+    @coordinated_write("planning_engine")
     def update_plan_status(self, plan_id: str, new_status: PlanStatus) -> PlanRecord:
         now = time.time()
         with self._get_connection() as conn:

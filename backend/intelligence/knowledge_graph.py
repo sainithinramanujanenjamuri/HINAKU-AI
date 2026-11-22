@@ -16,6 +16,7 @@ import uuid
 from .errors import KnowledgeGraphError
 from .graph_types import EdgeRelationship, KnowledgeEdge
 from .types import KnowledgeDomain
+from backend.database.backup import coordinated_write
 
 
 class KnowledgeGraph:
@@ -53,6 +54,7 @@ class KnowledgeGraph:
                 CREATE INDEX IF NOT EXISTS idx_edges_pair ON knowledge_edges (source_id, target_id, relationship);
             """)
 
+    @coordinated_write("knowledge_graph")
     def add_edge(self, edge: KnowledgeEdge) -> KnowledgeEdge:
         """Adds a directed semantic edge between knowledge entities."""
         if not edge.source_id or not edge.target_id:
@@ -151,6 +153,7 @@ class KnowledgeGraph:
             rows = conn.execute(query, params).fetchall()
             return [self._row_to_edge(r) for r in rows]
 
+    @coordinated_write("knowledge_graph")
     def delete_edge(self, edge_id: str) -> bool:
         """Deletes a graph edge by ID."""
         with self._get_connection() as conn:

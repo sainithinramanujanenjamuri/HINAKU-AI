@@ -37,6 +37,7 @@ from .learning_types import (
     WeaknessStatus,
 )
 from .weakness_catalog import WeaknessCatalog
+from backend.database.backup import coordinated_write
 
 logger = logging.getLogger("hinaku.intelligence.improvement_engine")
 
@@ -94,6 +95,7 @@ class ImprovementProposalEngine:
                 CREATE INDEX IF NOT EXISTS idx_prop_created ON improvement_proposals (created_at DESC);
             """)
 
+    @coordinated_write("improvement_engine")
     def create_proposal(
         self,
         description: str,
@@ -219,6 +221,7 @@ class ImprovementProposalEngine:
             rows = conn.execute(query, params).fetchall()
             return [self._row_to_proposal(r) for r in rows]
 
+    @coordinated_write("improvement_engine")
     def evaluate_proposal(
         self,
         proposal_id: str,
@@ -296,6 +299,7 @@ class ImprovementProposalEngine:
 
         return eval_results
 
+    @coordinated_write("improvement_engine")
     def record_owner_decision(
         self,
         proposal_id: str,
@@ -343,6 +347,7 @@ class ImprovementProposalEngine:
 
         return self.get_proposal(proposal_id)
 
+    @coordinated_write("improvement_engine")
     def deploy_approved_proposal(
         self,
         proposal_id: str,
@@ -401,6 +406,23 @@ class ImprovementProposalEngine:
             "change_category": proposal.change_category.value,
             "resolved_weakness_count": len(proposal.related_weakness_ids),
         }
+
+    @coordinated_write("improvement_engine")
+    def delete_proposal(self, proposal_id: str) -> bool:
+        """Deletes a candidate proposal by ID."""
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                "DELETE FROM improvement_proposals WHERE proposal_id = ?;",
+                (proposal_id,),
+            )
+            return cursor.rowcount > 0
+
+    @coordinated_write("improvement_engine")
+    def clear_all_proposals(self) -> int:
+        """Removes all improvement proposals (supports full learning data wipe)."""
+        with self._get_connection() as conn:
+            cursor = conn.execute("DELETE FROM improvement_proposals;")
+            return cursor.rowcount
 
     def _row_to_proposal(self, row: sqlite3.Row) -> ImprovementProposal:
         weak_ids = []

@@ -27,6 +27,7 @@ from chromadb.config import Settings as ChromaSettings
 
 from backend.config import get_settings
 from backend.models.ollama_shared import get_shared_embedding_settings, log_ollama_call
+from backend.database.backup import coordinated_write, get_write_coordinator
 from .chunker import DocumentChunk, estimate_tokens, MAX_WHOLE_FILE_TOKENS
 
 logger = logging.getLogger("hinaku.attachments.storage")
@@ -52,6 +53,30 @@ class AttachmentStorage:
         self.uploads_dir.mkdir(parents=True, exist_ok=True)
         self._init_sqlite()
         self._init_chroma()
+
+        # Register handle release/reopen callbacks with write coordinator
+        try:
+            coord = get_write_coordinator()
+            coord.register_handle_release_callback(self.close)
+            coord.register_handle_reopen_callback(self.reopen)
+        except Exception as e:
+            logger.warning(f"Could not register handle callbacks with coordinator: {e}")
+
+    def close(self):
+        """Release ChromaDB client resources and close open handles."""
+        try:
+            if hasattr(self, "chroma_client") and self.chroma_client is not None:
+                self.chroma_client._system.stop()
+                self.chroma_client = None
+                self.doc_collection = None
+                logger.info("AttachmentStorage: Chroma client handles successfully closed.")
+        except Exception as e:
+            logger.warning(f"Error stopping Chroma client during handle release: {e}")
+
+    def reopen(self):
+        """Reopen ChromaDB client after restoration or maintenance."""
+        self._init_chroma()
+        logger.info("AttachmentStorage: Chroma client handles successfully re-initialized.")
 
     def _get_connection(self) -> sqlite3.Connection:
         conn = sqlite3.connect(str(self.db_path))
@@ -174,6 +199,7 @@ class AttachmentStorage:
                 out.append(l2_normalize(vec))
             return out
 
+    @coordinated_write("attachment_storage")
     def save_attachment(
         self,
         conversation_id: str,
@@ -378,6 +404,7 @@ class AttachmentStorage:
             row = conn.execute("SELECT * FROM attachment_sections WHERE id = ?", (section_id,)).fetchone()
             return dict(row) if row else None
 
+    @coordinated_write("attachment_storage")
     def update_section_cache(self, section_id: str, explanation_cache: str) -> None:
         """Caches generated topic walkthrough in SQLite so retries/continues do not recompute."""
         with self._get_connection() as conn:
@@ -748,6 +775,7 @@ class AttachmentStorage:
 
         return "\n\n".join(chunk_blocks), coverage
 
+    @coordinated_write("attachment_storage")
     def delete_attachment(self, attachment_id: str) -> bool:
         """
         Cascading hard delete for a single attachment:
@@ -790,6 +818,7 @@ class AttachmentStorage:
         self._vacuum_db()
         return True
 
+    @coordinated_write("attachment_storage")
     def delete_conversation_attachments(self, conversation_id: str) -> int:
         """
         Cascades deletion for all attachments belonging to a conversation.

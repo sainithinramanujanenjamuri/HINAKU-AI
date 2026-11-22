@@ -37,6 +37,15 @@
       </div>
 
       <div class="sidebar-footer">
+        <button id="projects-toggle-btn" class="footer-nav-btn" title="Projects">
+          <span>📂 Projects</span>
+        </button>
+        <button id="tasks-toggle-btn" class="footer-nav-btn" title="Tasks">
+          <span>📋 Tasks</span>
+        </button>
+        <button id="learning-toggle-btn" class="footer-nav-btn" title="Learning">
+          <span>💡 Learning</span>
+        </button>
         <button id="memory-toggle-btn" class="footer-nav-btn" title="Memory">
           <span>🧠 Memories</span>
         </button>
@@ -64,6 +73,17 @@
         </div>
 
         <div class="top-bar-right">
+          <!-- Top Project Chip -->
+          <div id="top-project-chip" class="status-chip project-chip" title="Active Project (Click to select)">
+            <span id="top-project-icon">📂</span>
+            <span id="top-project-text">Global</span>
+            <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2" fill="none">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </div>
+          <!-- Project Dropdown Menu -->
+          <div id="project-dropdown-menu" class="dropdown-menu hidden"></div>
+
           <!-- Top Privacy Chip -->
           <button id="private-toggle-btn" class="private-toggle-btn hidden" title="Toggle Private Chat (never uses API)">
             <span id="privacy-icon" class="privacy-icon">🔓</span>
@@ -294,6 +314,9 @@
       </div>
       <div class="page-container">
         <aside class="page-sidebar">
+          <button class="page-nav-item" data-page="projects">📂 Projects</button>
+          <button class="page-nav-item" data-page="tasks">📋 Tasks</button>
+          <button class="page-nav-item" data-page="learning">💡 Learning</button>
           <button class="page-nav-item active" data-page="memory">🧠 Memory Drawer</button>
           <button class="page-nav-item" data-page="dataset">📦 Dataset Review</button>
           <button class="page-nav-item" data-page="ratings">⭐ Model Ratings</button>
@@ -355,6 +378,75 @@
     <div class="modal-container wide-modal">
       <button id="report-modal-close" class="icon-btn">✕</button>
       <div class="modal-body" id="report-modal-body"></div>
+    </div>
+  </div>
+
+  <!-- Scoped Owner Action Approval Modal (Milestone 7 Section 5.2) -->
+  <div id="action-approval-modal" class="modal-overlay hidden">
+    <div class="modal-container approval-modal-container">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <span class="modal-badge-critical">CRITICAL ACTION REVIEW</span>
+          <h2 id="approval-task-title">Task Title</h2>
+        </div>
+        <button id="approval-modal-close-btn" class="icon-btn">✕</button>
+      </div>
+      <div class="approval-modal-body">
+        <div class="approval-meta-grid">
+          <div class="approval-meta-item">
+            <span class="approval-meta-label">Action Category</span>
+            <span id="approval-action-category" class="approval-meta-value category-pill"></span>
+          </div>
+          <div class="approval-meta-item">
+            <span class="approval-meta-label">Operation</span>
+            <span id="approval-operation" class="approval-meta-value mono-val"></span>
+          </div>
+          <div class="approval-meta-item full-width">
+            <span class="approval-meta-label">Target Resource</span>
+            <span id="approval-target-resource" class="approval-meta-value mono-val"></span>
+          </div>
+          <div class="approval-meta-item full-width">
+            <span class="approval-meta-label">Scope Parameters</span>
+            <pre id="approval-scope-params" class="approval-code-block"></pre>
+          </div>
+          <div class="approval-meta-item full-width">
+            <span class="approval-meta-label">Canonical Action Hash (SHA-256)</span>
+            <span id="approval-action-hash" class="approval-hash mono-val"></span>
+          </div>
+        </div>
+
+        <div class="approval-warning-box">
+          <span class="warning-icon">⚠️</span>
+          <div class="warning-text">
+            <strong>Security Boundary & Scope Enforcement:</strong>
+            Approval authorizes strictly this single operation on this specific resource within the defined scope. Any subsequent mutation of task parameters automatically invalidates this approval.
+          </div>
+        </div>
+
+        <div class="approval-confirm-row">
+          <label class="checkbox-container">
+            <input type="checkbox" id="approval-confirm-checkbox">
+            <span class="checkbox-label">I explicitly confirm and authorize this specific critical operation.</span>
+          </label>
+        </div>
+
+        <div id="approval-invalidation-notice" class="approval-notice hidden"></div>
+      </div>
+      <div class="modal-footer">
+        <button id="approval-cancel-btn" class="action-btn-secondary">Cancel</button>
+        <button id="approval-authorize-btn" class="action-btn-critical" disabled>Authorize Operation</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Task Lifecycle Audit History Modal -->
+  <div id="task-history-modal" class="modal-overlay hidden">
+    <div class="modal-container wide-modal">
+      <div class="modal-header">
+        <h2 id="task-history-title">Task State Transition Audit History</h2>
+        <button id="task-history-close-btn" class="icon-btn">✕</button>
+      </div>
+      <div class="modal-body" id="task-history-body"></div>
     </div>
   </div>
 

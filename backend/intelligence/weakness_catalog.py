@@ -29,6 +29,7 @@ from .learning_types import (
     WeaknessSeverity,
     WeaknessStatus,
 )
+from backend.database.backup import coordinated_write
 
 logger = logging.getLogger("hinaku.intelligence.weakness_catalog")
 
@@ -108,6 +109,7 @@ class WeaknessCatalog:
 
         return record
 
+    @coordinated_write("weakness_catalog")
     def catalog_experience(
         self,
         experience: ExperienceRecord,
@@ -266,6 +268,7 @@ class WeaknessCatalog:
         with self._get_connection() as conn:
             return conn.execute(query, params).fetchone()[0]
 
+    @coordinated_write("weakness_catalog")
     def delete_weakness(self, weakness_id: str) -> bool:
         """Deletes a weakness record by ID."""
         with self._get_connection() as conn:
@@ -275,6 +278,28 @@ class WeaknessCatalog:
             )
             return cursor.rowcount > 0
 
+    @coordinated_write("weakness_catalog")
+    def unlink_experience(self, experience_id: str) -> int:
+        """
+        Removes an experience ID from all weakness records' supporting_experience_ids.
+        Maintains referential integrity when an experience is deleted for privacy or cleanup.
+        Returns the number of weakness records updated.
+        """
+        updated_count = 0
+        with self._get_connection() as conn:
+            rows = conn.execute("SELECT * FROM weakness_records;").fetchall()
+            for row in rows:
+                rec = self._row_to_record(row)
+                if experience_id in rec.supporting_experience_ids:
+                    new_ids = [eid for eid in rec.supporting_experience_ids if eid != experience_id]
+                    conn.execute(
+                        "UPDATE weakness_records SET supporting_experience_ids = ? WHERE weakness_id = ?;",
+                        (json.dumps(new_ids), rec.weakness_id)
+                    )
+                    updated_count += 1
+        return updated_count
+
+    @coordinated_write("weakness_catalog")
     def clear_all_weaknesses(self) -> int:
         """Removes all weakness records (privacy / full data wipe)."""
         with self._get_connection() as conn:

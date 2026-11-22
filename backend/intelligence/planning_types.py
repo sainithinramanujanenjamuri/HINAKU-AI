@@ -71,6 +71,11 @@ class ManagedTask:
     critical_action_category: Optional[CriticalActionCategory] = None
     approval_status: Optional[str] = None  # None, "pending", "approved", "denied"
     assigned_agent: Optional[str] = None
+    action_hash: Optional[str] = None
+    target_resource: Optional[str] = None
+    operation: Optional[str] = None
+    scope_parameters: Dict[str, Any] = field(default_factory=dict)
+    approval_metadata: Dict[str, Any] = field(default_factory=dict)
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
     completed_at: Optional[float] = None
@@ -95,6 +100,11 @@ class ManagedTask:
             ),
             "approval_status": self.approval_status,
             "assigned_agent": self.assigned_agent,
+            "action_hash": self.action_hash,
+            "target_resource": self.target_resource,
+            "operation": self.operation,
+            "scope_parameters": self.scope_parameters,
+            "approval_metadata": self.approval_metadata,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "completed_at": self.completed_at,
@@ -124,6 +134,11 @@ class ManagedTask:
             critical_action_category=cat,
             approval_status=data.get("approval_status"),
             assigned_agent=data.get("assigned_agent"),
+            action_hash=data.get("action_hash"),
+            target_resource=data.get("target_resource"),
+            operation=data.get("operation"),
+            scope_parameters=data.get("scope_parameters") or {},
+            approval_metadata=data.get("approval_metadata") or {},
             created_at=data.get("created_at", time.time()),
             updated_at=data.get("updated_at", time.time()),
             completed_at=data.get("completed_at"),

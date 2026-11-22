@@ -32,6 +32,7 @@ from .types import (
     KnowledgeProvenance,
     SourceAuthority,
 )
+from backend.database.backup import coordinated_write
 
 
 class ProjectStore:
@@ -125,6 +126,7 @@ class ProjectStore:
     # Project Identity & Registration
     # --------------------------------------------------------------------------
 
+    @coordinated_write("project_store")
     def create_project(self, record: ProjectRecord) -> ProjectRecord:
         """Registers a new project, preventing duplicates by id or name."""
         with self._get_connection() as conn:
@@ -205,6 +207,7 @@ class ProjectStore:
             rows = conn.execute(query, params).fetchall()
             return [self._row_to_project(r) for r in rows]
 
+    @coordinated_write("project_store")
     def update_project(self, project_id: str, updates: Dict[str, Any]) -> ProjectRecord:
         """Updates project properties and updates updated_at timestamp."""
         existing = self.get_project(project_id)
@@ -244,6 +247,7 @@ class ProjectStore:
             )
         return self.get_project(project_id)  # type: ignore
 
+    @coordinated_write("project_store")
     def delete_project(
         self,
         project_id: str,
@@ -283,6 +287,7 @@ class ProjectStore:
     # Structured Project Knowledge
     # --------------------------------------------------------------------------
 
+    @coordinated_write("project_store")
     def add_knowledge_item(self, item: ProjectKnowledgeItem) -> ProjectKnowledgeItem:
         """Adds a structured project knowledge item and records its initial revision."""
         project = self.get_project(item.project_id)
@@ -380,6 +385,7 @@ class ProjectStore:
             rows = conn.execute(query, params).fetchall()
             return [self._row_to_knowledge_item(r) for r in rows]
 
+    @coordinated_write("project_store")
     def update_knowledge_item(
         self,
         item_id: str,
@@ -453,6 +459,7 @@ class ProjectStore:
 
         return self.get_knowledge_item(item_id)  # type: ignore
 
+    @coordinated_write("project_store")
     def delete_knowledge_item(
         self,
         item_id: str,
@@ -490,6 +497,7 @@ class ProjectStore:
     # Repository Grounding Index
     # --------------------------------------------------------------------------
 
+    @coordinated_write("project_store")
     def upsert_repo_files(self, project_id: str, files: List[RepositoryFileIndex]) -> None:
         """Batch upserts indexed files for a project repository."""
         with self._get_connection() as conn:

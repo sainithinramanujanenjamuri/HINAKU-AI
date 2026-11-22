@@ -110,6 +110,8 @@ class ChatRequest(BaseModel):
     is_private: Optional[bool] = None
     think_harder: Optional[bool] = False
     detailed: Optional[bool] = False
+    project_id: Optional[str] = None
+    task_id: Optional[str] = None
 
 class ChatResponse(BaseModel):
     role: str
@@ -131,6 +133,8 @@ class ChatResponse(BaseModel):
     latency_breakdown: Optional[Dict[str, int]] = None
     options: Optional[Dict[str, Any]] = None
     citations: Optional[List[Dict[str, Any]]] = None
+    project_id: Optional[str] = None
+    task_id: Optional[str] = None
 
 @router.get("/info")
 async def get_info():
@@ -480,6 +484,52 @@ async def chat_endpoint(req: ChatRequest, response: Response, _auth: str = Depen
     # Check for document attachments (forces local model)
     has_attachments = attachment_manager.has_attachments(conv_id)
 
+    # Project Context & Confidentiality via DomainRouter (Explicit selection supersedes heuristics)
+    active_project_id = req.project_id
+    if not active_project_id and conv and "project_id" in conv.keys() and conv["project_id"]:
+        active_project_id = conv["project_id"]
+
+    project_conf = None
+    is_confidential_project = False
+    project_context_str = None
+    decision_context_str = None
+
+    if active_project_id:
+        from backend.intelligence.project_engine import ProjectEngine
+        from backend.intelligence.domain_router import DomainRouter
+        from backend.intelligence.context import IntelligenceContext
+        from backend.intelligence.types import KnowledgeDomain
+        from backend.intelligence.project_types import ProjectConfidentiality
+
+        project_engine = ProjectEngine(settings.sqlite_path)
+        project_record = project_engine.get_project(active_project_id)
+        if not project_record or project_record.deleted:
+            if req.project_id:
+                raise HTTPException(status_code=404, detail=f"Project '{active_project_id}' not found or has been deleted.")
+        else:
+            project_conf = project_record.confidentiality
+            is_confidential_project = project_conf in (ProjectConfidentiality.CONFIDENTIAL, ProjectConfidentiality.RESTRICTED)
+
+            # Persist project selection to conversation
+            history_manager.set_conversation_project(conv_id, active_project_id)
+
+            domain_router = DomainRouter(project_engine=project_engine, memory_storage=memory_storage)
+            intel_ctx = IntelligenceContext(
+                actor_id="owner",
+                active_project_id=active_project_id,
+                permitted_domains={KnowledgeDomain.PROJECT, KnowledgeDomain.DECISION},
+                operation_constraints={"allow_external_api": not is_confidential_project and not is_private},
+                metadata={"project_confidentiality": project_conf.value}
+            )
+
+            bundle = domain_router.retrieve_context_bundle(
+                query=latest_user_text,
+                intelligence_context=intel_ctx,
+                project_id=active_project_id,
+            )
+            project_context_str = bundle.project_context
+            decision_context_str = bundle.decision_context
+
     # Identify target backend for memory retrieval privacy rule
     from backend.models.router import is_personal_statement
     from backend.guards import is_sensitive_topic
@@ -503,7 +553,8 @@ async def chat_endpoint(req: ChatRequest, response: Response, _auth: str = Depen
         is_detail=is_detail,
         has_attachments=has_attachments,
         requested_model=req.model,
-        has_personal_context=has_personal_history
+        has_personal_context=has_personal_history,
+        project_confidentiality=project_conf,
     )
     router_ms = int((time.perf_counter() - t_router_start) * 1000)
     is_api = (router_decision.target_backend == "api")
@@ -525,6 +576,10 @@ async def chat_endpoint(req: ChatRequest, response: Response, _auth: str = Depen
     if is_detail and not has_attachments:
         persona_text += "\nExplain in about 250 words ending with a one-sentence conclusion. Do not open with 'Okay, let's break down' or similar filler; begin directly with the answer."
     system_parts = [persona_text, clock_context]
+    if project_context_str:
+        system_parts.append(project_context_str)
+    if decision_context_str:
+        system_parts.append(f"#### Accepted Architecture & Design Decisions:\n{decision_context_str}")
     if memory_context:
         system_parts.append(memory_context)
     coverage_meta = {"sections": [], "pages": []}
@@ -969,7 +1024,8 @@ async def chat_endpoint(req: ChatRequest, response: Response, _auth: str = Depen
                     options=target_opts,
                     is_detail=is_detail,
                     has_attachments=has_attachments,
-                    requested_model=req.model
+                    requested_model=req.model,
+                    project_confidentiality=project_conf,
                 ):
                     if event.get("type") == "error":
                         encountered_error = event
@@ -1124,7 +1180,9 @@ async def chat_endpoint(req: ChatRequest, response: Response, _auth: str = Depen
                     latency_ms=gen_ms + verify_ms,
                     verify_ms=verify_ms,
                     think_ms=0,
-                    memory_ms=memory_ms
+                    memory_ms=memory_ms,
+                    project_id=active_project_id,
+                    task_id=req.task_id,
                 )
                 # Background memory extraction after 5s idle using LOCAL model (never API)
                 if not is_private and not has_attachments and settings.memory_enabled and settings.memory_extract_after_each_turn:
@@ -1170,7 +1228,9 @@ async def chat_endpoint(req: ChatRequest, response: Response, _auth: str = Depen
                     "latency_breakdown": latency_breakdown,
                     "final_reply": final_reply,
                     "citations": doc_citations,
-                    "actions": message_actions
+                    "actions": message_actions,
+                    "project_id": active_project_id,
+                    "task_id": req.task_id,
                 }
                 yield f"data: {json.dumps(done_payload)}\n\n"
 
@@ -1206,7 +1266,8 @@ async def chat_endpoint(req: ChatRequest, response: Response, _auth: str = Depen
             options=target_opts,
             is_detail=is_detail,
             has_attachments=has_attachments,
-            requested_model=req.model
+            requested_model=req.model,
+            project_confidentiality=project_conf,
         ):
             if event.get("type") == "error":
                 encountered_error = event
@@ -1305,7 +1366,9 @@ async def chat_endpoint(req: ChatRequest, response: Response, _auth: str = Depen
             latency_ms=gen_ms + verify_ms,
             verify_ms=verify_ms,
             think_ms=0,
-            memory_ms=memory_ms
+            memory_ms=memory_ms,
+            project_id=active_project_id,
+            task_id=req.task_id,
         )
         if final_reply.strip():
             if not is_private and not has_attachments and settings.memory_enabled and settings.memory_extract_after_each_turn:
@@ -1334,5 +1397,7 @@ async def chat_endpoint(req: ChatRequest, response: Response, _auth: str = Depen
             hit_token_limit=was_cut,
             is_private=is_private,
             latency_breakdown=latency_breakdown,
-            options=target_opts
+            options=target_opts,
+            project_id=active_project_id,
+            task_id=req.task_id,
         )

@@ -5,6 +5,7 @@ import sqlite3
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from backend.database.backup import get_write_coordinator
 
 _UNSET = object()
 
@@ -76,8 +77,9 @@ class ChatHistoryManager:
         return conn
 
     def _init_db(self):
-        with self._get_connection() as conn:
-            conn.executescript("""
+        with get_write_coordinator().write_permit("history"):
+            with self._get_connection() as conn:
+                conn.executescript("""
                 CREATE TABLE IF NOT EXISTS conversations (
                     id TEXT PRIMARY KEY,
                     title TEXT NOT NULL,
@@ -127,6 +129,8 @@ class ChatHistoryManager:
                 conn.execute("ALTER TABLE conversations ADD COLUMN is_private INTEGER DEFAULT 0")
             if "pinned" not in conv_cols:
                 conn.execute("ALTER TABLE conversations ADD COLUMN pinned INTEGER DEFAULT 0")
+            if "project_id" not in conv_cols:
+                conn.execute("ALTER TABLE conversations ADD COLUMN project_id TEXT")
 
             msg_cols = [c["name"] for c in conn.execute("PRAGMA table_info(messages)").fetchall()]
             if "backend" not in msg_cols:
@@ -144,6 +148,8 @@ class ChatHistoryManager:
                 ("verify_ms", "INTEGER DEFAULT 0"),
                 ("think_ms", "INTEGER DEFAULT 0"),
                 ("memory_ms", "INTEGER DEFAULT 0"),
+                ("project_id", "TEXT"),
+                ("task_id", "TEXT"),
             ]:
                 if col not in int_cols:
                     conn.execute(f"ALTER TABLE interactions ADD COLUMN {col} {col_type}")
@@ -164,34 +170,37 @@ class ChatHistoryManager:
             return row["value"] if row else default
 
     def set_metadata(self, key: str, value: str):
-        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-        with self._get_connection() as conn:
-            conn.execute(
-                "INSERT OR REPLACE INTO app_metadata (key, value, updated_at) VALUES (?, ?, ?)",
-                (key, str(value), now)
-            )
-            conn.commit()
+        with get_write_coordinator().write_permit("history"):
+            now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            with self._get_connection() as conn:
+                conn.execute(
+                    "INSERT OR REPLACE INTO app_metadata (key, value, updated_at) VALUES (?, ?, ?)",
+                    (key, str(value), now)
+                )
+                conn.commit()
 
     def create_conversation(
         self,
         title: str = "New conversation",
         conv_id: Optional[str] = None,
-        is_private: bool = False
+        is_private: bool = False,
+        project_id: Optional[str] = None,
     ) -> Dict[str, Any]:
-        cid = conv_id or str(uuid.uuid4())
-        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-        with self._get_connection() as conn:
-            conn.execute(
-                "INSERT INTO conversations (id, title, is_private, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-                (cid, title, 1 if is_private else 0, now, now)
-            )
-            conn.commit()
-        return {"id": cid, "title": title, "is_private": is_private, "created_at": now, "updated_at": now}
+        with get_write_coordinator().write_permit("history"):
+            cid = conv_id or str(uuid.uuid4())
+            now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            with self._get_connection() as conn:
+                conn.execute(
+                    "INSERT INTO conversations (id, title, is_private, project_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+                    (cid, title, 1 if is_private else 0, project_id, now, now)
+                )
+                conn.commit()
+            return {"id": cid, "title": title, "is_private": is_private, "project_id": project_id, "created_at": now, "updated_at": now}
 
     def list_conversations(self) -> List[Dict[str, Any]]:
         with self._get_connection() as conn:
             rows = conn.execute(
-                "SELECT id, title, is_private, COALESCE(pinned, 0) as pinned, created_at, updated_at FROM conversations ORDER BY COALESCE(pinned, 0) DESC, updated_at DESC"
+                "SELECT id, title, is_private, COALESCE(pinned, 0) as pinned, project_id, created_at, updated_at FROM conversations ORDER BY COALESCE(pinned, 0) DESC, updated_at DESC"
             ).fetchall()
             return [
                 {
@@ -199,6 +208,7 @@ class ChatHistoryManager:
                     "title": r["title"],
                     "is_private": bool(r["is_private"]),
                     "pinned": bool(r["pinned"]),
+                    "project_id": r["project_id"] if "project_id" in r.keys() else None,
                     "created_at": r["created_at"],
                     "updated_at": r["updated_at"]
                 }
@@ -208,7 +218,7 @@ class ChatHistoryManager:
     def get_conversation(self, conv_id: str) -> Optional[Dict[str, Any]]:
         with self._get_connection() as conn:
             conv = conn.execute(
-                "SELECT id, title, is_private, COALESCE(pinned, 0) as pinned, created_at, updated_at FROM conversations WHERE id = ?",
+                "SELECT id, title, is_private, COALESCE(pinned, 0) as pinned, project_id, created_at, updated_at FROM conversations WHERE id = ?",
                 (conv_id,)
             ).fetchone()
             if not conv:
@@ -244,61 +254,79 @@ class ChatHistoryManager:
                 "title": conv["title"],
                 "is_private": bool(conv["is_private"]),
                 "pinned": bool(conv["pinned"]),
+                "project_id": conv["project_id"] if "project_id" in conv.keys() else None,
                 "created_at": conv["created_at"],
                 "updated_at": conv["updated_at"],
                 "messages": parsed_msgs
             }
             return conv_dict
 
+    def set_conversation_project(self, conv_id: str, project_id: Optional[str]) -> Optional[Dict[str, Any]]:
+        with get_write_coordinator().write_permit("history"):
+            now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            with self._get_connection() as conn:
+                cursor = conn.execute(
+                    "UPDATE conversations SET project_id = ?, updated_at = ? WHERE id = ?",
+                    (project_id, now, conv_id)
+                )
+                conn.commit()
+                if cursor.rowcount == 0:
+                    return None
+            return self.get_conversation(conv_id)
+
     def set_conversation_pinned(self, conv_id: str, pinned: bool) -> Optional[Dict[str, Any]]:
-        with self._get_connection() as conn:
-            conn.execute(
-                "UPDATE conversations SET pinned = ? WHERE id = ?",
-                (1 if pinned else 0, conv_id)
-            )
-            conn.commit()
-        return self.get_conversation(conv_id)
+        with get_write_coordinator().write_permit("history"):
+            with self._get_connection() as conn:
+                conn.execute(
+                    "UPDATE conversations SET pinned = ? WHERE id = ?",
+                    (1 if pinned else 0, conv_id)
+                )
+                conn.commit()
+            return self.get_conversation(conv_id)
 
     def rename_conversation(self, conv_id: str, new_title: str) -> Optional[Dict[str, Any]]:
-        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-        with self._get_connection() as conn:
-            cursor = conn.execute(
-                "UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?",
-                (new_title.strip() or "Untitled", now, conv_id)
-            )
-            conn.commit()
-            if cursor.rowcount == 0:
-                return None
-        return self.get_conversation(conv_id)
+        with get_write_coordinator().write_permit("history"):
+            now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            with self._get_connection() as conn:
+                cursor = conn.execute(
+                    "UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?",
+                    (new_title.strip() or "Untitled", now, conv_id)
+                )
+                conn.commit()
+                if cursor.rowcount == 0:
+                    return None
+            return self.get_conversation(conv_id)
 
     def set_conversation_privacy(self, conv_id: str, is_private: bool) -> Optional[Dict[str, Any]]:
-        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-        with self._get_connection() as conn:
-            cursor = conn.execute(
-                "UPDATE conversations SET is_private = ?, updated_at = ? WHERE id = ?",
-                (1 if is_private else 0, now, conv_id)
-            )
-            conn.commit()
-            if cursor.rowcount == 0:
-                return None
-        return self.get_conversation(conv_id)
+        with get_write_coordinator().write_permit("history"):
+            now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            with self._get_connection() as conn:
+                cursor = conn.execute(
+                    "UPDATE conversations SET is_private = ?, updated_at = ? WHERE id = ?",
+                    (1 if is_private else 0, now, conv_id)
+                )
+                conn.commit()
+                if cursor.rowcount == 0:
+                    return None
+            return self.get_conversation(conv_id)
 
     def delete_conversation(self, conv_id: str) -> bool:
-        with self._get_connection() as conn:
-            conn.execute("DELETE FROM interactions WHERE conversation_id = ?", (conv_id,))
-            conn.execute("DELETE FROM messages WHERE conversation_id = ?", (conv_id,))
-            cursor = conn.execute("DELETE FROM conversations WHERE id = ?", (conv_id,))
-            conn.commit()
-            if cursor.rowcount > 0:
-                try:
-                    old_iso = conn.isolation_level
-                    conn.isolation_level = None
-                    conn.execute("VACUUM")
-                    conn.isolation_level = old_iso
-                except Exception as e:
-                    logger.error(f"Failed to vacuum after delete_conversation: {e}")
-                return True
-            return False
+        with get_write_coordinator().write_permit("history"):
+            with self._get_connection() as conn:
+                conn.execute("DELETE FROM interactions WHERE conversation_id = ?", (conv_id,))
+                conn.execute("DELETE FROM messages WHERE conversation_id = ?", (conv_id,))
+                cursor = conn.execute("DELETE FROM conversations WHERE id = ?", (conv_id,))
+                conn.commit()
+                if cursor.rowcount > 0:
+                    try:
+                        old_iso = conn.isolation_level
+                        conn.isolation_level = None
+                        conn.execute("VACUUM")
+                        conn.isolation_level = old_iso
+                    except Exception as e:
+                        logger.error(f"Failed to vacuum after delete_conversation: {e}")
+                    return True
+                return False
 
     def add_message(
         self,
@@ -309,39 +337,40 @@ class ChatHistoryManager:
         backend: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        msg_id = str(uuid.uuid4())
-        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-        meta_json = json.dumps(metadata) if metadata else None
-        with self._get_connection() as conn:
-            conv = conn.execute("SELECT id, title FROM conversations WHERE id = ?", (conv_id,)).fetchone()
-            if not conv:
-                title = generate_title(content) if role == "user" else "New conversation"
+        with get_write_coordinator().write_permit("history"):
+            msg_id = str(uuid.uuid4())
+            now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            meta_json = json.dumps(metadata) if metadata else None
+            with self._get_connection() as conn:
+                conv = conn.execute("SELECT id, title FROM conversations WHERE id = ?", (conv_id,)).fetchone()
+                if not conv:
+                    title = generate_title(content) if role == "user" else "New conversation"
+                    conn.execute(
+                        "INSERT INTO conversations (id, title, is_private, created_at, updated_at) VALUES (?, ?, 0, ?, ?)",
+                        (conv_id, title, now, now)
+                    )
+                else:
+                    if role == "user" and conv["title"] in ("New conversation", "Untitled"):
+                        new_title = generate_title(content)
+                        conn.execute("UPDATE conversations SET title = ? WHERE id = ?", (new_title, conv_id))
+
                 conn.execute(
-                    "INSERT INTO conversations (id, title, is_private, created_at, updated_at) VALUES (?, ?, 0, ?, ?)",
-                    (conv_id, title, now, now)
+                    "INSERT INTO messages (id, conversation_id, role, content, model, backend, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (msg_id, conv_id, role, content, model, backend, meta_json, now)
                 )
-            else:
-                if role == "user" and conv["title"] in ("New conversation", "Untitled"):
-                    new_title = generate_title(content)
-                    conn.execute("UPDATE conversations SET title = ? WHERE id = ?", (new_title, conv_id))
+                conn.execute("UPDATE conversations SET updated_at = ? WHERE id = ?", (now, conv_id))
+                conn.commit()
 
-            conn.execute(
-                "INSERT INTO messages (id, conversation_id, role, content, model, backend, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (msg_id, conv_id, role, content, model, backend, meta_json, now)
-            )
-            conn.execute("UPDATE conversations SET updated_at = ? WHERE id = ?", (now, conv_id))
-            conn.commit()
-
-        return {
-            "id": msg_id,
-            "conversation_id": conv_id,
-            "role": role,
-            "content": content,
-            "model": model,
-            "backend": backend,
-            "metadata": metadata or {},
-            "created_at": now
-        }
+            return {
+                "id": msg_id,
+                "conversation_id": conv_id,
+                "role": role,
+                "content": content,
+                "model": model,
+                "backend": backend,
+                "metadata": metadata or {},
+                "created_at": now
+            }
 
     def log_interaction(
         self,
@@ -358,27 +387,30 @@ class ChatHistoryManager:
         latency_ms: int = 0,
         verify_ms: int = 0,
         think_ms: int = 0,
-        memory_ms: int = 0
+        memory_ms: int = 0,
+        project_id: Optional[str] = None,
+        task_id: Optional[str] = None,
     ) -> str:
-        interaction_id = str(uuid.uuid4())
-        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-        with self._get_connection() as conn:
-            conn.execute(
-                """
-                INSERT INTO interactions (
-                    id, conversation_id, message_id, user_prompt, answer, model, backend,
-                    feedback, edited_answer, draft_reply, verified, latency_ms, verify_ms,
-                    think_ms, memory_ms, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    interaction_id, conv_id, message_id, user_prompt, answer, model, backend,
-                    feedback, edited_answer, draft_reply, int(verified), latency_ms, verify_ms,
-                    think_ms, memory_ms, now
+        with get_write_coordinator().write_permit("history"):
+            interaction_id = str(uuid.uuid4())
+            now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            with self._get_connection() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO interactions (
+                        id, conversation_id, message_id, user_prompt, answer, model, backend,
+                        feedback, edited_answer, draft_reply, verified, latency_ms, verify_ms,
+                        think_ms, memory_ms, project_id, task_id, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        interaction_id, conv_id, message_id, user_prompt, answer, model, backend,
+                        feedback, edited_answer, draft_reply, int(verified), latency_ms, verify_ms,
+                        think_ms, memory_ms, project_id, task_id, now
+                    )
                 )
-            )
-            conn.commit()
-        return interaction_id
+                conn.commit()
+            return interaction_id
 
     def get_ratings_by_model(self) -> Dict[str, Any]:
         """Aggregate ratings and latency statistics per model."""
@@ -457,29 +489,30 @@ class ChatHistoryManager:
         if not interaction_id and not message_id:
             return False
 
-        with self._get_connection() as conn:
-            clauses = []
-            params = []
-            if feedback is not _UNSET:
-                clauses.append("feedback = ?")
-                params.append(feedback)
-            if edited_answer is not _UNSET:
-                clauses.append("edited_answer = ?")
-                params.append(edited_answer)
-            if not clauses:
-                return False
+        with get_write_coordinator().write_permit("history"):
+            with self._get_connection() as conn:
+                clauses = []
+                params = []
+                if feedback is not _UNSET:
+                    clauses.append("feedback = ?")
+                    params.append(feedback)
+                if edited_answer is not _UNSET:
+                    clauses.append("edited_answer = ?")
+                    params.append(edited_answer)
+                if not clauses:
+                    return False
 
-            if interaction_id:
-                params.append(interaction_id)
-                sql = f"UPDATE interactions SET {', '.join(clauses)} WHERE id = ?"
-            else:
-                params.append(message_id)
-                sql = f"UPDATE interactions SET {', '.join(clauses)} WHERE message_id = ?"
+                if interaction_id:
+                    params.append(interaction_id)
+                    sql = f"UPDATE interactions SET {', '.join(clauses)} WHERE id = ?"
+                else:
+                    params.append(message_id)
+                    sql = f"UPDATE interactions SET {', '.join(clauses)} WHERE message_id = ?"
 
-            cur = conn.execute(sql, tuple(params))
-            conn.commit()
-            if cur.rowcount > 0:
-                return True
+                cur = conn.execute(sql, tuple(params))
+                conn.commit()
+                if cur.rowcount > 0:
+                    return True
 
         if message_id:
             inter_id = self.ensure_interaction_for_message(message_id)
@@ -489,10 +522,11 @@ class ChatHistoryManager:
         return False
 
     def update_message_content(self, message_id: str, new_content: str) -> bool:
-        with self._get_connection() as conn:
-            cur = conn.execute("UPDATE messages SET content = ? WHERE id = ?", (new_content, message_id))
-            conn.commit()
-            return cur.rowcount > 0
+        with get_write_coordinator().write_permit("history"):
+            with self._get_connection() as conn:
+                cur = conn.execute("UPDATE messages SET content = ? WHERE id = ?", (new_content, message_id))
+                conn.commit()
+                return cur.rowcount > 0
 
     def get_interaction(self, interaction_id: str) -> Optional[Dict[str, Any]]:
         with self._get_connection() as conn:
@@ -527,16 +561,17 @@ class ChatHistoryManager:
 
     def wipe_all_data(self) -> None:
         """Permanently delete all conversations, messages, and interactions."""
-        with self._get_connection() as conn:
-            conn.execute("DELETE FROM interactions")
-            conn.execute("DELETE FROM messages")
-            conn.execute("DELETE FROM conversations")
-            conn.commit()
-            try:
-                old_iso = conn.isolation_level
-                conn.isolation_level = None
-                conn.execute("VACUUM")
-                conn.isolation_level = old_iso
-            except Exception as e:
-                logger.error(f"Failed to vacuum on wipe_all_data: {e}")
+        with get_write_coordinator().write_permit("history"):
+            with self._get_connection() as conn:
+                conn.execute("DELETE FROM interactions")
+                conn.execute("DELETE FROM messages")
+                conn.execute("DELETE FROM conversations")
+                conn.commit()
+                try:
+                    old_iso = conn.isolation_level
+                    conn.isolation_level = None
+                    conn.execute("VACUUM")
+                    conn.isolation_level = old_iso
+                except Exception as e:
+                    logger.error(f"Failed to vacuum on wipe_all_data: {e}")
 

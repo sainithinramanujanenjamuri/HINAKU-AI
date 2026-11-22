@@ -32,6 +32,7 @@ from .types import (
     KnowledgeProvenance,
     SourceAuthority,
 )
+from backend.database.backup import coordinated_write
 
 
 class DecisionEngine:
@@ -210,6 +211,7 @@ class DecisionEngine:
     # Owner Authorization & Decision Recording
     # --------------------------------------------------------------------------
 
+    @coordinated_write("decision_engine")
     def record_owner_choice(
         self,
         decision_id: str,
@@ -321,6 +323,7 @@ class DecisionEngine:
 
         return None
 
+    @coordinated_write("decision_engine")
     def supersede_decision(
         self,
         old_decision_id: str,

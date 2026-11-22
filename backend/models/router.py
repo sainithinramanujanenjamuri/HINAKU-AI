@@ -1,6 +1,6 @@
 import logging
 import re
-from typing import Any, AsyncGenerator, Dict, List, NamedTuple, Optional
+from typing import Any, AsyncGenerator, Dict, List, NamedTuple, Optional, Union
 from .ollama_adapter import OllamaAdapter
 from .api_adapter import ApiAdapter
 from .privacy_gate import OutboundPrivacyGate, OutboundPrivacyViolation
@@ -237,7 +237,8 @@ class ModelRouter:
         is_detail: bool = False,
         has_attachments: bool = False,
         requested_model: Optional[str] = None,
-        has_personal_context: bool = False
+        has_personal_context: bool = False,
+        project_confidentiality: Optional[Union[str, Any]] = None,
     ) -> RouterDecision:
         # Strict privacy: conversations with attachments are locked to local model under all modes
         if has_attachments:
@@ -246,6 +247,22 @@ class ModelRouter:
                 target_model=self.local_adapter.default_model,
                 fallback_allowed=False,
                 notice="Attachment present: locked to local model."
+            )
+
+        # Confidential / restricted projects NEVER use API under any mode and never fall back
+        is_confidential_project = False
+        if project_confidentiality is not None:
+            conf_str = str(getattr(project_confidentiality, "value", project_confidentiality)).lower()
+            if conf_str in ("confidential", "restricted"):
+                is_confidential_project = True
+
+        if is_confidential_project:
+            logger.info("Project is confidential/restricted. Forcing local backend with fallback disabled.")
+            return RouterDecision(
+                target_backend="local",
+                target_model=self.local_adapter.default_model,
+                fallback_allowed=False,
+                notice=None
             )
 
         # Private chats NEVER use API under any mode
@@ -406,7 +423,8 @@ class ModelRouter:
         options: Optional[Dict[str, Any]] = None,
         is_detail: bool = False,
         has_attachments: bool = False,
-        requested_model: Optional[str] = None
+        requested_model: Optional[str] = None,
+        project_confidentiality: Optional[Union[str, Any]] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         # Detect if any turn in messages contains personal statements or sensitive topics
         has_personal_context = any(
@@ -421,7 +439,8 @@ class ModelRouter:
             is_detail=is_detail,
             has_attachments=has_attachments,
             requested_model=requested_model or override_model,
-            has_personal_context=has_personal_context
+            has_personal_context=has_personal_context,
+            project_confidentiality=project_confidentiality,
         )
         active_backend = decision.target_backend
         active_model = override_model if (override_model and active_backend == "local") else decision.target_model
@@ -432,13 +451,14 @@ class ModelRouter:
             safety = OutboundPrivacyGate.inspect_payload(
                 messages,
                 is_private=is_private,
-                has_attachments=has_attachments
+                has_attachments=has_attachments,
+                project_confidentiality=project_confidentiality,
             )
             if not safety.is_safe:
                 logger.warning(f"[Router] Outbound payload blocked by privacy policy: {safety.reason}. Forcing local execution.")
                 active_backend = "local"
                 active_model = override_model or self.local_adapter.default_model
-                notice = "Personal or private context detected; routed locally for privacy."
+                notice = "Personal, private, or confidential project context detected; routed locally for privacy."
 
         if active_backend == "api":
             try:
@@ -531,20 +551,27 @@ class ModelRouter:
                     raise
         except Exception as e:
             logger.error(f"Local backend failed: {e}")
-            if active_backend == "local" and decision.fallback_allowed and not is_private and self.api_adapter.api_key:
+            is_confidential = False
+            if project_confidentiality is not None:
+                c_str = str(getattr(project_confidentiality, "value", project_confidentiality)).lower()
+                if c_str in ("confidential", "restricted"):
+                    is_confidential = True
+
+            if active_backend == "local" and decision.fallback_allowed and not is_private and not is_confidential and self.api_adapter.api_key:
                 # Outbound Privacy Gate inspection BEFORE API fallback
                 safety = OutboundPrivacyGate.inspect_payload(
                     messages,
                     is_private=is_private,
-                    has_attachments=has_attachments
+                    has_attachments=has_attachments,
+                    project_confidentiality=project_confidentiality,
                 )
                 if not safety.is_safe:
-                    logger.warning(f"[Router] Refusing API fallback: outbound payload contains private or personal context ({safety.reason}).")
+                    logger.warning(f"[Router] Refusing API fallback: outbound payload contains private, personal, or confidential context ({safety.reason}).")
                     yield {
                         "type": "error",
                         "error_type": "local_error",
                         "chunk": "",
-                        "error": f"Local model failed: {str(e)} (API fallback blocked: payload contains private or personal context)",
+                        "error": f"Local model failed: {str(e)} (API fallback blocked: {safety.reason})",
                         "backend": "local",
                         "model": active_model,
                         "notice": f"Local model error: {str(e)}"
